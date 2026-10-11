@@ -75,12 +75,12 @@ Claude Code 首先检查文件集合与大小 / mtime / 解析版本：任一变
 新命令 `sync_usage` 同步全部客户端，旧 `sync_codex` 保留仅 Codex 的兼容语义。
 
 DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/session.jsonl`
-及 `session.jsonl.zstd`，依据本机 deepseek-harness 持久化源代码支持格式 v0；忽略迁移备份
-`session.v*.jsonl.zstd`，不读配置、凭据或插件账单。默认根可由 `DSH_SESSIONS_DIR` 显式指定。
+及 `session.jsonl.zstd`，并支持 v1–v4 规范版本化日志 `session.vN.jsonl[.zstd]`（失败隔离 ADR 见第 8 节），
+同目录只读取最高代。不读配置、凭据或插件账单。默认根可由 `DSH_SESSIONS_DIR` 显式指定。
 新增 Rust `zstd`（0.13，MIT，底层 Zstandard BSD）用于流式解压多个压缩帧，关闭非必需默认特性；
 无网络、遥测或运行时外部进程。它会引入本地 C 解压器与编译依赖，具体版本以 Cargo.lock 为准。
 只提取 header 元数据、请求模型与 usage 样本；chunk 与完成消息的 usage 不重复相加，
-按会话 + turn / step 去重，并排除 header `seedLength` 指定的继承事件。未知格式保留旧数据并报错。
+按会话 + turn / step / attempt 去重，并按格式版本排除 seedLength 或 inherited end-seed 指定的继承事件。未知格式保留旧数据并报告文件失败。
 
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
@@ -208,6 +208,16 @@ usage/tokens ────────→ usage/client
 - 聚合在 Rust 侧完成，前端只做展示层格式化；单次返回给前端的数据量应可控（分页或预聚合）。
 
 ## 8. 架构决策记录（ADR）
+
+### DSH 版本化日志与失败隔离（2026-10-11）
+
+DSH JSONL 采集兼容已核对的 v0–v4 统计元数据。`collectors/dsh/format.rs` 识别规范版本化文件名，
+同目录只选择最高版本，旧代文件不重复统计；不回退到损坏或未知新版本之前的旧日志。
+`metadata.rs` 仅反序列化统计白名单，`parser.rs` 解码文件、`projection.rs` 折叠请求尝试；按 v0/v1 的 seedLength 或 v2–v4 的继承标记排除种子。
+新版本嵌入流的 usage 与最终 usage 按请求尝试替换，retry-started 划分独立尝试。
+`usage/store` 新增事务合并快照入口：部分文件失败时只替换成功会话，保留失败及未确认删除的历史记录，
+不推进失败文件水位；完整扫描仍使用全客户端原子替换。同步报告显式记录失败，界面显示部分失败。
+不写入客户端文件，不新增依赖、数据库迁移或联网能力；回归测试全部使用合成日志。
 
 ### 持续集成与发布隔离（2026-10-11）
 

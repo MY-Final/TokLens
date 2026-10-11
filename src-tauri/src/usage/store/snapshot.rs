@@ -24,6 +24,27 @@ impl UsageStore {
         files: &[SourceFile],
         sessions: &[SessionImport],
     ) -> Result<ImportSummary, UsageError> {
+        self.write_client_snapshot(client, files, sessions, true)
+    }
+
+    /// Replace successful sessions atomically while preserving failed or unconfirmed sources.
+    /// Failed file watermarks must not be included. A later complete scan performs deletion cleanup.
+    pub fn merge_client_snapshot(
+        &self,
+        client: Client,
+        files: &[SourceFile],
+        sessions: &[SessionImport],
+    ) -> Result<ImportSummary, UsageError> {
+        self.write_client_snapshot(client, files, sessions, false)
+    }
+
+    fn write_client_snapshot(
+        &self,
+        client: Client,
+        files: &[SourceFile],
+        sessions: &[SessionImport],
+        prune_missing: bool,
+    ) -> Result<ImportSummary, UsageError> {
         let mut paths = BTreeSet::new();
         let mut ids = BTreeSet::new();
         for file in files {
@@ -48,16 +69,34 @@ impl UsageStore {
             }
         }
         let transaction = self.conn.unchecked_transaction()?;
-        let pruned: i64 = transaction.query_row(
-            "SELECT COUNT(*) FROM messages WHERE client = ?1",
-            [client.as_str()],
-            |row| row.get(0),
-        )?;
-        transaction.execute("DELETE FROM sessions WHERE client = ?1", [client.as_str()])?;
-        transaction.execute(
-            "DELETE FROM source_files WHERE client = ?1",
-            [client.as_str()],
-        )?;
+        let mut pruned = 0i64;
+        if prune_missing {
+            pruned = transaction.query_row(
+                "SELECT COUNT(*) FROM messages WHERE client = ?1",
+                [client.as_str()],
+                |row| row.get(0),
+            )?;
+            transaction.execute("DELETE FROM sessions WHERE client = ?1", [client.as_str()])?;
+            transaction.execute(
+                "DELETE FROM source_files WHERE client = ?1",
+                [client.as_str()],
+            )?;
+        } else {
+            for entry in sessions {
+                pruned += transaction.query_row(
+                    "SELECT COUNT(*) FROM messages WHERE client = ?1 AND session_id = ?2",
+                    params![
+                        client.as_str(),
+                        crate::usage::model::session_id(client, &entry.session.client_session_id)
+                    ],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                transaction.execute(
+                    "DELETE FROM sessions WHERE client = ?1 AND client_session_id = ?2",
+                    params![client.as_str(), entry.session.client_session_id],
+                )?;
+            }
+        }
         let mut sources = std::collections::BTreeMap::new();
         for file in files {
             sources.insert(
@@ -147,6 +186,21 @@ mod tests {
         assert!(
             store
                 .replace_client_snapshot(Client::ClaudeCode, &[bad], &[])
+                .is_err()
+        );
+        let import = SessionImport {
+            session: session.clone(),
+            messages: vec![],
+            source_path: String::new(),
+            message_source_paths: Default::default(),
+        };
+        let bad = SourceFile {
+            path: String::new(),
+            ..file.clone()
+        };
+        assert!(
+            store
+                .merge_client_snapshot(Client::ClaudeCode, &[bad], &[import])
                 .is_err()
         );
         assert_eq!(store.session_count().expect("count"), 2);
