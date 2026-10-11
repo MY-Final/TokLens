@@ -8,6 +8,7 @@
 pub mod dto;
 mod error;
 pub mod queries;
+pub mod settings;
 mod state;
 mod sync;
 

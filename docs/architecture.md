@@ -5,6 +5,25 @@
 
 ## 1. 现状
 
+### 桌面设置与更新决策（2026-10-11）
+
+新增 `settings/`（版本化 JSON、校验与原子保存）、`desktop/`（托盘、窗口生命周期）、
+`updates/`（官方签名更新）与 command 后台调度模块。前端新增设置页与共享设置 Hook，
+仍通过 `lib/api.ts` 调用后端，使用 React 内置状态和已有 next-themes，不引入状态管理库。
+设置位于 TokLens 应用数据目录；统计清除使用 usage/store 事务，不删除源文件。
+调度、退出、清除与更新安装共用同步互斥边界，隐藏窗口不影响采集。
+
+引入官方 Tauri 2 updater、autostart、single-instance、window-state 插件以及 tray-icon 特性。
+updater 引入原生 HTTPS / 签名校验依赖；默认不发请求，仅显式检查或用户开启自动检查后使用。
+其余插件提供系统自启、进程去重及窗口状态恢复，不采集正文、无遥测。具体体积以生产构建为准。
+插件从 crates.io 获取；前端不增加 npm 运行时依赖，不开放通用 shell/fs/http 权限。
+原生 command 封装固定目录打开和固定 GitHub 更新端点，权限仅授予主窗口；CSP 仅允许本地资源，
+样式内联用于现有 shadcn/Recharts，不允许远程脚本。
+
+发布目标为 Windows x64 NSIS、macOS x64/arm64 DMG 与签名更新包；GitHub Actions 汇总后生成草稿 Release。
+更新私钥仅保存在仓库外和 GitHub Secrets；公钥入配置。首版不使用系统代码签名或 Apple 公证。
+发布规则与配置步骤见 `docs/releases.md`；新配置不能改变已有 Token 口径。
+
 ### MiMoCode / Pi Desktop 采集器决策（2026-10-11）
 
 新增 `collectors/mimocode/`（只读 SQL 白名单 / 同步）与 `collectors/pi_desktop/`（JSONL 白名单 / 操作账本 / 同步），

@@ -1,5 +1,6 @@
 pub mod collectors;
 pub mod commands;
+pub mod settings;
 pub mod usage;
 
 use serde::Serialize;
@@ -28,12 +29,15 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let state = commands::AppState::initialize(&data_dir)?;
             app.manage(state);
+            app.manage(settings::SettingsStore::load(&data_dir));
             // 启动即做一次增量同步：首次运行导入历史，之后只处理变化的文件。
             commands::request_sync(app.handle(), false)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            commands::settings::get_settings,
+            commands::settings::update_settings,
             commands::queries::get_overview_stats,
             commands::queries::get_daily_token_trend,
             commands::queries::get_client_usage,
