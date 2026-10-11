@@ -16,6 +16,7 @@ pub mod scheduler;
 pub mod settings;
 mod state;
 mod sync;
+pub mod tray_usage;
 
 pub use dto::SyncStateDto;
 pub use error::CommandError;

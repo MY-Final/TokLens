@@ -54,6 +54,7 @@ pub fn start(app: &tauri::AppHandle) {
                 let _ = request_sync(&app, false);
             }
             crate::updates::maybe_check_automatically(&app);
+            crate::desktop::refresh_tray(&app);
             std::thread::sleep(Duration::from_secs(15));
         }
     });

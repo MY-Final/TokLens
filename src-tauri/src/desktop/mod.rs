@@ -1,6 +1,7 @@
 //! Native lifecycle. Never reads client data.
 pub mod preferences;
 mod tray;
+pub use tray::{refresh as refresh_tray, update_last_scan, update_usage_summary};
 
 use crate::commands::{AppState, CommandError};
 use crate::settings::{CloseBehavior, SettingsPatch, SettingsStore};

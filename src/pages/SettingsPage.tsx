@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { SettingsSection, SettingsSelect, SettingsSwitch } from "@/components/SettingsFields";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { SettingsController } from "@/hooks/use-settings";
@@ -22,11 +23,27 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
 export function SettingsPage({
   controller,
   updates,
+  updateFocusToken = 0,
 }: {
   controller: SettingsController;
   updates: UpdatesController;
+  updateFocusToken?: number;
 }) {
   const { settings, busy, error, warning, patch, reload } = controller;
+  const updateSection = useRef<HTMLDivElement>(null);
+  const focusedToken = useRef(0);
+  useEffect(() => {
+    if (updateFocusToken === 0) {
+      focusedToken.current = 0;
+      return;
+    }
+    if (!settings || focusedToken.current === updateFocusToken) return;
+    const section = updateSection.current;
+    if (!section) return;
+    focusedToken.current = updateFocusToken;
+    section.scrollIntoView({ block: "start" });
+    section.focus({ preventScroll: true });
+  }, [settings, updateFocusToken]);
   if (!settings)
     return error ? (
       <ErrorBlock
@@ -110,7 +127,9 @@ export function SettingsPage({
         />
       </SettingsSection>
       <CollectionSettings controller={controller} />
-      <UpdateSettings controller={controller} updates={updates} />
+      <div ref={updateSection} tabIndex={-1} aria-label="更新与关于">
+        <UpdateSettings controller={controller} updates={updates} />
+      </div>
       <DataSettings controller={controller} />
     </div>
   );

@@ -21,6 +21,8 @@ pub async fn clear_statistics(app: AppHandle) -> Result<SettingsSnapshot, Comman
             .sync
             .lock()
             .map_err(|_| CommandError::new("同步状态异常，请重启应用"))? = SyncState::default();
+        super::tray_usage::invalidate(&app);
+        drop(_guard);
         let _ = app.emit(super::SYNC_EVENT, state.sync_state());
         Ok(snapshot)
     })

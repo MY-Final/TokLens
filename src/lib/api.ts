@@ -40,10 +40,32 @@ export function resolveClose(action: CloseBehavior | null, remember: boolean): P
   return invoke("resolve_close", { action, remember });
 }
 export function onDesktopEvent(
-  event: "close-requested" | "navigate-settings" | "settings-changed",
+  event: "close-requested" | "navigate-settings" | "navigate-updates" | "settings-changed",
   callback: () => void,
 ): Promise<UnlistenFn> {
   return listen(event, callback);
+}
+
+export type TrayPageKey = "overview" | "analytics" | "sessions" | "sources";
+
+/** Native shortcuts accept only supported pages; event data cannot select arbitrary routes. */
+export function onTrayNavigate(callback: (page: TrayPageKey) => void): Promise<UnlistenFn> {
+  return listen<unknown>("navigate-page", ({ payload }) => {
+    if (
+      payload === "overview" ||
+      payload === "analytics" ||
+      payload === "sessions" ||
+      payload === "sources"
+    ) {
+      callback(payload);
+    }
+  });
+}
+
+/** Local calendar boundaries only; native analytics supplies and presents all usage values. */
+export function refreshTrayUsage(fromMs: number, toMs: number): Promise<void> {
+  if (!isTauri()) return Promise.resolve();
+  return invoke("refresh_tray_usage", { fromMs, toMs });
 }
 export function onDesktopError(callback: (message: string) => void): Promise<UnlistenFn> {
   return listen<string>("desktop-error", (event) => callback(event.payload));

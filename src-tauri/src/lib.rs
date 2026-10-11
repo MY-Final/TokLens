@@ -85,6 +85,7 @@ pub fn run() {
             desktop::get_desktop_status,
             desktop::get_close_pending,
             desktop::resolve_close,
+            commands::tray_usage::refresh_tray_usage,
             commands::queries::get_overview_stats,
             commands::queries::get_daily_token_trend,
             commands::queries::get_client_usage,
