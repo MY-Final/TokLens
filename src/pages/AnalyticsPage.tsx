@@ -26,6 +26,7 @@ const CLIENT_FILTERS: ReadonlyArray<{ value: string; label: string; client: Clie
   { value: "claude_code", label: "Claude Code", client: "claude_code" },
   { value: "opencode", label: "OpenCode", client: "opencode" },
   { value: "dsh", label: "DSH", client: "dsh" },
+  { value: "kimi_code", label: "Kimi Code", client: "kimi_code" },
 ];
 
 export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
@@ -89,8 +90,9 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
       label: "缓存写入",
       value:
         client === null ? (totals?.countedCacheWriteTokens ?? 0) : (totals?.cacheWriteTokens ?? 0),
-      note: "Claude Code / DSH 计入总量；其他客户端单独记录",
-      counted: client === null || client === "claude_code" || client === "dsh",
+      note: "Claude Code / DSH / Kimi Code 计入总量；其他客户端单独记录",
+      counted:
+        client === null || client === "claude_code" || client === "dsh" || client === "kimi_code",
     },
   ];
 
@@ -110,7 +112,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
           </FilterSelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          统计本机 Codex、Claude Code、OpenCode 与 DSH 的已知用量。
+          统计本机 Codex、Claude Code、OpenCode、DSH 与 Kimi Code 的已知用量。
         </span>
       </div>
 
@@ -139,7 +141,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
         <CardHeader>
           <CardTitle>Token 分桶构成</CardTitle>
           <CardDescription>
-            分桶按各客户端口径归一化；仅 Claude Code / DSH 的缓存写入计入规范总量。
+            分桶按各客户端口径归一化；仅 Claude Code / DSH / Kimi Code 的缓存写入计入规范总量。
           </CardDescription>
         </CardHeader>
         <CardContent>

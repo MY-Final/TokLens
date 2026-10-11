@@ -18,6 +18,7 @@ const CLIENT_HINTS: Record<string, string> = {
   codex: "读取 %USERPROFILE%\\.codex\\sessions 下的 rollout-*.jsonl（只读）。",
   claude_code: "只读 ~/.claude/projects 下的会话与子代理转录；支持 CLAUDE_CONFIG_DIR。",
   dsh: "只读 ~/.dsh/sessions 下的 session.jsonl / .jsonl.zstd；支持 DSH_SESSIONS_DIR。",
+  kimi_code: "只读 ~/.kimi-code/sessions 下的会话元数据与 agent wire.jsonl；支持 KIMI_CODE_HOME。",
   opencode: "只读 ~/.local/share/opencode/opencode.db，包含 WAL 更新；支持 XDG_DATA_HOME。",
 };
 

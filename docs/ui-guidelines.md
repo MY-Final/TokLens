@@ -118,14 +118,14 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 ### Codex 总览重构（2026-10-11）
 
-顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持四客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持五客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
 
 ### AI 客户端品牌图标（2026-10-11）
 
-`ClientIdentity` 统一映射 `Codex` / `ClaudeCode` / `OpenCode` / `DeepSeek`（DSH） 的 LobeHub 单色 SVG 组件，
+`ClientIdentity` 统一映射 `Codex` / `ClaudeCode` / `OpenCode` / `DeepSeek`（DSH） / `Kimi` 的 LobeHub 单色 SVG 组件，
 普通标识 16px、紧凑标识 14px，继承 `client-*` 语义颜色；标签始终保留客户端名称。
 图标是装饰信息，外层设 `aria-hidden`，避免与可见文字重复朗读；未接入状态仍由 badge 和置灰表达。
 仅使用本地 React 图标，不使用 CDN 工具或远程图片，不在组件中加入图标库的 Avatar / Combine UI。
@@ -133,5 +133,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 多客户端接入后，客户端筛选均可用；空数据表达为「暂无数据」，目录缺失表达为「未发现数据源」，采集支持状态与连接状态分开。
 同步结果逐客户端显示，单源失败保留历史并明确提示；刷新触发 `sync_usage`。
 客户端 Progress 占比使用后端 `shareBps`；趋势使用逐日客户端总量，禁止把合并数据标成 Codex。
-Token 构成仅堆叠计入总量的缓存写入（当前为 Claude Code / DSH），不堆叠其他客户端的原始 cache_write。
+Token 构成仅堆叠计入总量的缓存写入（当前为 Claude Code / DSH / Kimi Code），不堆叠其他客户端的原始 cache_write。
 DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标签始终明确为 DSH。
+
+Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。

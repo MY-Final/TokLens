@@ -49,6 +49,7 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
             <SelectItem value="claude_code">Claude Code</SelectItem>
             <SelectItem value="opencode">OpenCode</SelectItem>
             <SelectItem value="dsh">DSH</SelectItem>
+            <SelectItem value="kimi_code">Kimi Code</SelectItem>
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">

@@ -41,12 +41,14 @@ const TOTAL_SERIES = [
     dotClass: "bg-client-opencode",
   },
   { key: "dsh", label: "DSH", color: "var(--client-dsh)", dotClass: "bg-client-dsh" },
+  { key: "kimi_code", label: "Kimi Code", color: "var(--client-kimi)", dotClass: "bg-client-kimi" },
 ] as const;
 const CHART_CONFIG = {
   codex: { label: "Codex", color: "var(--client-codex)" },
   claude_code: { label: "Claude Code", color: "var(--client-claude)" },
   opencode: { label: "OpenCode", color: "var(--client-opencode)" },
   dsh: { label: "DSH", color: "var(--client-dsh)" },
+  kimi_code: { label: "Kimi Code", color: "var(--client-kimi)" },
   cacheWrite: { label: "缓存写入（计入总量）", color: "var(--chart-5)" },
   cacheRead: { label: "缓存读取", color: "var(--chart-1)" },
   input: { label: "输入（未命中缓存）", color: "var(--chart-2)" },
@@ -75,7 +77,7 @@ function TokenTooltip(props: ComponentProps<typeof ChartTooltipContent>) {
         )}
       />
       <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-        <p>客户端记录 · Claude Code / DSH 缓存写入计入总量</p>
+        <p>客户端记录 · Claude Code / DSH / Kimi Code 缓存写入计入总量</p>
         <p>费用暂不可用 · 无可靠价格来源</p>
       </div>
     </div>
@@ -106,6 +108,7 @@ export function TokenTrendChart({
     claude_code: bucket.clients.find((client) => client.client === "claude_code")?.totalTokens ?? 0,
     opencode: bucket.clients.find((client) => client.client === "opencode")?.totalTokens ?? 0,
     dsh: bucket.clients.find((client) => client.client === "dsh")?.totalTokens ?? 0,
+    kimi_code: bucket.clients.find((client) => client.client === "kimi_code")?.totalTokens ?? 0,
     cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,
@@ -232,7 +235,7 @@ export function TokenTrendChart({
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {description ??
-            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；仅 Claude Code / DSH 的缓存写入计入总量，缺失字段不推算。"}
+            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；仅 Claude Code / DSH / Kimi Code 的缓存写入计入总量，缺失字段不推算。"}
         </p>
       </CardContent>
     </DashboardCard>
