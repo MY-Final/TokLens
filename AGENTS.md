@@ -39,6 +39,8 @@ TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、
 | 包管理   | pnpm（唯一包管理器）                                     |
 | 校验     | ESLint（flat config）+ Prettier + tsc + rustfmt + clippy |
 
+- 通用图标使用 lucide-react；AI 客户端品牌图标使用用户指定、已登记的 `@lobehub/icons`，通过 `ClientIdentity` 统一呈现。
+  图标本地打包，peer 依赖不作为业务 UI 组件库使用，接入与体积记录见 `docs/architecture.md`。
 - 只使用 pnpm；不要生成 `package-lock.json` / `yarn.lock`，不要提交它们。
 - 编辑器：安装 `.vscode/extensions.json` 推荐的扩展，并把 Prettier 设为默认格式化工具（保存时格式化）；提交前仍以 `pnpm check` 结果为准。
 - 依赖版本以 `package.json` 与 `Cargo.toml` 为准，命令以 `package.json` 的 `scripts` 为准（本文件只做说明）。

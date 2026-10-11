@@ -46,8 +46,9 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 - 优先使用已存在的 shadcn/ui 组件（`button`、`input`、`select`、`table`、`tabs`、`dialog`、`alert-dialog`、
   `dropdown-menu`、`popover`、`tooltip`、`badge`、`progress`、`scroll-area`、`separator`、`skeleton`、`switch`、
-  `calendar`、`card`、`command`、`sheet`、`sidebar`、`sonner`）与 `lucide-react` 图标。
-- **不要引入新的 UI 组件库或图标库**（antd、MUI、Chakra、Element、其他图标集等）。缺少组件时按 shadcn 方式补充：
+  `calendar`、`card`、`command`、`sheet`、`sidebar`、`sonner`）与 `lucide-react` 通用图标；AI 客户端品牌图标使用用户指定的 `@lobehub/icons`。
+- **不要引入新的业务 UI 组件库或未经登记的图标库**（antd、MUI、Chakra、Element、其他图标集等）。
+  `@lobehub/icons` 是已登记的 AI 品牌图标例外，其 peer 依赖不用于业务组件。缺少组件时按 shadcn 方式补充：
   `pnpm dlx shadcn@latest add <component>`，并把生成文件视为 vendor 代码（不手改、不加入 `eslint.config.js` 的强规则范围）。
 - `src/components/ui/**` 与 `src/hooks/use-mobile.ts` 是生成物：需要调整外观时优先在业务组件里组合 Tailwind 类，
   而不是修改生成文件；确需修改时必须在提交说明中写明原因。
@@ -86,7 +87,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 - 强烈玻璃拟态、霓虹渐变、大面积彩色背景、随机阴影、装饰性发光。
 - 卡片套卡片、无关联指标过度拆分、卡片内表格再套边框。
 - 硬编码颜色/间距魔数、复制粘贴的"近似样式"。
-- 引入新 UI 库、新图标库、第二套图表库。
+- 引入未经登记的 UI / 图标库，或第二套图表库。
 - 用动画掩盖加载延迟，或用占位内容造成布局跳动。
 - 未标注的估算数据、未标注单位的图表、把估算与实测混算成一个数字。
 
@@ -97,7 +98,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 - [ ] 加载、空、错误三态齐备
 - [ ] 图表有单位、时间范围与图例，估算系列已标注
 - [ ] 图标按钮有 `aria-label`/tooltip，键盘可达
-- [ ] 未新增 UI/图表/图标库，未修改 `src/components/ui/` 生成代码
+- [ ] 未引入未经登记的 UI/图表/图标库，未修改 `src/components/ui/` 生成代码
 
 ## 11. 统计界面约定（TokLens 桌面端）
 
@@ -119,3 +120,10 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
+
+### AI 客户端品牌图标（2026-10-11）
+
+`ClientIdentity` 统一映射 `Codex` / `ClaudeCode` / `OpenCode` 的 LobeHub 单色 SVG 组件，
+普通标识 16px、紧凑标识 14px，继承 `client-*` 语义颜色；标签始终保留客户端名称。
+图标是装饰信息，外层设 `aria-hidden`，避免与可见文字重复朗读；未接入状态仍由 badge 和置灰表达。
+仅使用本地 React 图标，不使用 CDN 工具或远程图片，不在组件中加入图标库的 Avatar / Combine UI。
