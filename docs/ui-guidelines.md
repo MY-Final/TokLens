@@ -147,3 +147,9 @@ DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标�
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。
 
 MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。七客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
+
+### 采集的部分失败状态
+
+数据源卡片显示该客户端最近一次发现 / 解析 / 未变化 / 失败文件数；不能用全客户端合计表示单个来源的采集结果。
+`filesFailed > 0` 使用“部分采集失败”状态与错误说明，健康会话继续导入，失败文件重试并保留历史。
+无法解析的行数与文件失败数分别展示，不能显示“已连接”掩盖部分失败。DSH 格式提示覆盖 v0–v4。

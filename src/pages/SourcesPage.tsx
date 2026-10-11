@@ -19,7 +19,7 @@ import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 const CLIENT_HINTS: Record<string, string> = {
   codex: "读取 %USERPROFILE%\\.codex\\sessions 下的 rollout-*.jsonl（只读）。",
   claude_code: "只读 ~/.claude/projects 下的会话与子代理转录；支持 CLAUDE_CONFIG_DIR。",
-  dsh: "只读 ~/.dsh/sessions 下的 session.jsonl / .jsonl.zstd；支持 DSH_SESSIONS_DIR。",
+  dsh: "只读 ~/.dsh/sessions 下的 v0–v4 JSONL / Zstandard 会话日志；支持 DSH_SESSIONS_DIR。",
   mimocode:
     "只读 ~/.local/share/mimocode/mimocode.db（含 WAL）；支持 XDG_DATA_HOME / MIMOCODE_DB，排除外部导入消息，保留本地续聊。",
   pi_desktop:
@@ -152,89 +152,107 @@ export function SourcesPage({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {(status?.clients ?? []).map((client) => (
-          <DashboardCard
-            key={client.client}
-            className={client.supported ? "" : "border-dashed opacity-50"}
-          >
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClientIdentity client={client.client} compact />
-                <Switch
-                  className="ml-auto"
-                  aria-label={`采集 ${client.client}`}
-                  checked={
-                    settingsController.settings?.enabledClients.includes(client.client) ?? false
-                  }
-                  disabled={settingsController.busy || !settingsController.settings}
-                  onCheckedChange={(enabled) => {
-                    const previous = settingsController.settings?.enabledClients ?? [];
-                    void settingsController.patch({
-                      enabledClients: enabled
-                        ? [...previous, client.client]
-                        : previous.filter((key) => key !== client.client),
-                    });
-                  }}
-                />
+        {(status?.clients ?? []).map((client) => {
+          const result = report?.clients.find((entry) => entry.client === client.client);
+          const scan = result?.report;
+          return (
+            <DashboardCard
+              key={client.client}
+              className={client.supported ? "" : "border-dashed opacity-50"}
+            >
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ClientIdentity client={client.client} compact />
+                  <Switch
+                    className="ml-auto"
+                    aria-label={`采集 ${client.client}`}
+                    checked={
+                      settingsController.settings?.enabledClients.includes(client.client) ?? false
+                    }
+                    disabled={settingsController.busy || !settingsController.settings}
+                    onCheckedChange={(enabled) => {
+                      const previous = settingsController.settings?.enabledClients ?? [];
+                      void settingsController.patch({
+                        enabledClients: enabled
+                          ? [...previous, client.client]
+                          : previous.filter((key) => key !== client.client),
+                      });
+                    }}
+                  />
+                  {client.supported ? (
+                    <Badge variant="secondary" className="font-normal">
+                      {settingsController.settings &&
+                      !settingsController.settings.enabledClients.includes(client.client)
+                        ? "已停用"
+                        : result?.error
+                          ? "同步异常"
+                          : scan?.rootMissing
+                            ? "未发现数据源"
+                            : (scan?.filesFailed ?? 0) > 0
+                              ? "部分采集失败"
+                              : client.sessions > 0
+                                ? "已连接"
+                                : "暂无数据"}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="font-normal text-muted-foreground">
+                      等待采集
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>{CLIENT_HINTS[client.client]}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {result?.error ? <p className="text-xs text-destructive">{result?.error}</p> : null}
+                {scan ? (
+                  <p className="text-xs text-muted-foreground">
+                    本次发现 {formatNumber(scan.filesSeen)} 个文件 · 解析{" "}
+                    {formatNumber(scan.filesParsed)} · 未变化{" "}
+                    {formatNumber(scan.filesSkippedUnchanged)} · 失败{" "}
+                    {formatNumber(scan.filesFailed)}
+                  </p>
+                ) : null}
+                {(scan?.filesFailed ?? 0) > 0 ? (
+                  <p className="text-xs text-destructive">
+                    部分文件损坏、未写完或版本不支持。正常会话已导入，失败文件的已有统计保留，下次同步重试。
+                  </p>
+                ) : null}
                 {client.supported ? (
-                  <Badge variant="secondary" className="font-normal">
-                    {settingsController.settings &&
-                    !settingsController.settings.enabledClients.includes(client.client)
-                      ? "已停用"
-                      : report?.clients.find((result) => result.client === client.client)?.error
-                        ? "同步异常"
-                        : report?.clients.find((result) => result.client === client.client)?.report
-                              ?.rootMissing
-                          ? "未发现数据源"
-                          : client.sessions > 0
-                            ? "已连接"
-                            : "暂无数据"}
-                  </Badge>
+                  <>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <dt className="text-muted-foreground">会话</dt>
+                      <dd className="text-right tabular-nums">{formatNumber(client.sessions)}</dd>
+                      <dt className="text-muted-foreground">请求明细</dt>
+                      <dd className="text-right tabular-nums">{formatNumber(client.messages)}</dd>
+                      <dt className="text-muted-foreground">已跟踪文件</dt>
+                      <dd className="text-right tabular-nums">
+                        {formatNumber(client.filesTracked)}
+                      </dd>
+                      <dt className="text-muted-foreground">无法解析的行</dt>
+                      <dd className="text-right tabular-nums">
+                        {formatNumber(client.unparsedRecords)}
+                      </dd>
+                      <dt className="text-muted-foreground">最近扫描</dt>
+                      <dd className="text-right tabular-nums">
+                        {formatRelative(client.lastScanMs)}
+                      </dd>
+                    </dl>
+                    {client.sessions === 0 && !loading ? (
+                      <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <FolderSearch className="size-3.5" aria-hidden="true" />
+                        还没有导入数据，先执行一次同步。
+                      </p>
+                    ) : null}
+                  </>
                 ) : (
-                  <Badge variant="outline" className="font-normal text-muted-foreground">
-                    等待采集
-                  </Badge>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    采集器尚未接入，暂不参与用量统计。
+                  </p>
                 )}
-              </CardTitle>
-              <CardDescription>{CLIENT_HINTS[client.client]}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {report?.clients.find((result) => result.client === client.client)?.error ? (
-                <p className="text-xs text-destructive">
-                  {report.clients.find((result) => result.client === client.client)?.error}
-                </p>
-              ) : null}
-              {client.supported ? (
-                <>
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
-                    <dt className="text-muted-foreground">会话</dt>
-                    <dd className="text-right tabular-nums">{formatNumber(client.sessions)}</dd>
-                    <dt className="text-muted-foreground">请求明细</dt>
-                    <dd className="text-right tabular-nums">{formatNumber(client.messages)}</dd>
-                    <dt className="text-muted-foreground">已跟踪文件</dt>
-                    <dd className="text-right tabular-nums">{formatNumber(client.filesTracked)}</dd>
-                    <dt className="text-muted-foreground">无法解析的行</dt>
-                    <dd className="text-right tabular-nums">
-                      {formatNumber(client.unparsedRecords)}
-                    </dd>
-                    <dt className="text-muted-foreground">最近扫描</dt>
-                    <dd className="text-right tabular-nums">{formatRelative(client.lastScanMs)}</dd>
-                  </dl>
-                  {client.sessions === 0 && !loading ? (
-                    <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <FolderSearch className="size-3.5" aria-hidden="true" />
-                      还没有导入数据，先执行一次同步。
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  采集器尚未接入，暂不参与用量统计。
-                </p>
-              )}
-            </CardContent>
-          </DashboardCard>
-        ))}
+              </CardContent>
+            </DashboardCard>
+          );
+        })}
         {!status && !loading ? (
           <DashboardCard>
             <CardContent className="py-4">
