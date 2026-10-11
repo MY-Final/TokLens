@@ -12,21 +12,29 @@ import { SourcesPage } from "@/pages/SourcesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useSettings } from "@/hooks/use-settings";
 import { useUpdates } from "@/hooks/use-updates";
+import { useLocalClock } from "@/hooks/use-local-clock";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { resolveRange, type RangeKey } from "@/lib/ranges";
+import { resolveRange, type DateRange } from "@/lib/ranges";
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
-  const [selectedRange, setRangeKey] = useState<RangeKey | null>(null);
+  const [selectedRange, setSelectedRange] = useState<DateRange | null>(null);
+  const nowMs = useLocalClock();
   const settings = useSettings();
   const updates = useUpdates();
-  const rangeKey = selectedRange ?? settings.settings?.defaultRange ?? "30d";
   const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
 
   const range = useMemo(
-    () => resolveRange(rangeKey, status?.firstEventMs ?? null),
-    [rangeKey, status?.firstEventMs],
+    () =>
+      selectedRange?.key === "custom"
+        ? selectedRange
+        : resolveRange(
+            selectedRange?.key ?? settings.settings?.defaultRange ?? "30d",
+            status?.firstEventMs ?? null,
+            new Date(nowMs),
+          ),
+    [selectedRange, settings.settings?.defaultRange, status?.firstEventMs, nowMs],
   );
 
   const handleSync = useCallback(
@@ -61,7 +69,8 @@ export default function App() {
         page={page}
         version={settings.appInfo?.version ?? null}
         collectionPaused={settings.settings?.collectionPaused ?? false}
-        rangeKey={rangeKey}
+        range={range}
+        nowMs={nowMs}
         status={status}
         syncBusy={syncBusy}
         error={error}
@@ -69,11 +78,16 @@ export default function App() {
           void reload();
         }}
         onNavigate={setPage}
-        onRangeChange={setRangeKey}
+        onRangeChange={setSelectedRange}
         onSync={handleSync}
       >
         {page === "overview" ? (
-          <OverviewPage range={range} refreshToken={refreshToken} onNavigate={setPage} />
+          <OverviewPage
+            range={range}
+            nowMs={nowMs}
+            refreshToken={refreshToken}
+            onNavigate={setPage}
+          />
         ) : null}
         {page === "analytics" ? <AnalyticsPage range={range} refreshToken={refreshToken} /> : null}
         {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}

@@ -52,23 +52,41 @@ pub fn get_overview_stats(
     })
 }
 
-/// 每日 Token 趋势：`day_count` 天，从 `from_ms`（本地零点）开始，缺失日期补 0。
+/// 每日 Token 趋势：精确会话范围与本地零点显示桶起点独立，缺失日期补 0。
 #[tauri::command(rename_all = "camelCase")]
 pub fn get_daily_token_trend(
     state: State<'_, AppState>,
     from_ms: i64,
     day_count: u32,
+    day_start_ms: Option<i64>,
+    to_ms: Option<i64>,
     client: Option<ClientParam>,
 ) -> Result<Vec<DailyTokenBucketDto>, CommandError> {
+    if to_ms.is_some_and(|to| to <= from_ms) {
+        return Err(CommandError::new("结束时间必须晚于开始时间。"));
+    }
+    let day_start_ms = day_start_ms.unwrap_or(from_ms);
     let store = state.store()?;
     let day_count = day_count.clamp(1, 400);
-    let buckets = store.daily_token_trend(from_ms, day_count, client.map(Client::from))?;
+    let buckets = store.daily_token_trend_in_range(
+        day_start_ms,
+        day_count,
+        Some(from_ms),
+        to_ms,
+        client.map(Client::from),
+    )?;
     let mut dtos: Vec<_> = buckets.into_iter().map(DailyTokenBucketDto::from).collect();
     for entry in Client::ALL {
         if client.is_some_and(|filter| Client::from(filter) != entry) {
             continue;
         }
-        let daily = store.daily_token_trend(from_ms, day_count, Some(entry))?;
+        let daily = store.daily_token_trend_in_range(
+            day_start_ms,
+            day_count,
+            Some(from_ms),
+            to_ms,
+            Some(entry),
+        )?;
         for (dto, bucket) in dtos.iter_mut().zip(daily) {
             dto.clients.push(super::dto::DailyClientTokensDto {
                 client: entry.as_str().to_string(),

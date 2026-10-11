@@ -132,17 +132,17 @@ usage/tokens ────────→ usage/client
 
 ### 3.1 命令清单（2026-10-11）
 
-| 命令                     | 参数                                              | 返回                                                           |
-| ------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
-| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`      | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
-| `get_daily_token_trend`  | `fromMs` / `dayCount` / `client`                  | 每日分桶（缺失日期补 0）                                       |
-| `get_client_usage`       | `fromMs` / `toMs`                                 | 七个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
-| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`            | 模型与项目排行                                                 |
-| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset` | 会话摘要列表（只含元数据与用量）                               |
-| `get_data_source_status` | —                                                 | 客户端接入状态、同步状态、库路径、数据时间范围                 |
-| `sync_usage`             | `force`                                           | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败             |
-| `sync_codex`             | `force`                                           | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
-| `app_info`               | —                                                 | 应用名与版本（连通性检查）                                     |
+| 命令                     | 参数                                                       | 返回                                                           |
+| ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------- |
+| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
+| `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                       |
+| `get_client_usage`       | `fromMs` / `toMs`                                          | 七个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
+| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
+| `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                 |
+| `sync_usage`             | `force`                                                    | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败             |
+| `sync_codex`             | `force`                                                    | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
+| `app_info`               | —                                                          | 应用名与版本（连通性检查）                                     |
 
 桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
@@ -288,6 +288,7 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-11 | 本地库放在应用数据目录（`%APPDATA%\com.toklens.app`）                             | 已采纳 | 不写项目目录，客户端数据只读                                            |
 | 2026-10-11 | 界面不展示费用金额（`costAvailable` 恒为 false）                                  | 已采纳 | 本机数据没有可靠成本来源，不用 token 反推金额                           |
 | 2026-10-11 | UI 采用统一 DashboardCard / ClientIdentity，图表采用 shadcn Chart + 已有 Recharts | 已采纳 | 统一外观与客户端配色，保留 Tauri DTO 和 Rust 统计边界，不新增运行时依赖 |
+| 2026-10-11 | 日期时间选择器复用 shadcn Popover 与原生分钟输入，根级 Hook 统一滚动预设时间      | 已采纳 | 无新依赖；自定义确认后固定，精确范围与每日显示桶独立                    |
 
 待登记（引入前补一行）：前端状态管理、前端测试框架、错误类型库（当前 `UsageError` 为模块内自定义枚举）、价格表来源。
 
@@ -313,7 +314,7 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 ### UI 组件结构（2026-10-11）
 
-`FilterSelectContent` 组合已有 shadcn SelectContent，统一日期与客户端筛选浮层的定位、宽度与选项间距，生成组件保持不变。
+`FilterSelectContent` 组合已有 shadcn SelectContent，统一客户端筛选浮层的定位、宽度与选项间距，生成组件保持不变。
 
 业务组件和页面采用 PascalCase 文件名；`DashboardCard` 组合 shadcn Card 统一面板外观，`ClientIdentity` 提供稳定客户端标识，`StatCard`、`TokenTrendChart`、`ClientUsageCard`、`RankingCard`、`SessionTable` 分别负责呈现。图表采用 shadcn Chart + 已有 Recharts，无新增运行时依赖。统计查询与 DTO 保持不变，费用来源未落地前 Tooltip 显示暂不可用，不反推金额。
 
@@ -324,3 +325,13 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 `DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop）。
 `ClientUsage.shareBps` 由领域查询按已知规范总量计算，10000 表示 100%，前端只格式化，不重新聚合。
 共享 DTO 类型仍在 `usage-types.ts`，`sync_codex` 保留仅 Codex 的语义。数据库 schema 保持 v1，无需迁移。
+
+### 统一日期时间筛选（2026-10-11）
+
+`DateRangePicker` 采用已有 shadcn Popover、Button、Input 与原生 `datetime-local` 分钟输入组合日期时间选择器，不新增日期库或修改 vendor 组件。
+自定义范围在确认后应用；根级时间 Hook 为所有统计页面提供同一当前时间，滚动预设统一刷新，已确认自定义范围保持固定。
+`hooks/use-local-clock.ts` 在分钟边界、窗口获得焦点和页面恢复可见时刷新时间，统一由 `App` 解析范围；编辑中的草稿不随时钟刷新。
+本周从本地周一零点起、本月从本地月初零点起。全局范围共享给总览、用量分析及会话明细。
+`get_daily_token_trend` 的 `fromMs` 是精确过滤开始，可选 `toMs` 为排他结束；`dayStartMs` 单独提供本地零点显示桶起点，省略时回退至 `fromMs`，兼容旧调用。
+命令层只校验结束晚于开始并将参数映射给领域查询；领域同时筛选会话总量与所属请求数。显示桶仍固定 24 小时，最多 400 天，无 DTO / schema / 权限 / 依赖变化。
+超长选择仅截断每日图表至最近 400 天并注明实际日期，区间指标查询完整范围；日历最近 365 天模式独立保留。

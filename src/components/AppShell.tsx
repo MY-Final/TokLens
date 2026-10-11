@@ -10,7 +10,6 @@ import {
   Settings,
 } from "lucide-react";
 
-import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
@@ -26,11 +25,11 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { SyncControl } from "@/components/SyncControl";
-import { FilterSelectContent } from "@/components/FilterSelectContent";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { ErrorBlock } from "@/components/StateBlocks";
 import type { DataSourceStatus } from "@/lib/usage-types";
 import { formatDateTime, formatNumber } from "@/lib/format";
-import { RANGE_OPTIONS, type RangeKey } from "@/lib/ranges";
+import type { DateRange } from "@/lib/ranges";
 
 export type PageKey = "overview" | "analytics" | "sessions" | "sources" | "settings";
 
@@ -53,7 +52,8 @@ export function AppShell({
   page,
   version,
   collectionPaused,
-  rangeKey,
+  range,
+  nowMs,
   children,
   status,
   syncBusy,
@@ -66,12 +66,13 @@ export function AppShell({
   page: PageKey;
   version: string | null;
   collectionPaused: boolean;
-  rangeKey: RangeKey;
+  range: DateRange;
+  nowMs: number;
   children: ReactNode;
   status: DataSourceStatus | null;
   syncBusy: boolean;
   onNavigate: (page: PageKey) => void;
-  onRangeChange: (key: RangeKey) => void;
+  onRangeChange: (range: DateRange) => void;
   onSync: (force?: boolean) => void;
   error: string | null;
   onRetry: () => void;
@@ -162,21 +163,12 @@ export function AppShell({
                   {sync?.report ? `已扫描 ${formatNumber(sync.report.filesSeen)} 个文件 · ` : ""}
                   上次同步 {formatDateTime(sync?.finishedAtMs ?? null)}
                 </span>
-                <Select
-                  value={rangeKey}
-                  onValueChange={(value) => onRangeChange(value as RangeKey)}
-                >
-                  <SelectTrigger size="sm" className="w-36" aria-label="选择日期范围">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <FilterSelectContent>
-                    {RANGE_OPTIONS.map((option) => (
-                      <SelectItem key={option.key} value={option.key}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </FilterSelectContent>
-                </Select>
+                <DateRangePicker
+                  range={range}
+                  firstEventMs={status?.firstEventMs ?? null}
+                  nowMs={nowMs}
+                  onChange={onRangeChange}
+                />
               </div>
             )}
           </div>

@@ -31,20 +31,20 @@ import type { DateRange } from "@/lib/ranges";
 const TOTAL_TOOLTIP =
   "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
 
-const MS_PER_DAY = 86_400_000;
-
 export function OverviewPage({
   range,
+  nowMs,
   refreshToken,
   onNavigate,
 }: {
   range: DateRange;
+  nowMs: number;
   refreshToken: number;
   onNavigate: (page: PageKey) => void;
 }) {
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+  const todayStart = startOfDay(nowMs).getTime();
 
   const overview = useAsyncData(
     () =>
@@ -53,22 +53,28 @@ export function OverviewPage({
         toMs: range.toMs,
         todayFromMs: todayStart,
       }),
-    `overview:${keySuffix}`,
+    `overview:${todayStart}:${keySuffix}`,
   );
   const trend = useAsyncData(
     () =>
       getDailyTokenTrend({
-        fromMs: range.fromMs ?? range.toMs - range.dayCount * MS_PER_DAY,
+        fromMs: range.fromMs ?? range.dayStartMs,
+        toMs: range.toMs,
+        dayStartMs: range.dayStartMs,
         dayCount: range.dayCount,
       }),
     `trend:${keySuffix}`,
   );
   const calendarStart = addDays(startOfDay(new Date(range.toMs - 1)), -364).getTime();
   const calendar = useAsyncData(
-    () => getDailyTokenTrend({ fromMs: calendarStart, dayCount: 365 }),
-    `calendar:${calendarStart}:${refreshToken}`,
+    () => getDailyTokenTrend({ fromMs: calendarStart, toMs: range.toMs, dayCount: 365 }),
+    `calendar:${calendarStart}:${range.toMs}:${refreshToken}`,
   );
   const calendarData = calendarPeriod === "year" ? calendar : trend;
+  const trendRangeLabel =
+    range.fromMs !== null && range.fromMs < range.dayStartMs
+      ? `${range.label} · 仅展示最近 400 天`
+      : range.label;
   const clients = useAsyncData(
     () => getClientUsage({ fromMs: range.fromMs, toMs: range.toMs }),
     `clients:${keySuffix}`,
@@ -144,7 +150,7 @@ export function OverviewPage({
       )}
 
       <TokenTrendChart
-        rangeLabel={range.label}
+        rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}
         error={trend.error}
@@ -152,7 +158,7 @@ export function OverviewPage({
       />
 
       <CalendarHeatmap
-        rangeLabel={calendarPeriod === "year" ? "最近一年（365 天）" : range.label}
+        rangeLabel={calendarPeriod === "year" ? "最近一年（365 天）" : trendRangeLabel}
         buckets={calendarData.data}
         loading={calendarData.loading}
         error={calendarData.error}

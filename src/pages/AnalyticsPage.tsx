@@ -19,8 +19,6 @@ import type { ClientKey } from "@/lib/usage-types";
 import { formatCompactTokens, formatNumber, formatPercent } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
 
-const MS_PER_DAY = 86_400_000;
-
 const CLIENT_FILTERS: ReadonlyArray<{ value: string; label: string; client: ClientKey | null }> = [
   { value: "all", label: "全部客户端", client: null },
   { value: "codex", label: "Codex", client: "codex" },
@@ -37,6 +35,10 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
   const selected = CLIENT_FILTERS.find((entry) => entry.value === clientValue) ?? CLIENT_FILTERS[0];
   const client = selected?.client ?? null;
   const keySuffix = `${range.key}:${clientValue}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
+  const trendRangeLabel =
+    range.fromMs !== null && range.fromMs < range.dayStartMs
+      ? `${range.label} · 仅展示最近 400 天`
+      : range.label;
 
   const overview = useAsyncData(
     () =>
@@ -51,7 +53,9 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
   const trend = useAsyncData(
     () =>
       getDailyTokenTrend({
-        fromMs: range.fromMs ?? range.toMs - range.dayCount * MS_PER_DAY,
+        fromMs: range.fromMs ?? range.dayStartMs,
+        toMs: range.toMs,
+        dayStartMs: range.dayStartMs,
         dayCount: range.dayCount,
         client,
       }),
@@ -207,7 +211,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
       </DashboardCard>
 
       <TokenTrendChart
-        rangeLabel={range.label}
+        rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}
         error={trend.error}
@@ -216,7 +220,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
       />
 
       <ClientDateHeatmap
-        rangeLabel={range.label}
+        rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}
         error={trend.error}

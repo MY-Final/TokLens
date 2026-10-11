@@ -64,6 +64,18 @@ impl UsageStore {
         day_count: u32,
         client: Option<Client>,
     ) -> Result<Vec<DailyBucket>, UsageError> {
+        self.daily_token_trend_in_range(day_start_ms, day_count, None, None, client)
+    }
+
+    /// Daily buckets and the exact half-open session-start filter are independent.
+    pub fn daily_token_trend_in_range(
+        &self,
+        day_start_ms: i64,
+        day_count: u32,
+        from_ms: Option<i64>,
+        to_ms: Option<i64>,
+        client: Option<Client>,
+    ) -> Result<Vec<DailyBucket>, UsageError> {
         const DAY_MS: i64 = 86_400_000;
         let mut buckets: Vec<DailyBucket> = (0..day_count as i64)
             .map(|index| DailyBucket {
@@ -86,21 +98,26 @@ impl UsageStore {
                AND started_at_ms >= ?1
                AND started_at_ms < ?2
                AND (?3 IS NULL OR client = ?3)
+               AND (?4 IS NULL OR started_at_ms >= ?4)
+               AND (?5 IS NULL OR started_at_ms < ?5)
              GROUP BY day_index
              ORDER BY day_index"
         );
         let client = client.map(Client::as_str);
         let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params![day_start_ms, end_ms, client], |row| {
-            let index: i64 = row.get(0)?;
-            Ok((
-                index,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
-                read_sums(row, 4)?,
-            ))
-        })?;
+        let rows = statement.query_map(
+            rusqlite::params![day_start_ms, end_ms, client, from_ms, to_ms],
+            |row| {
+                let index: i64 = row.get(0)?;
+                Ok((
+                    index,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    read_sums(row, 4)?,
+                ))
+            },
+        )?;
         let mut message_counts = std::collections::HashMap::new();
         for row in rows {
             let (index, sessions, sessions_without_usage, sessions_partial, sums) = row?;
@@ -118,11 +135,14 @@ impl UsageStore {
              JOIN sessions AS s ON s.id = m.session_id
              WHERE s.started_at_ms IS NOT NULL AND s.started_at_ms >= ?1 AND s.started_at_ms < ?2
                AND (?3 IS NULL OR s.client = ?3)
+               AND (?4 IS NULL OR s.started_at_ms >= ?4)
+               AND (?5 IS NULL OR s.started_at_ms < ?5)
              GROUP BY day_index",
         )?;
-        let rows = statement.query_map(rusqlite::params![day_start_ms, end_ms, client], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
-        })?;
+        let rows = statement.query_map(
+            rusqlite::params![day_start_ms, end_ms, client, from_ms, to_ms],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )?;
         for row in rows {
             let (index, count) = row?;
             message_counts.insert(index, count);

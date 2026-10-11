@@ -1,6 +1,96 @@
 use super::*;
 
 #[test]
+fn daily_exact_range_filters_sessions_and_requests_with_independent_buckets() {
+    let store = UsageStore::open_in_memory().expect("store");
+    let from = ms("2026-10-05T10:30:00.000Z");
+    // An inclusive minute selection ends immediately before this exclusive boundary.
+    let to = ms("2026-10-06T11:46:00.000Z");
+    for (id, at) in [
+        ("before", from - 1),
+        ("start", from),
+        ("last-minute", to - 1),
+        ("end", to),
+        ("outside-buckets", ms(D0) + 4 * 86_400_000),
+    ] {
+        let mut record = codex_record(
+            id,
+            D0,
+            D0,
+            None,
+            None,
+            counts(Some(10), Some(2), Some(0), Some(0), Some(0), Some(12)),
+        );
+        record.started_at_ms = Some(at);
+        store
+            .import_session(
+                &source(Client::Codex, id),
+                &record,
+                &[message(id, id, 1, "2026-10-10T00:00:00.000Z")],
+            )
+            .expect("synthetic session");
+    }
+    let mut unknown = codex_record("unknown", D0, D0, None, None, RawTokenCounts::default());
+    unknown.started_at_ms = Some(from + 1);
+    unknown.coverage = crate::usage::model::MessageCoverage::Partial;
+    store.upsert_session(&unknown).expect("unknown");
+    let mut claude = claude_record(D0, PROJECT_ALPHA, "fixture");
+    claude.started_at_ms = Some(from);
+    store.upsert_session(&claude).expect("claude");
+    let buckets = store
+        .daily_token_trend_in_range(ms(D0), 4, Some(from), Some(to), Some(Client::Codex))
+        .expect("exact trend");
+    assert_eq!(buckets.len(), 4);
+    assert_eq!(buckets[0].day_start_ms, ms(D0));
+    assert_eq!(
+        (
+            buckets[0].sessions,
+            buckets[0].messages,
+            buckets[0].sessions_without_usage,
+            buckets[0].sessions_partial,
+            buckets[0].sums.total_tokens
+        ),
+        (2, 1, 1, 1, 12)
+    );
+    assert_eq!(
+        (
+            buckets[1].sessions,
+            buckets[1].messages,
+            buckets[1].sums.total_tokens
+        ),
+        (1, 1, 12)
+    );
+    assert_eq!((buckets[2].sessions, buckets[3].sessions), (0, 0));
+    let all = store
+        .daily_token_trend_in_range(ms(D0), 4, Some(from), Some(to), None)
+        .expect("all clients");
+    assert_eq!(all[0].sessions, 3);
+    assert_eq!(all[0].sums.total_tokens, 662);
+    let legacy = store
+        .daily_token_trend(ms(D0), 4, Some(Client::Codex))
+        .expect("legacy");
+    assert_eq!(legacy.iter().map(|bucket| bucket.sessions).sum::<i64>(), 5);
+    assert_eq!(legacy.iter().map(|bucket| bucket.messages).sum::<i64>(), 4);
+    assert_eq!(
+        legacy
+            .iter()
+            .map(|bucket| bucket.sums.total_tokens)
+            .sum::<i64>(),
+        48
+    );
+    let clipped = store
+        .daily_token_trend_in_range(
+            ms(D0),
+            1,
+            Some(from),
+            Some(to + 10 * 86_400_000),
+            Some(Client::Codex),
+        )
+        .expect("bucket bounds");
+    assert_eq!(clipped[0].sessions, 2);
+}
+
+#[test]
 fn range_totals_respect_range_and_client_filters() {
     let store = seeded_store();
     let all = store

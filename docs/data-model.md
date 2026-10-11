@@ -328,3 +328,10 @@ costStatus estimated / unknown 的 cost 不导入，当前所有 Pi cost 均不�
 会话总量对每个请求选择的已知总量求和（允许客户端 total 与由完整分桶换算的旧记录混合），不因混合格式覆盖客户端自报总量；任一请求总量未知时会话总量未知。
 两者使用完整快照原子替换；源缺失、失败、未知格式保留历史与水位，非法完整行计数且覆盖标记 partial。
 Pi 提交前复核文件集合/指纹，截断尾行保留上次快照；重复、追加、缩短、删除、重启与隐私用合成 fixture 验证。
+
+### 每日查询的精确范围（2026-10-11）
+
+`daily_token_trend_in_range(day_start_ms, day_count, from_ms, to_ms, client)` 独立接收显示桶起点与可选会话时间边界。
+会话 Token / 完整度查询与请求计数查询均按 `sessions.started_at_ms >= from_ms AND sessions.started_at_ms < to_ms` 过滤，并同时限制在显示桶范围内。
+请求自身时间不参与区间过滤或分桶。缺失日期、未知总量及 partial 完整度字段保持原语义。
+`daily_token_trend` 保留为不额外筛选精确范围的兼容包装；固定 24 小时桶与夏令时限制保持不变。

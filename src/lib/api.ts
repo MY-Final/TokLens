@@ -129,11 +129,15 @@ export function getOverviewStats(
 export function getDailyTokenTrend(args: {
   fromMs: number;
   dayCount: number;
+  dayStartMs?: number;
+  toMs?: number;
   client?: ClientKey | null;
 }): Promise<DailyTokenBucket[]> {
   return invoke<DailyTokenBucket[]>("get_daily_token_trend", {
     fromMs: args.fromMs,
     dayCount: args.dayCount,
+    dayStartMs: args.dayStartMs ?? null,
+    toMs: args.toMs ?? null,
     client: args.client ?? null,
   });
 }
