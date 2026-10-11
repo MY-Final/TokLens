@@ -3,8 +3,15 @@
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
 **Codex**, **Claude Code**, and **OpenCode** on this machine (sessions, requests, tokens, models, cost).
 
-This repository currently contains only the project scaffolding. Business logic, data collection,
-UI screens, and additional UI component libraries are intentionally not included yet.
+What is implemented today:
+
+- a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
+- a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex.rs`),
+- the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
+- the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
+
+Claude Code and OpenCode collectors are not implemented yet (the UI marks them as unsupported) and no cost
+figures are shown, because there is no reliable cost source on this machine.
 
 Development rules live in [`AGENTS.md`](./AGENTS.md) with details under [`docs/`](./docs/README.md):
 
@@ -67,9 +74,10 @@ The first run compiles the Rust dependencies and may take several minutes.
 | `pnpm check`       | lint + typecheck + format:check (run before committing)        |
 | `pnpm rust:fmt`    | Format Rust code (`rust:fmt:check` to verify)                  |
 | `pnpm rust:clippy` | Lint Rust code with `clippy -D warnings`                       |
+| `pnpm rust:test`   | Run the Rust unit tests (`rust:check` also runs fmt + clippy)  |
 
 > `pnpm dev` only serves the web frontend. Tauri APIs such as `invoke` are unavailable in that mode, so the
-> scaffold shows a "backend not connected" status when opened in a plain browser.
+> app shows a local-backend-unavailable message when opened in a plain browser.
 
 ## Project Structure
 
@@ -87,8 +95,9 @@ TokLens/
 ├─ public/                  # Static assets served as-is
 ├─ src/                     # React frontend source
 │  ├─ main.tsx              # React entry point
-│  ├─ App.tsx               # Root component (backend connectivity check)
-│  ├─ App.css               # Base styles
+│  ├─ App.tsx               # App shell: sidebar navigation + pages
+│  ├─ pages/                # Overview / analytics / sessions / data sources
+│  ├─ components/           # Business components (charts, tables, cards)
 │  ├─ index.css             # Tailwind v4 entry and design tokens
 │  ├─ components/ui/        # shadcn/ui generated components (vendor code)
 │  ├─ hooks/                # Reusable hooks (use-mobile.ts from shadcn)
@@ -101,13 +110,21 @@ TokLens/
    ├─ icons/                # Application icons
    └─ src/
       ├─ main.rs            # Binary entry point
-      └─ lib.rs             # Application setup and Tauri commands
+      ├─ lib.rs             # Tauri setup: state, initial sync, command registry
+      ├─ commands/          # Command layer: DTOs, queries, background sync
+      ├─ collectors/        # Client collectors (Codex implemented)
+      └─ usage/             # Data model, token semantics, SQLite store & analytics
 ```
 
 ## Notes
 
 - The application identifier is `com.toklens.app`.
-- The only registered Tauri command is `app_info`, a placeholder used to verify that the frontend can reach the
-  Rust backend.
+- The local usage database lives in the app data directory: `%APPDATA%\com.toklens.app\toklens-usage.sqlite3`.
+  Client data directories are only ever read, never written.
+- Commands: `get_overview_stats`, `get_daily_token_trend`, `get_client_usage`, `get_rankings`, `get_sessions`,
+  `get_data_source_status`, `sync_codex` (plus `app_info`). Queries read the local database;
+  `sync_codex` reads client files and updates only TokLens's own database.
+- Usage accuracy can be reconciled against Codex's own counters with
+  `cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report`.
 - Statistics must distinguish measured data from estimated data, and local session data is private by default:
   see [`docs/data-metrics.md`](./docs/data-metrics.md).

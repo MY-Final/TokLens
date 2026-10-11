@@ -3,11 +3,12 @@
 本文件是 TokLens 的唯一入口规范，适用于本仓库内的全部代码、脚本与文档，人和 AI Agent 同样遵守。
 更细的规则拆分为三份配套文档（索引见 `docs/README.md`），出现冲突时以本文件的约束优先级为准：
 
-| 文档                    | 负责内容                                   |
-| ----------------------- | ------------------------------------------ |
-| `docs/architecture.md`  | 架构分层、模块边界、依赖方向、架构决策登记 |
-| `docs/ui-guidelines.md` | UI/UX 设计规范、组件与可视化规范           |
-| `docs/data-metrics.md`  | 数据来源、统计口径、估算规则、隐私默认值   |
+| 文档                    | 负责内容                                        |
+| ----------------------- | ----------------------------------------------- |
+| `docs/architecture.md`  | 架构分层、模块边界、依赖方向、架构决策登记      |
+| `docs/ui-guidelines.md` | UI/UX 设计规范、组件与可视化规范                |
+| `docs/data-metrics.md`  | 数据来源、统计口径、估算规则、隐私默认值        |
+| `docs/data-model.md`    | 统一数据模型、Token 语义、去重键、SQLite 表结构 |
 
 ## 1. 项目目标与边界
 
@@ -20,8 +21,9 @@ TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、
 2. **真实与估算分离**：任何指标都必须能回答"这是采集到的真实数据，还是推算出来的估算数据"（见 `docs/data-metrics.md`）。
 3. **隐私默认保护**：只读取统计所需的最小元数据，默认不落盘、不打印、不外传会话正文。
 
-当前仓库状态：仅有 Tauri 2 + React 脚手架。**没有**数据库、没有采集实现、没有业务页面，唯一的 Tauri 命令是占位用的
-`app_info`。新增架构组件（持久化、状态管理、测试框架、错误处理库等）前，必须先在 `docs/architecture.md` 的决策记录中登记。
+当前仓库状态：已有本地 SQLite 用量库、Codex 只读采集器、Tauri 查询与同步命令，以及总览 / 用量分析 /
+会话明细 / 数据源管理页面。Claude Code 与 OpenCode 采集器、费用换算尚未实现。
+新增架构组件（持久化、状态管理、测试框架、错误处理库等）前，必须先在 `docs/architecture.md` 的决策记录中登记。
 
 明确不做的事：云端账号体系、远程同步、修改或删除客户端的原始会话数据、绕过客户端自身配置读取数据、采集与统计无关的正文内容。
 
@@ -56,21 +58,28 @@ pnpm check            # lint + typecheck + format:check（提交前必跑）
 pnpm rust:fmt         # cargo fmt 写入
 pnpm rust:fmt:check   # cargo fmt --check
 pnpm rust:clippy      # cargo clippy --all-targets -- -D warnings
+pnpm rust:test        # Rust 单元测试（cargo test）
+pnpm rust:check       # rust:fmt:check + rust:clippy + rust:test（Rust 改动必跑）
 pnpm tauri build      # 生产打包
 ```
 
 ## 3. 目录职责
 
-| 路径                      | 职责                                                                      |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `src/`                    | 前端应用源码（React）                                                     |
-| `src/components/ui/`      | shadcn CLI 生成的组件：视为 vendor 代码，不手改（已豁免 ESLint/Prettier） |
-| `src/lib/`                | 无副作用纯函数与工具（不得依赖 React、Tauri API）                         |
-| `src/hooks/`              | 复用 Hook；`use-mobile.ts` 为 shadcn 生成物，同样视为 vendor              |
-| `src-tauri/src/`          | Rust 侧：数据采集、解析、归一化、聚合、持久化与 Tauri command             |
-| `src-tauri/capabilities/` | Tauri 2 权限声明（最小权限，见第 5 节）                                   |
-| `docs/`                   | 规范文档（架构 / UI / 数据统计）                                          |
-| `public/`                 | 原样拷贝的静态资源                                                        |
+| 路径                        | 职责                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `src/`                      | 前端应用源码（React）                                                               |
+| `src/components/ui/`        | shadcn CLI 生成的组件：视为 vendor 代码，不手改（已豁免 ESLint/Prettier）           |
+| `src/components/`           | 业务组件（不依赖 Tauri 细节，数据统一来自 `src/lib/api.ts`）                        |
+| `src/lib/`                  | 纯函数与工具（不得依赖 React）；`api.ts` 是唯一 Tauri 调用与 DTO 封装入口           |
+| `src/hooks/`                | 复用 Hook；`use-mobile.ts` 为 shadcn 生成物，同样视为 vendor                        |
+| `src/pages/`                | 页面级组件（总览 / 用量分析 / 会话明细 / 数据源管理）                               |
+| `src-tauri/src/`            | Rust 侧：数据采集、解析、归一化、聚合、持久化与 Tauri command                       |
+| `src-tauri/src/usage/`      | 统一数据模型 / Token 口径 / SQLite 存储（不含采集器与 UI，见 `docs/data-model.md`） |
+| `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（当前仅 Codex，见 `docs/data-model.md` 第 8 节）   |
+| `src-tauri/src/commands/`   | Tauri command 层：应用状态、后台同步调度与前端 DTO（口径仍由 `usage` 提供）         |
+| `src-tauri/capabilities/`   | Tauri 2 权限声明（最小权限，见第 5 节）                                             |
+| `docs/`                     | 规范文档（架构 / UI / 数据统计）                                                    |
+| `public/`                   | 原样拷贝的静态资源                                                                  |
 
 约束：
 
@@ -132,7 +141,9 @@ pnpm tauri build      # 生产打包
 
 ## 7. 测试要求
 
-现状：尚未配置测试框架（无 Vitest / 无 Rust 测试目标）。引入框架时先在 `docs/architecture.md` 登记版本与脚本，并把命令接入 `pnpm check`。
+现状：Rust 侧已有单元测试（`src-tauri/src/usage/`，`pnpm rust:test`），前端尚未配置测试框架（无 Vitest）。引入前端框架时先在 `docs/architecture.md` 登记并补脚本。
+
+口径类改动（Token 语义、去重键、累计值、迁移）必须带 `#[cfg(test)]` 单测，且只能使用合成数据。
 
 必须覆盖的内容：
 
@@ -147,7 +158,7 @@ pnpm tauri build      # 生产打包
 
 1. 依赖变化时执行 `pnpm install`，确认 `pnpm-lock.yaml` 同步更新。
 2. 运行 `pnpm check`（lint + typecheck + format 校验），必须全绿。
-3. 改动涉及 Rust 时，运行 `pnpm rust:fmt:check` 与 `pnpm rust:clippy`，必须全绿。
+3. 改动涉及 Rust 时，运行 `pnpm rust:check`（fmt + clippy + test），必须全绿。
 4. 涉及界面或交互时，运行 `pnpm tauri dev` 手动验证：窗口可启动、控制台无报错、关键路径可完成、空/加载/错误三态正常。
 5. 涉及统计数据时，抽样与客户端自身统计对账，并在提交说明中写明口径、差异与原因。
 6. 涉及新依赖、新权限、联网能力、目录结构或统计口径时，同步更新 `AGENTS.md` / `docs/` 对应文档。
@@ -156,7 +167,7 @@ pnpm tauri build      # 生产打包
    - [ ] 没有提交 vendor 代码（`src/components/ui/`、`use-mobile.ts`）的手改
    - [ ] 没有把会话正文写入日志、缓存或仓库
    - [ ] 估算数据在 UI 上有明确标注
-   - [ ] `pnpm check` 通过，Rust 侧改动额外通过 fmt/clippy
+   - [ ] `pnpm check` 通过，Rust 侧改动额外通过 `pnpm rust:check`（fmt + clippy + test）
 
 ## 9. 规范维护
 
