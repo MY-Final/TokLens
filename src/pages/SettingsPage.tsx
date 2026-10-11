@@ -3,6 +3,8 @@ import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { SettingsController } from "@/hooks/use-settings";
 import type { CloseBehavior, Theme } from "@/lib/settings-types";
 import { RANGE_OPTIONS } from "@/lib/ranges";
+import { CollectionSettings } from "@/components/CollectionSettings";
+import { DataSettings } from "@/components/DataSettings";
 
 const CLOSE_OPTIONS: { value: CloseBehavior; label: string }[] = [
   { value: "ask", label: "每次询问" },
@@ -99,6 +101,8 @@ export function SettingsPage({ controller }: { controller: SettingsController })
           }}
         />
       </SettingsSection>
+      <CollectionSettings controller={controller} />
+      <DataSettings controller={controller} />
     </div>
   );
 }

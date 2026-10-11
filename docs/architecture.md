@@ -138,6 +138,11 @@ usage/tokens ────────→ usage/client
 | `sync_codex`             | `force`                                           | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
 | `app_info`               | —                                                 | 应用名与版本（连通性检查）                                     |
 
+桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
+更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
+处理原生关闭流程。`clear_statistics` 在后台维护边界中暂停并清除统计；`reset_settings` 仅重置偏好；
+`open_app_data_dir` 只打开固定 TokLens 目录。`settings-changed` 通知前端重读；统计清除复用 `usage-sync` 刷新事件。
+
 ## 4. 客户端适配器规范
 
 每个客户端一个独立模块（`codex`、`claude_code`、`opencode`、`dsh`、`kimi_code`、`mimocode`、`pi_desktop`，后续新增同理），并遵守：

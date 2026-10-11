@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import type { SettingsController } from "@/hooks/use-settings";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
@@ -34,6 +36,7 @@ export function SourcesPage({
   refreshToken,
   onRetry,
   onSync,
+  settingsController,
 }: {
   status: DataSourceStatus | null;
   loading: boolean;
@@ -42,6 +45,7 @@ export function SourcesPage({
   refreshToken: number;
   onRetry: () => void;
   onSync: (force?: boolean) => void;
+  settingsController: SettingsController;
 }) {
   const sync: SyncState | null = status?.sync ?? null;
   const report = sync?.report ?? null;
@@ -49,13 +53,21 @@ export function SourcesPage({
   return (
     <div className="space-y-4">
       {error ? <ErrorBlock message={error} onRetry={onRetry} /> : null}
+      {settingsController.error ? (
+        <ErrorBlock
+          message={settingsController.error}
+          onRetry={() => {
+            void settingsController.reload();
+          }}
+        />
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <DashboardCard>
           <CardHeader>
             <CardTitle>同步</CardTitle>
             <CardDescription>
-              启动时同步全部客户端；转录变化时重新聚合，OpenCode 每次读取元数据快照。
+              按设置采集已启用的客户端；暂停或关闭客户端后保留已有统计。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -148,6 +160,22 @@ export function SourcesPage({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ClientIdentity client={client.client} compact />
+                <Switch
+                  className="ml-auto"
+                  aria-label={`采集 ${client.client}`}
+                  checked={
+                    settingsController.settings?.enabledClients.includes(client.client) ?? false
+                  }
+                  disabled={settingsController.busy || !settingsController.settings}
+                  onCheckedChange={(enabled) => {
+                    const previous = settingsController.settings?.enabledClients ?? [];
+                    void settingsController.patch({
+                      enabledClients: enabled
+                        ? [...previous, client.client]
+                        : previous.filter((key) => key !== client.client),
+                    });
+                  }}
+                />
                 {client.supported ? (
                   <Badge variant="secondary" className="font-normal">
                     {report?.clients.find((result) => result.client === client.client)?.error

@@ -76,6 +76,7 @@ export default function App() {
         {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}
         {page === "sources" ? (
           <SourcesPage
+            settingsController={settings}
             status={status}
             loading={loading}
             error={error}

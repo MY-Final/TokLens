@@ -5,6 +5,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 pub fn update(app: &AppHandle, patch: SettingsPatch) -> Result<SettingsSnapshot, CommandError> {
     let desired_autostart = patch.autostart;
+    let resume = patch.collection_paused == Some(false);
     let previous_native = if desired_autostart.is_some() {
         Some(
             app.autolaunch()
@@ -16,6 +17,14 @@ pub fn update(app: &AppHandle, patch: SettingsPatch) -> Result<SettingsSnapshot,
     };
     let store = app.state::<SettingsStore>();
     let snapshot = store.transform(|previous| {
+        if patch.collection_paused.is_some()
+            && app
+                .state::<crate::commands::AppState>()
+                .activity
+                .is_clearing()
+        {
+            return Err("正在清除统计，请等待完成后再恢复采集".into());
+        }
         let next = previous.patched(patch)?;
         if let Some(enabled) = desired_autostart {
             set_autostart(app, enabled)?;
@@ -31,6 +40,9 @@ pub fn update(app: &AppHandle, patch: SettingsPatch) -> Result<SettingsSnapshot,
     }
     let snapshot = snapshot.map_err(CommandError::new)?;
     let _ = app.emit("settings-changed", ());
+    if resume {
+        let _ = crate::commands::request_sync(app, false);
+    }
     Ok(snapshot)
 }
 fn set_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {

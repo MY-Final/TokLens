@@ -8,7 +8,9 @@
 mod activity;
 pub mod dto;
 mod error;
+pub mod maintenance;
 pub mod queries;
+pub mod scheduler;
 pub mod settings;
 mod state;
 mod sync;

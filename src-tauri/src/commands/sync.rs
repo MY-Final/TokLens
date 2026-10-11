@@ -33,6 +33,23 @@ fn request_sync_for(
     if !state.activity.start_sync().map_err(CommandError::new)? {
         return Ok(state.sync_state());
     }
+    let preferences = match app.state::<crate::settings::SettingsStore>().snapshot() {
+        Ok(snapshot) => snapshot.settings,
+        Err(error) => {
+            state.activity.finish_sync();
+            return Err(CommandError::new(error));
+        }
+    };
+    if preferences.collection_paused {
+        state.activity.finish_sync();
+        return Err(CommandError::new("采集已暂停，请先在设置中恢复采集"));
+    }
+    let enabled = preferences.clients();
+    let clients: Vec<Client> = clients
+        .iter()
+        .copied()
+        .filter(|c| enabled.contains(c))
+        .collect();
     let dto = {
         let mut sync = state
             .sync
@@ -48,7 +65,7 @@ fn request_sync_for(
         SyncStateDto::from(&*sync)
     };
     let _ = app.emit(SYNC_EVENT, dto.clone());
-    spawn_sync(app.clone(), force, clients.to_vec());
+    spawn_sync(app.clone(), force, clients);
     Ok(dto)
 }
 

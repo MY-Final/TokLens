@@ -35,6 +35,15 @@ export function getAppInfo(): Promise<AppInfo> {
 export function getSettings(): Promise<SettingsSnapshot> {
   return invoke<SettingsSnapshot>("get_settings");
 }
+export function clearStatistics(): Promise<SettingsSnapshot> {
+  return invoke("clear_statistics");
+}
+export function resetSettings(): Promise<SettingsSnapshot> {
+  return invoke("reset_settings");
+}
+export function openAppDataDir(): Promise<void> {
+  return invoke("open_app_data_dir");
+}
 
 export function updateSettings(patch: SettingsPatch): Promise<SettingsSnapshot> {
   return invoke<SettingsSnapshot>("update_settings", { patch });

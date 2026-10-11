@@ -11,6 +11,7 @@
 mod connection;
 mod error;
 mod import;
+mod maintenance;
 mod migrations;
 mod queries;
 mod snapshot;

@@ -50,13 +50,24 @@ pub fn run() {
             app.manage(settings::SettingsStore::load(&data_dir));
             desktop::initialize(app.handle())?;
             // 启动即做一次增量同步：首次运行导入历史，之后只处理变化的文件。
-            commands::request_sync(app.handle(), false)?;
+            let preferences = app
+                .state::<settings::SettingsStore>()
+                .snapshot()
+                .map_err(std::io::Error::other)?
+                .settings;
+            if preferences.sync_on_start && !preferences.collection_paused {
+                commands::request_sync(app.handle(), false)?;
+            }
+            commands::scheduler::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::maintenance::clear_statistics,
+            commands::maintenance::reset_settings,
+            commands::maintenance::open_app_data_dir,
             desktop::get_desktop_status,
             desktop::get_close_pending,
             desktop::resolve_close,
