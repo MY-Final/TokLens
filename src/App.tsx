@@ -6,13 +6,17 @@ import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { SessionsPage } from "@/pages/SessionsPage";
 import { SourcesPage } from "@/pages/SourcesPage";
+import { SettingsPage } from "@/pages/SettingsPage";
+import { useSettings } from "@/hooks/use-settings";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { resolveRange, type RangeKey } from "@/lib/ranges";
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
-  const [rangeKey, setRangeKey] = useState<RangeKey>("30d");
+  const [selectedRange, setRangeKey] = useState<RangeKey | null>(null);
+  const settings = useSettings();
+  const rangeKey = selectedRange ?? settings.settings?.defaultRange ?? "30d";
   const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
 
   const range = useMemo(
@@ -31,6 +35,7 @@ export default function App() {
     <TooltipProvider delayDuration={200}>
       <AppShell
         page={page}
+        version={settings.appInfo?.version ?? null}
         rangeKey={rangeKey}
         status={status}
         syncBusy={syncBusy}
@@ -60,6 +65,7 @@ export default function App() {
             onSync={handleSync}
           />
         ) : null}
+        {page === "settings" ? <SettingsPage controller={settings} /> : null}
       </AppShell>
       <Toaster position="bottom-right" />
     </TooltipProvider>

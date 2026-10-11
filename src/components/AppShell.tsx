@@ -1,7 +1,14 @@
 /** 侧边导航 + 顶部工具栏。 */
 
 import type { ReactNode } from "react";
-import { BarChart3, Database, LayoutDashboard, ListTree, ShieldCheck } from "lucide-react";
+import {
+  BarChart3,
+  Database,
+  LayoutDashboard,
+  ListTree,
+  ShieldCheck,
+  Settings,
+} from "lucide-react";
 
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -24,7 +31,7 @@ import type { DataSourceStatus } from "@/lib/usage-types";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { RANGE_OPTIONS, type RangeKey } from "@/lib/ranges";
 
-export type PageKey = "overview" | "analytics" | "sessions" | "sources";
+export type PageKey = "overview" | "analytics" | "sessions" | "sources" | "settings";
 
 const NAV_ITEMS: ReadonlyArray<{ key: PageKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "overview", label: "总览", icon: LayoutDashboard },
@@ -38,10 +45,12 @@ const PAGE_TITLES: Record<PageKey, string> = {
   analytics: "用量分析",
   sessions: "会话明细",
   sources: "数据源管理",
+  settings: "设置",
 };
 
 export function AppShell({
   page,
+  version,
   rangeKey,
   children,
   status,
@@ -53,6 +62,7 @@ export function AppShell({
   onRetry,
 }: {
   page: PageKey;
+  version: string | null;
   rangeKey: RangeKey;
   children: ReactNode;
   status: DataSourceStatus | null;
@@ -101,11 +111,24 @@ export function AppShell({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="gap-3 px-5 py-5">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={page === "settings"}
+                onClick={() => onNavigate("settings")}
+              >
+                <Settings className="size-4" aria-hidden="true" />
+                <span>设置</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="size-3.5" aria-hidden="true" />
             本地优先 · 隐私保护
           </div>
-          <span className="font-mono text-xs text-muted-foreground/80">TokLens v0.1.0</span>
+          <span className="font-mono text-xs text-muted-foreground/80">
+            TokLens {version ? `v${version}` : ""}
+          </span>
         </SidebarFooter>
       </Sidebar>
 
@@ -123,26 +146,33 @@ export function AppShell({
               <h1 className="text-xl font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
               <p className="mt-1 text-xs text-muted-foreground">本地 AI 编程助手使用情况统计</p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="hidden text-xs text-muted-foreground xl:inline">
-                {sync?.report ? `已扫描 ${formatNumber(sync.report.filesSeen)} 个文件 · ` : ""}
-                上次同步 {formatDateTime(sync?.finishedAtMs ?? null)}
-              </span>
-              <Select value={rangeKey} onValueChange={(value) => onRangeChange(value as RangeKey)}>
-                <SelectTrigger size="sm" className="w-36" aria-label="选择日期范围">
-                  <SelectValue />
-                </SelectTrigger>
-                <FilterSelectContent>
-                  {RANGE_OPTIONS.map((option) => (
-                    <SelectItem key={option.key} value={option.key}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </FilterSelectContent>
-              </Select>
-            </div>
+            {page !== "settings" && (
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="hidden text-xs text-muted-foreground xl:inline">
+                  {sync?.report ? `已扫描 ${formatNumber(sync.report.filesSeen)} 个文件 · ` : ""}
+                  上次同步 {formatDateTime(sync?.finishedAtMs ?? null)}
+                </span>
+                <Select
+                  value={rangeKey}
+                  onValueChange={(value) => onRangeChange(value as RangeKey)}
+                >
+                  <SelectTrigger size="sm" className="w-36" aria-label="选择日期范围">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <FilterSelectContent>
+                    {RANGE_OPTIONS.map((option) => (
+                      <SelectItem key={option.key} value={option.key}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </FilterSelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          {error && page !== "sources" ? <ErrorBlock message={error} onRetry={onRetry} /> : null}
+          {error && page !== "sources" && page !== "settings" ? (
+            <ErrorBlock message={error} onRetry={onRetry} />
+          ) : null}
           {children}
         </div>
       </SidebarInset>

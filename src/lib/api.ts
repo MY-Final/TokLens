@@ -7,6 +7,19 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { AppInfo, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
+
+export function getAppInfo(): Promise<AppInfo> {
+  return invoke<AppInfo>("app_info");
+}
+
+export function getSettings(): Promise<SettingsSnapshot> {
+  return invoke<SettingsSnapshot>("get_settings");
+}
+
+export function updateSettings(patch: SettingsPatch): Promise<SettingsSnapshot> {
+  return invoke<SettingsSnapshot>("update_settings", { patch });
+}
 
 import type {
   ClientKey,
