@@ -72,10 +72,7 @@ impl TokenBuckets {
             if !required {
                 continue;
             }
-            match value {
-                Some(value) => total = total.checked_add(value)?,
-                None => return None,
-            }
+            total = total.checked_add(value?)?;
         }
         Some(total)
     }

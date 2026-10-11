@@ -51,6 +51,7 @@ pub async fn install_update(app: AppHandle) -> Result<(), CommandError> {
         }
         #[cfg(target_os = "macos")]
         app.restart();
+        #[cfg(not(target_os = "macos"))]
         Ok(())
     })
     .await
