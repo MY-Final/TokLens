@@ -5,6 +5,7 @@
 //!
 //! 隐私：只返回元数据与统计值；会话正文、提示词、凭据不进入任何 DTO。
 
+mod activity;
 pub mod dto;
 mod error;
 pub mod queries;

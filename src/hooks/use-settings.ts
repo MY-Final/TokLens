@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
-import { getAppInfo, getSettings, toErrorMessage, updateSettings } from "@/lib/api";
+import { getAppInfo, getSettings, onDesktopEvent, toErrorMessage, updateSettings } from "@/lib/api";
 import type { AppInfo, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
 
 export function useSettings() {
@@ -65,6 +65,25 @@ export function useSettings() {
     },
     [accept],
   );
+
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    onDesktopEvent("settings-changed", () => {
+      void reload();
+    })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => {
+        /* Native settings are unavailable in browser preview. */
+      });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [reload]);
 
   return {
     settings: snapshot?.settings ?? null,

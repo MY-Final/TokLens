@@ -127,7 +127,9 @@ pnpm tauri build      # 生产打包
 - **最小权限**：`src-tauri/capabilities/default.json` 只声明当前功能必需的权限。新增 `fs`、`shell`、`http` 等权限必须在
   PR/提交说明中给出用途、范围与替代方案评估。
 - **不引入高风险能力**：不得使用 `shell:allow-execute`、任意路径 `fs` 读写、远程 `http` 等，除非功能必需且经过人工确认。
-- **CSP**：`tauri.conf.json` 当前为 `csp: null`（脚手架默认）。在接入任何外部资源、内联脚本或自定义协议前，必须先配置 CSP。
+- **CSP**：`tauri.conf.json` 限制到本地资源与 IPC，开发模式额外允许 Vite HMR；禁止远程脚本。已有图表与组件允许内联样式。
+- **桌面生命周期**：托盘、关闭与自启位于 `src-tauri/src/desktop/`，设置位于 `settings/`；退出必须等待已有采集写入完成。
+- **更新**：只使用官方签名 updater，默认不联网；仅用户检查或开启自动检查后访问固定 GitHub Releases 端点。私钥不得入库。
 - 前端不执行远程代码、不 `eval`、不加载远程脚本；外部链接统一通过 `tauri-plugin-opener` 交给系统浏览器打开。
 - 不引入带遥测/统计上报的依赖；新增依赖需说明理由、维护状态与体积影响，且必须来自 npm 官方 registry。
 - 不在代码、日志、错误信息或仓库中存放任何密钥、令牌、真实会话内容；本地数据目录、`.env`、导出文件不得入库。

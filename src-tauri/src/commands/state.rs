@@ -19,6 +19,7 @@ pub struct SyncState {
 
 /// 应用状态：本地库连接 + 库路径 + 同步状态。
 pub struct AppState {
+    pub(crate) activity: super::activity::ActivityGate,
     pub(crate) store: Mutex<UsageStore>,
     pub(crate) db_path: PathBuf,
     pub(crate) sync: Mutex<SyncState>,
@@ -34,6 +35,7 @@ impl AppState {
         let db_path = app_data_dir.join("toklens-usage.sqlite3");
         let store = UsageStore::open(&db_path)?;
         Ok(Self {
+            activity: super::activity::ActivityGate::default(),
             store: Mutex::new(store),
             db_path,
             sync: Mutex::new(SyncState::default()),

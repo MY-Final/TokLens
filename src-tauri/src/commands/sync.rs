@@ -30,14 +30,14 @@ fn request_sync_for(
     clients: &[Client],
 ) -> Result<SyncStateDto, CommandError> {
     let state = app.state::<AppState>();
+    if !state.activity.start_sync().map_err(CommandError::new)? {
+        return Ok(state.sync_state());
+    }
     let dto = {
         let mut sync = state
             .sync
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if sync.running {
-            return Ok(SyncStateDto::from(&*sync));
-        }
         sync.running = true;
         sync.started_at_ms = Some(now_ms());
         sync.finished_at_ms = None;
@@ -81,6 +81,7 @@ fn spawn_sync(app: AppHandle, force: bool, clients: Vec<Client>) {
             }
         }
         let dto = state.sync_state();
+        state.activity.finish_sync();
         let _ = app.emit(SYNC_EVENT, dto);
     });
 }

@@ -1,4 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { onDesktopError, onDesktopEvent } from "@/lib/api";
+import { CloseWindowDialog } from "@/components/CloseWindowDialog";
 
 import { AppShell, type PageKey } from "@/components/AppShell";
 import { useDataSourceStatus } from "@/hooks/use-data-source-status";
@@ -30,6 +33,25 @@ export default function App() {
     },
     [syncNow],
   );
+
+  useEffect(() => {
+    let disposed = false;
+    const stops: (() => void)[] = [];
+    const attach = (stop: () => void) => {
+      if (disposed) stop();
+      else stops.push(stop);
+    };
+    onDesktopEvent("navigate-settings", () => setPage("settings"))
+      .then(attach)
+      .catch(() => {});
+    onDesktopError((message) => toast.error(message))
+      .then(attach)
+      .catch(() => {});
+    return () => {
+      disposed = true;
+      stops.forEach((stop) => stop());
+    };
+  }, []);
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -68,6 +90,7 @@ export default function App() {
         {page === "settings" ? <SettingsPage controller={settings} /> : null}
       </AppShell>
       <Toaster position="bottom-right" />
+      <CloseWindowDialog />
     </TooltipProvider>
   );
 }

@@ -7,7 +7,26 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { AppInfo, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
+import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
+
+export function getDesktopStatus(): Promise<{ trayAvailable: boolean }> {
+  return invoke("get_desktop_status");
+}
+export function getClosePending(): Promise<boolean> {
+  return invoke("get_close_pending");
+}
+export function resolveClose(action: CloseBehavior | null, remember: boolean): Promise<void> {
+  return invoke("resolve_close", { action, remember });
+}
+export function onDesktopEvent(
+  event: "close-requested" | "navigate-settings" | "settings-changed",
+  callback: () => void,
+): Promise<UnlistenFn> {
+  return listen(event, callback);
+}
+export function onDesktopError(callback: (message: string) => void): Promise<UnlistenFn> {
+  return listen<string>("desktop-error", (event) => callback(event.payload));
+}
 
 export function getAppInfo(): Promise<AppInfo> {
   return invoke<AppInfo>("app_info");
