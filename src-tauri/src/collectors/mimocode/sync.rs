@@ -1,0 +1,84 @@
+//! Always read metadata in a snapshot transaction: main-file mtime misses WAL writes.
+
+use super::{PARSER_VERSION, queries};
+use crate::collectors::files::{fingerprint, home_dir};
+use crate::collectors::{SyncError, SyncOptions, SyncReport};
+use crate::usage::client::Client;
+use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
+use crate::usage::time::now_ms;
+use rusqlite::{Connection, OpenFlags};
+use std::path::{Path, PathBuf};
+
+pub struct MiMoCodeCollector {
+    database: PathBuf,
+}
+
+impl MiMoCodeCollector {
+    pub fn default_database() -> Option<PathBuf> {
+        std::env::var_os("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().map(|home| home.join(".local").join("share")))
+            .map(|data| {
+                let path = std::env::var_os("MIMOCODE_DB")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from("mimocode.db"));
+                if path.is_absolute() {
+                    path
+                } else {
+                    data.join("mimocode").join(path)
+                }
+            })
+    }
+
+    pub fn new(database: impl Into<PathBuf>) -> Self {
+        Self {
+            database: database.into(),
+        }
+    }
+    pub fn database(&self) -> &Path {
+        &self.database
+    }
+
+    pub fn sync(
+        &self,
+        store: &UsageStore,
+        _options: &SyncOptions,
+    ) -> Result<SyncReport, SyncError> {
+        let mut report = SyncReport::default();
+        if !self.database.try_exists()? {
+            report.root_missing = true;
+            return Ok(report);
+        }
+        report.files_seen = 1;
+        let mut conn = Connection::open_with_flags(
+            &self.database,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        conn.pragma_update(None, "query_only", true)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        let transaction = conn.transaction()?;
+        let path = self.database.to_string_lossy().to_string();
+        let snapshot = queries::snapshot(&transaction, &path)?;
+        transaction.commit()?;
+        let (size, mtime) = fingerprint(&self.database)?;
+        let source = SourceFile {
+            client: Client::MimoCode,
+            path,
+            kind: SourceFileKind::Sqlite,
+            size_bytes: Some(size),
+            mtime_ms: Some(mtime),
+            content_offset: 0,
+            parser_version: PARSER_VERSION,
+            last_scan_ms: Some(now_ms()),
+            unparsed_records: snapshot.unparsed as i64,
+        };
+        let imported =
+            store.replace_client_snapshot(Client::MimoCode, &[source], &snapshot.sessions)?;
+        report.files_parsed = 1;
+        report.unparsed_lines = snapshot.unparsed;
+        report.sessions_imported = snapshot.sessions.len();
+        report.messages_inserted = imported.messages_inserted;
+        report.messages_pruned = imported.messages_pruned;
+        Ok(report)
+    }
+}

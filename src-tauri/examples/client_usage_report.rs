@@ -12,6 +12,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Client::OpenCode,
         Client::Dsh,
         Client::KimiCode,
+        Client::MimoCode,
+        Client::PiDesktop,
     ];
     let batch = sync_clients(
         &store,

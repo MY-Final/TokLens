@@ -5,7 +5,9 @@ pub mod codex;
 pub mod dsh;
 mod files;
 pub mod kimi_code;
+pub mod mimocode;
 pub mod opencode;
+pub mod pi_desktop;
 mod sync;
 mod types;
 

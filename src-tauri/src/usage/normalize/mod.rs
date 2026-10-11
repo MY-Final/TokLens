@@ -9,6 +9,7 @@ mod codex;
 pub mod dsh;
 pub mod kimi_code;
 mod opencode;
+pub mod request_ledger;
 mod rollup;
 pub use rollup::sum_complete_counts;
 

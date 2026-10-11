@@ -1,7 +1,8 @@
 /** Cross-platform DTOs. Keep fields aligned with Rust commands/dto.rs. */
 
 /** 客户端标识（与 Rust `Client::as_str()` 一致）。 */
-export type ClientKey = "codex" | "claude_code" | "opencode" | "dsh" | "kimi_code";
+export type ClientKey =
+  "codex" | "claude_code" | "opencode" | "dsh" | "kimi_code" | "mimocode" | "pi_desktop";
 
 export type TokenTotals = {
   inputTokens: number;
@@ -9,7 +10,7 @@ export type TokenTotals = {
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
-  /** 已计入规范总量的缓存写入（当前来自 Claude Code / DSH / Kimi Code）。 */
+  /** 已计入规范总量的缓存写入（按各客户端统计口径）。 */
   countedCacheWriteTokens: number;
   totalTokens: number;
 };

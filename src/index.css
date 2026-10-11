@@ -13,6 +13,8 @@
   --color-client-opencode: var(--client-opencode);
   --color-client-dsh: var(--client-dsh);
   --color-client-kimi: var(--client-kimi);
+  --color-client-mimo: var(--client-mimo);
+  --color-client-pi: var(--client-pi);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -72,6 +74,8 @@
   --client-claude: #d97706;
   --client-dsh: oklch(0.65 0.18 260);
   --client-kimi: oklch(0.64 0.17 245);
+  --client-mimo: oklch(0.7 0.17 45);
+  --client-pi: oklch(0.65 0.15 300);
   --client-opencode: #6366f1;
   --chart-1: #099f83;
   --chart-2: #59beb0;
@@ -112,6 +116,8 @@
   --client-claude: #f5aa59;
   --client-dsh: oklch(0.65 0.18 260);
   --client-kimi: oklch(0.64 0.17 245);
+  --client-mimo: oklch(0.7 0.17 45);
+  --client-pi: oklch(0.65 0.15 300);
   --client-opencode: #a3a5ff;
   --chart-1: #45c7a4;
   --chart-2: #70c8c0;

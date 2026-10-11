@@ -101,6 +101,27 @@ pub const KIMI_CODE_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "Kimi provider/addUsage contract: inputOther + output + inputCacheRead + inputCacheCreation",
 };
 
+/// MiMo's getUsage subtracts cache from input and reasoning from output before persistence.
+pub const MIMOCODE_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "mimocode.message.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::Separate,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: true,
+    basis: "installed MiMo getUsage contract: input/output/reasoning/cache are disjoint buckets",
+};
+/// Pi's usageFromPi/usageToPi sum input + output + both caches; reasoning is in output.
+pub const PI_DESKTOP_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "pi_desktop.operation.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::IncludedIn,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: true,
+    basis: "Pi Desktop request accounting contract and local total == input + output + cacheRead + cacheWrite",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
@@ -108,6 +129,8 @@ pub fn semantics_for(client: Client) -> &'static TokenSemantics {
         Client::OpenCode => &OPENCODE_SEMANTICS,
         Client::Dsh => &DSH_SEMANTICS,
         Client::KimiCode => &KIMI_CODE_SEMANTICS,
+        Client::MimoCode => &MIMOCODE_SEMANTICS,
+        Client::PiDesktop => &PI_DESKTOP_SEMANTICS,
     }
 }
 

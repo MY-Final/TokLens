@@ -3,17 +3,17 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                                      | 职责                                                        |
-| ---------- | ----------------------------------------- | ----------------------------------------------------------- |
-| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                      |
-| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                              |
-| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                            |
-| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                        |
-| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                           |
-| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code 的独立规则 |
-| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                  |
-| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                       |
-| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                  |
+| 模块       | 文件                                      | 职责                                                                                |
+| ---------- | ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                              |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                      |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                    |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                   |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop 的独立规则 |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                          |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                               |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                          |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -33,25 +33,27 @@
 | OpenCode    | `opencode.message.v1`            | 独立                      | 独立                      | 未知                       | 是（`total = input + output + reasoning + cache.read`） |
 | DSH         | `dsh.token_usage.v1`             | 独立                      | 包含（子集）              | 独立                       | 否（按 token-meter 四个独立桶求和）                     |
 | Kimi Code   | `kimi_code.usage_record.v1`      | 独立                      | 客户端不提供              | 独立                       | 否（四桶求和）                                          |
+| MiMoCode    | `mimocode.message.v1`            | 独立                      | 独立                      | 独立                       | 是（旧记录无 total 时由五桶求和）                       |
+| Pi Desktop  | `pi_desktop.operation.v1`        | 独立                      | 包含（子集）              | 独立                       | 是（input + output + 两个缓存桶）                       |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
-| 分桶                        | Codex                       | Claude Code                  | OpenCode                    | DSH                              | Kimi Code                        |
-| --------------------------- | --------------------------- | ---------------------------- | --------------------------- | -------------------------------- | -------------------------------- |
-| `input`（未命中缓存的输入） | `input − cache_read`        | `input`                      | `input`                     | `inputTokens`                    | `inputOther`                     |
-| `output`（不含推理）        | `output − reasoning`        | `output`                     | `output`                    | `outputTokens − reasoningTokens` | `output`                         |
-| `reasoning`                 | `reasoning`                 | 不提供（NULL）               | `reasoning`                 | `reasoningTokens`                | 不提供（NULL）                   |
-| `cache_read`                | `cache_read`                | `cache_read`                 | `cache.read`                | `cacheReadTokens`                | `inputCacheRead`                 |
-| `cache_write`               | `cache_write`（不计入总量） | `cache_creation`（计入总量） | `cache.write`（不计入总量） | `cacheWriteTokens`（计入总量）   | `inputCacheCreation`（计入总量） |
+| 分桶                        | Codex                       | Claude Code                  | OpenCode                    | DSH                              | Kimi Code                        | MiMoCode              | Pi Desktop                       |
+| --------------------------- | --------------------------- | ---------------------------- | --------------------------- | -------------------------------- | -------------------------------- | --------------------- | -------------------------------- |
+| `input`（未命中缓存的输入） | `input − cache_read`        | `input`                      | `input`                     | `inputTokens`                    | `inputOther`                     | `input`               | `inputTokens`                    |
+| `output`（不含推理）        | `output − reasoning`        | `output`                     | `output`                    | `outputTokens − reasoningTokens` | `output`                         | `output`              | `outputTokens − reasoningTokens` |
+| `reasoning`                 | `reasoning`                 | 不提供（NULL）               | `reasoning`                 | `reasoningTokens`                | 不提供（NULL）                   | `reasoning`           | `reasoningTokens`                |
+| `cache_read`                | `cache_read`                | `cache_read`                 | `cache.read`                | `cacheReadTokens`                | `inputCacheRead`                 | `cache.read`          | `cacheReadTokens`                |
+| `cache_write`               | `cache_write`（不计入总量） | `cache_creation`（计入总量） | `cache.write`（不计入总量） | `cacheWriteTokens`（计入总量）   | `inputCacheCreation`（计入总量） | `cache.write`（计入） | `cacheWriteTokens`（计入）       |
 
 规范总量 `total_tokens`：
 
-1. 客户端提供总量时（Codex、OpenCode）直接采用客户端值（`total_basis = client_reported`），
+1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop）直接采用客户端值（`total_basis = client_reported`），
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
-2. 客户端不提供总量时（Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
+2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
 4. `cache_write` 是否计入总量由口径决定：Codex/OpenCode 的客户端总量本身不含它，故不计入且标注未知；
-   Claude Code / DSH / Kimi Code 的 cache_write 与 input 独立，故计入。DSH 缓存字段省略时按协议默认 0，详见第 10 节。
+   Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 的 cache_write 与 input 独立，故计入。DSH 缓存字段省略时按协议默认 0，详见第 10 节。
 
 ## 2. 未确认的语义（明确标注，不推断）
 
@@ -72,15 +74,17 @@
 | OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                            | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
 | DSH         | header `id`                                         | `step:<turn>:<step>`                                    | 同一步最终 usage 替换 chunk 的早期样本；没有最终 usage 时保留早期样本，排除继承 seed                  |
 | Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                   | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
+| MiMoCode    | session.id                                          | message.id                                              | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
+| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                            | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
 - `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
 - `client_reported`：OpenCode，直接使用会话聚合列。
-- `sum_of_messages`：Claude Code / DSH / Kimi Code，由去重后的消息求和得出。
+- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
 
 ## 4. SQLite 表结构（v1）
 
@@ -280,3 +284,30 @@ agent 目录决定身份，main 之外标记 sidechain，保留每条请求对�
 追加、缩短、删除通过原子替换纠正总量；根目录缺失、缺少 state、未知版本、读取失败或截断尾行保留上次快照和水位。
 完整非法行 / 未知事件计入 unparsed，并将会话覆盖标为 partial；无 usage 的会话保留未知，不展示为真实零用量。
 目前不支持未验证的 state / wire 协议，客户端成本未提供，不推算费用。
+
+## 12. MiMoCode / Pi Desktop 采集器
+
+MiMoCode 的 `collectors/mimocode/` 默认只读 ~/.local/share/mimocode/mimocode.db（XDG_DATA_HOME 覆盖 data 根），
+MIMOCODE_DB 为绝对路径时直接使用、相对路径时位于 mimocode data 根。SQLite query_only + READ_ONLY，
+每次同步重读事务快照以覆盖仅 WAL 变化，不对客户端 checkpoint 或写入。
+仅投影 session.id / parent_id / directory / time_created / time_updated，以及 message.id / session_id / agent_id 和 data 的 role、modelID、providerID、time、tokens。
+claude_import / external_import 仅读 session_id / message_ids，排除导入消息副本，保留本地续聊请求；纯导入会话不占 MiMo 会话数；缺少导入表兼容旧版。
+不读取 part、event、memory、snapshot、auth、installation_id、账户/凭据表。
+按原始消息 ID 计数，包括 main 之外 agent（sidechain）；没有调用用量的会话保持未知。
+getUsage 持久化前已扣缓存和 reasoning，五桶独立；旧消息无 total 时按完整桶求和，缺失必需字段不估算。
+其 cost 由价格换算，不保存为客户端实测费用；本次不改变成本模型。
+
+Pi Desktop 的 `collectors/pi_desktop/` 默认只读 ~/.pi-desktop/sessions/**/*.jsonl；PI_DESKTOP_SESSIONS_DIR 为 TokLens 扫描覆盖。
+支持 schema 1 session header 和 message.meta.usage，只提取时间、身份、模型与 usage 白名单，跳过 blocks、工具正文、modelSystem.messageJson。
+不扫描 pi.sqlite、secret、logs、cache。会话来源没有 cwd 时项目保持未知，不从正文或路径猜测。
+inputTokens 与 cacheReadTokens / cacheWriteTokens 独立；reasoningTokens 属 outputTokens 子集，缺失时不猜推理。
+缓存字段在该协议中为可选：省略按 native ledger 默认 0；显式 null、负数、溢出视为非法记录。
+operationId 是全客户端物理请求键；重复及父汇总 operations 中的操作取完整总量最大者，不再次叠加外层汇总。
+aggregate 的未归属 legacy 残差按父 message id 保留，差值必须非负；无 operationId 的旧消息按 sessionId + message.id 去重。
+不同会话重复 operationId 按总量最大者归属（平局按排序首次发现的来源），不复制到多个会话；跨文件重复 sessionId 拒绝以免误归属。
+当前接受 usageOrigin pi / legacy / 缺省；未知来源计入 unparsed，不当作实测调用。
+costStatus estimated / unknown 的 cost 不导入，当前所有 Pi cost 均不持久化，不估价。
+
+会话总量对每个请求选择的已知总量求和（允许客户端 total 与由完整分桶换算的旧记录混合），不因混合格式覆盖客户端自报总量；任一请求总量未知时会话总量未知。
+两者使用完整快照原子替换；源缺失、失败、未知格式保留历史与水位，非法完整行计数且覆盖标记 partial。
+Pi 提交前复核文件集合/指纹，截断尾行保留上次快照；重复、追加、缩短、删除、重启与隐私用合成 fixture 验证。

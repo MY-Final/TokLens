@@ -179,6 +179,10 @@ pub fn dedup_key_note(client: Client) -> &'static str {
         Client::Codex => "response_id | token_count:<ordinal>",
         Client::ClaudeCode => "message.id",
         Client::OpenCode => "message.id",
+        Client::MimoCode => "native session id + message id; exclude imported session copies",
+        Client::PiDesktop => {
+            "physical operationId; legacy session + message id; expand aggregates once"
+        }
         Client::KimiCode => "session id + agent folder + physical wire line number",
         Client::Dsh => {
             "turn + step (chunk sample replaced by completed message, excluding inherited seed)"

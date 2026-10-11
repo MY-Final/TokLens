@@ -354,3 +354,32 @@ turn scope 也计入会话累计，故 `usage.record` 是增量而非累计；�
 独立只读脚本与内存库导入对账：2 会话、2 usage、普通输入 31,422、输出 925、缓存读取 28,800、
 缓存写入 0、规范总量 61,147；另一个会话无 usage，保留未知。没有未识别行。
 这些是本次采样结果，不是固定 fixture；自动测试仅使用合成数据。
+
+## MiMoCode — SQLite 与去重（2026-10-11）
+
+本机用户指定 ~/.local/share/mimocode/mimocode.db 包含 session / message / part；
+只读 schema 和 SQL JSON 投影确认 message.data.tokens 独立字段：input、output、reasoning、cache.read、cache.write、可选 total。
+635 个 assistant 中 613 条有 total，全部满足 total = 五个桶之和；cache.read > input 出现 583 次，reasoning > output 出现 60 次。
+已安装 Xiaomi MiMo app.asar/out/main/node.mjs 的 getUsage 函数确认 input 预先扣除缓存，output 预先扣除 reasoning；cache.write 独立计入。
+MIMOCODE_DB 的绝对/相对覆盖与 XDG data 根同样由该模块确认。这里只检索安装源码中的字段契约，不执行客户端、不输出正文或凭据。
+
+导入标记 claude_import 中 3 个会话的 message_ids 对应 17 个 assistant 副本；external_import 为空。
+仅排除登记的导入消息，不因会话曾导入而丢弃其后续本地请求；纯导入会话不计入 MiMo。
+独立只读 SQL 与采集器对账：14 个本地会话、618 个请求、input 3,581,156、output 198,576、
+reasoning 25,596、cache.read 65,200,832、cache.write 0，总量 69,006,160。全库（含导入）会得到 70,582,900，差值来自外部副本。
+MiMo cost 是 getUsage 按价格表计算，当前不作为客户端实测费用导入。
+
+## Pi Desktop — schema 1 与物理操作账本（2026-10-11）
+
+用户指定 ~/.pi-desktop/sessions 有一份 schema 1 JSONL：session header、message 行，统计来自 assistant.meta.usage。
+本机 16 个 assistant operation，input 26,490、output（含推理）7,062、reasoning 1,843、cacheRead 320,896、cacheWrite 未提供。
+全部满足 total = input + output + cacheRead + cacheWrite，总量 354,448；归一化普通 output 为 5,219，不重复加 reasoning。
+一条未含 cacheRead，schema 中可选缓存字段按 native ledger 默认 0；不读取 blocks、system meta 中的 messageJson。
+
+源码依据：[vastsa/PI-Desktop](https://github.com/vastsa/PI-Desktop/tree/f24984d69667243c4e763b7009e07015be6677d1)，
+核对 packages/agent-runtime/src/agent-messages.ts（usageFromPi / usageToPi）、request-usage.ts、
+packages/shared/src/message-usage.ts（addUsage）和 crates/host-core/src/sessions/usage.rs。
+operationId 是物理请求，operations 是原子账本，父 aggregate 不得与子请求再相加；完整总量优先，legacy 未归属残差仍可加。
+usageOrigin 当前约定 pi / legacy；costStatus 明确 reported / estimated / unknown，本机全部为 estimated，当前不导入 cost。
+LobeHub XiaomiMiMo 对应小米品牌；其 Pi 标识为 Inflection AI，Pi Desktop 使用本地通用终端图标避免错标。
+这些数字是本机只读时点快照；自动回归使用合成 fixture，无真实会话正文进入仓库。

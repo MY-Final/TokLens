@@ -16,6 +16,8 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   opencode: "[&_[data-slot=progress-indicator]]:bg-client-opencode",
   dsh: "[&_[data-slot=progress-indicator]]:bg-client-dsh",
   kimi_code: "[&_[data-slot=progress-indicator]]:bg-client-kimi",
+  mimocode: "[&_[data-slot=progress-indicator]]:bg-client-mimo",
+  pi_desktop: "[&_[data-slot=progress-indicator]]:bg-client-pi",
 };
 
 export function ClientUsageCard({

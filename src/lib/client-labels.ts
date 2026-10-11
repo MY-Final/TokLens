@@ -8,6 +8,8 @@ export const CLIENT_LABELS: Record<ClientKey, string> = {
   opencode: "OpenCode",
   dsh: "DSH",
   kimi_code: "Kimi Code",
+  mimocode: "MiMoCode",
+  pi_desktop: "Pi Desktop",
 };
 
 export function clientLabel(client: ClientKey): string {

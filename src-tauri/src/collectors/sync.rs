@@ -4,6 +4,7 @@ use super::{
     SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
     dsh::DshCollector, kimi_code::KimiCodeCollector, opencode::OpenCodeCollector,
 };
+use super::{mimocode::MiMoCodeCollector, pi_desktop::PiDesktopCollector};
 use crate::usage::client::Client;
 use crate::usage::store::UsageStore;
 use std::path::PathBuf;
@@ -15,6 +16,8 @@ pub struct CollectorRoots {
     pub opencode: Option<PathBuf>,
     pub dsh: Option<PathBuf>,
     pub kimi_code: Option<PathBuf>,
+    pub mimocode: Option<PathBuf>,
+    pub pi_desktop: Option<PathBuf>,
 }
 
 impl CollectorRoots {
@@ -25,6 +28,8 @@ impl CollectorRoots {
             opencode: OpenCodeCollector::default_database(),
             dsh: DshCollector::default_root(),
             kimi_code: KimiCodeCollector::default_root(),
+            mimocode: MiMoCodeCollector::default_database(),
+            pi_desktop: PiDesktopCollector::default_root(),
         }
     }
 }
@@ -78,6 +83,14 @@ pub fn sync_clients(
                 .kimi_code
                 .as_ref()
                 .map(|root| KimiCodeCollector::new(root).sync(store, options)),
+            Client::MimoCode => roots
+                .mimocode
+                .as_ref()
+                .map(|root| MiMoCodeCollector::new(root).sync(store, options)),
+            Client::PiDesktop => roots
+                .pi_desktop
+                .as_ref()
+                .map(|root| PiDesktopCollector::new(root).sync(store, options)),
             Client::Dsh => roots
                 .dsh
                 .as_ref()
