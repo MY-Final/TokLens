@@ -1,3 +1,5 @@
+pub mod usage;
+
 use serde::Serialize;
 
 #[derive(Serialize)]
