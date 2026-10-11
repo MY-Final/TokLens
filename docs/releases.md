@@ -35,6 +35,7 @@ GitHub Actions Secrets：
 日常检查不打安装包、不使用签名 Secrets；PR 无写权限。重复提交取消同一分支的旧检查。
 首次原生编译使用独立目标缓存，后续提交复用；锁文件必须保持不变。
 工具链为 Node 22、pnpm 10、Python 3.12、Rust stable。
+GitHub Actions 使用当前 Node 24 运行时版本（与构建项目的 Node 22 分开），避免已弃用 action 运行时。
 
 `.github/workflows/release.yml` 仅由稳定版本标签触发，发布任务不会因普通 main 推送执行。
 

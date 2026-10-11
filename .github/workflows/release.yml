@@ -28,15 +28,15 @@ jobs:
             bundles: app,dmg
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
@@ -68,7 +68,7 @@ jobs:
         env:
           TOKLENS_RELEASE_ARTIFACTS: ${{ github.workspace }}/release-artifacts/${{ matrix.target }}
         run: cargo test --manifest-path src-tauri/Cargo.toml --test updater_signature
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: signed-${{ matrix.target }}
           path: release-artifacts/${{ matrix.target }}
@@ -81,11 +81,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: signed-*
           path: release-artifacts
