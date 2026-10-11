@@ -1,3 +1,4 @@
+pub mod collectors;
 pub mod usage;
 
 use serde::Serialize;
