@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# TypeScript
+*.tsbuildinfo
+
 # Rust / Tauri
 src-tauri/target
 src-tauri/gen/schemas

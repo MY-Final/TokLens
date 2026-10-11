@@ -1,0 +1,11 @@
+# vendored / 生成物：不格式化（与 eslint.config.js 的 shadcnGenerated 列表对应）
+src/components/ui
+src/hooks/use-mobile.ts
+src-tauri/icons
+
+# 构建产物与锁文件
+dist
+node_modules
+src-tauri/target
+src-tauri/gen
+pnpm-lock.yaml

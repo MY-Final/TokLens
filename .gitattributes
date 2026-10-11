@@ -1,0 +1,7 @@
+# 统一使用 LF 换行，避免 Windows / macOS / Linux 之间的换行差异导致格式检查漂移。
+* text=auto eol=lf
+
+# 二进制资源（Tauri 图标等）
+*.png binary
+*.ico binary
+*.icns binary
