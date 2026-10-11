@@ -72,6 +72,9 @@ pub fn get_daily_token_trend(
         for (dto, bucket) in dtos.iter_mut().zip(daily) {
             dto.clients.push(super::dto::DailyClientTokensDto {
                 client: entry.as_str().to_string(),
+                sessions: bucket.sessions,
+                sessions_without_usage: bucket.sessions_without_usage,
+                sessions_partial: bucket.sessions_partial,
                 total_tokens: bucket.sums.total_tokens,
             });
         }

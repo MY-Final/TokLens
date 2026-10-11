@@ -43,6 +43,10 @@ pub struct RangeTotals {
 pub struct DailyBucket {
     pub day_start_ms: i64,
     pub sessions: i64,
+    /// 总量未知的会话数（`total_tokens IS NULL`），与实测 0 区分。
+    pub sessions_without_usage: i64,
+    /// 请求明细不完整的会话数，不代表会话累计总量未知。
+    pub sessions_partial: i64,
     pub messages: i64,
     pub sums: TokenSums,
 }

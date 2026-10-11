@@ -4,9 +4,14 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 import { CalendarDays, Database, ListTree, MessageSquare } from "lucide-react";
+import { addDays, startOfDay } from "date-fns";
+import { useState } from "react";
 
 import type { PageKey } from "@/components/AppShell";
 import { ClientUsageCard } from "@/components/ClientUsageCard";
+import { CalendarHeatmap } from "@/components/CalendarHeatmap";
+import { FilterSelectContent } from "@/components/FilterSelectContent";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RankingCard } from "@/components/RankingCard";
 import { SessionTable } from "@/components/SessionTable";
 import { StatCard } from "@/components/StatCard";
@@ -37,6 +42,7 @@ export function OverviewPage({
   refreshToken: number;
   onNavigate: (page: PageKey) => void;
 }) {
+  const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const todayStart = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
 
@@ -57,6 +63,12 @@ export function OverviewPage({
       }),
     `trend:${keySuffix}`,
   );
+  const calendarStart = addDays(startOfDay(new Date(range.toMs - 1)), -364).getTime();
+  const calendar = useAsyncData(
+    () => getDailyTokenTrend({ fromMs: calendarStart, dayCount: 365 }),
+    `calendar:${calendarStart}:${refreshToken}`,
+  );
+  const calendarData = calendarPeriod === "year" ? calendar : trend;
   const clients = useAsyncData(
     () => getClientUsage({ fromMs: range.fromMs, toMs: range.toMs }),
     `clients:${keySuffix}`,
@@ -137,6 +149,25 @@ export function OverviewPage({
         loading={trend.loading}
         error={trend.error}
         onRetry={trend.reload}
+      />
+
+      <CalendarHeatmap
+        rangeLabel={calendarPeriod === "year" ? "最近一年（365 天）" : range.label}
+        buckets={calendarData.data}
+        loading={calendarData.loading}
+        error={calendarData.error}
+        onRetry={calendarData.reload}
+        controls={
+          <Select value={calendarPeriod} onValueChange={setCalendarPeriod}>
+            <SelectTrigger size="sm" className="w-36" aria-label="选择活动日历时间范围">
+              <SelectValue />
+            </SelectTrigger>
+            <FilterSelectContent>
+              <SelectItem value="year">最近一年</SelectItem>
+              <SelectItem value="selected">跟随页面日期</SelectItem>
+            </FilterSelectContent>
+          </Select>
+        }
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

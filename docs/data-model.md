@@ -212,6 +212,14 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 
 分桶之和应等于规范总量；唯一例外是上一行的 `client_total_mismatch` 会话（总量取客户端值，分项按其原始字段计算）。
 
+首版热力图复用每日趋势，不新增表或迁移。`DailyBucket` 增加 `sessions_without_usage`
+（当天 `total_tokens IS NULL` 的会话数）与 `sessions_partial`（当天 `message_coverage = partial` 的会话数）。
+跨端 `DailyTokenBucket` 使用 `sessionsWithoutUsage` / `sessionsPartial`，`clients` 每个日条目增加同样的两项与 `sessions`。
+这些计数彼此独立：明细不完整的会话仍可能有已知累计 Token 总量。
+缺失日期仍返回零会话、零计数与零求和；有会话但全部总量未知时，数值求和仍为 0，展示应为 `—`。
+已知与未知混合时保留已知求和并标注已知子集及未知会话数，不把它当作完整总量。
+请求数仍按所属会话开始日期计数，不按请求自身时间重分桶；本地零点起固定 24 小时桶的夏令时偏差保持原有限制。
+
 ## 10. 新采集器（2026-10-11）
 
 ### Claude Code

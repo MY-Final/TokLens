@@ -209,6 +209,17 @@ usage/tokens ────────→ usage/client
 
 ## 8. 架构决策记录（ADR）
 
+### 首版热力图与逐日完整度（2026-10-11）
+
+日历热力图复用 `get_daily_token_trend` 的总 Token / 会话数 / 请求数，客户端 × 日期热力图复用其 `clients` 的总 Token。
+`CalendarHeatmap` / `ClientDateHeatmap` 只呈现 DTO，`HeatmapCell` 共用语义色阶、完整度标记与 tooltip。
+总览日历默认查询最近 365 天，也可切换为跟随页面日期；客户端矩阵复用用量分析的日期与客户端筛选结果。
+`usage/analytics` 在已有每日查询中补充 `sessions_without_usage` 与 `sessions_partial`；命令层仅映射为 camelCase DTO。
+`DailyTokenBucket` 返回 `sessionsWithoutUsage` / `sessionsPartial`，每个客户端日条目同时返回
+`sessions` / `sessionsWithoutUsage` / `sessionsPartial`，前端仅依据这些元数据展示未知与不完整状态。
+保留原趋势数值、会话开始日归属、本地零点起固定 24 小时桶及已知夏令时限制。
+不新增 API、依赖、权限、数据库 schema 或迁移，不更改采集、去重与 Token 公式。
+
 ### DSH 版本化日志与失败隔离（2026-10-11）
 
 DSH JSONL 采集兼容已核对的 v0–v4 统计元数据。`collectors/dsh/format.rs` 识别规范版本化文件名，

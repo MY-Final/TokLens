@@ -157,3 +157,126 @@ fn totals_flag_sessions_whose_client_total_disagrees_with_its_buckets() {
         "分桶按客户端分项计算"
     );
 }
+
+#[test]
+fn daily_completeness_distinguishes_unknown_zero_mixed_and_partial() {
+    let store = UsageStore::open_in_memory().expect("store");
+    let mut unknown = codex_record("unknown", D0, D0, None, None, RawTokenCounts::default());
+    unknown.coverage = crate::usage::model::MessageCoverage::Partial;
+    store.upsert_session(&unknown).expect("unknown session");
+    let zero = codex_record(
+        "zero",
+        D1,
+        D1,
+        None,
+        None,
+        counts(Some(0), Some(0), Some(0), Some(0), Some(0), Some(0)),
+    );
+    store.upsert_session(&zero).expect("zero session");
+    let unknown_mixed = codex_record(
+        "mixed-unknown",
+        D2,
+        D2,
+        None,
+        None,
+        RawTokenCounts::default(),
+    );
+    store.upsert_session(&unknown_mixed).expect("mixed unknown");
+    let mut known_mixed = codex_record(
+        "mixed-known",
+        D2,
+        D2,
+        None,
+        None,
+        counts(Some(10), Some(2), Some(0), Some(0), Some(0), Some(12)),
+    );
+    known_mixed.coverage = crate::usage::model::MessageCoverage::Partial;
+    // Requests retain start-date attribution even when their timestamps differ.
+    store
+        .import_session(
+            &source(Client::Codex, "synthetic-mixed.jsonl"),
+            &known_mixed,
+            &[message(
+                "mixed-known",
+                "later-request",
+                1,
+                "2026-10-08T01:00:00.000Z",
+            )],
+        )
+        .expect("mixed known");
+    let claude = claude_record(D0, PROJECT_ALPHA, "fixture-model");
+    store.upsert_session(&claude).expect("other client");
+
+    let codex = store
+        .daily_token_trend(ms(D0), 4, Some(Client::Codex))
+        .expect("codex days");
+    assert_eq!(
+        (
+            codex[0].sessions,
+            codex[0].sessions_without_usage,
+            codex[0].sums.total_tokens
+        ),
+        (1, 1, 0)
+    );
+    assert_eq!(codex[0].sessions_partial, 1);
+    assert_eq!(
+        (
+            codex[1].sessions,
+            codex[1].sessions_without_usage,
+            codex[1].sums.total_tokens
+        ),
+        (1, 0, 0)
+    );
+    assert_eq!(
+        (
+            codex[2].sessions,
+            codex[2].sessions_without_usage,
+            codex[2].sums.total_tokens
+        ),
+        (2, 1, 12)
+    );
+    assert_eq!(
+        codex[2].sessions_partial, 1,
+        "known cumulative total can have partial request coverage"
+    );
+    assert_eq!(codex[2].messages, 1);
+    assert_eq!(codex[3].messages, 0);
+    assert_eq!(
+        (
+            codex[3].sessions,
+            codex[3].sessions_without_usage,
+            codex[3].sessions_partial
+        ),
+        (0, 0, 0)
+    );
+    assert_eq!(codex[3].sums, TokenSums::default());
+
+    let all = store.daily_token_trend(ms(D0), 4, None).expect("all days");
+    assert_eq!(
+        (
+            all[0].sessions,
+            all[0].sessions_without_usage,
+            all[0].sums.total_tokens
+        ),
+        (2, 1, 650)
+    );
+    let claude = store
+        .daily_token_trend(ms(D0), 4, Some(Client::ClaudeCode))
+        .expect("claude days");
+    assert_eq!(
+        (
+            claude[0].sessions,
+            claude[0].sessions_without_usage,
+            claude[0].sessions_partial
+        ),
+        (1, 0, 0)
+    );
+    assert_eq!(claude[1].sessions, 0);
+    assert_eq!(claude[1].sessions_without_usage, 0);
+    assert!(
+        store
+            .daily_token_trend(ms(D0), 0, None)
+            .expect("no days")
+            .is_empty()
+    );
+}

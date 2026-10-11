@@ -2,6 +2,7 @@
 
 import { EmptyBlock } from "@/components/StateBlocks";
 import { DashboardCard } from "@/components/DashboardCard";
+import { ClientDateHeatmap } from "@/components/ClientDateHeatmap";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 
 import { useState } from "react";
@@ -212,6 +213,15 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
         error={trend.error}
         onRetry={trend.reload}
         description="按会话开始时间归属到本地日期；切换客户端筛选会影响本图与下方排行。"
+      />
+
+      <ClientDateHeatmap
+        rangeLabel={range.label}
+        buckets={trend.data}
+        loading={trend.loading}
+        error={trend.error}
+        onRetry={trend.reload}
+        client={client}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

@@ -78,6 +78,8 @@ impl UsageStore {
         let sql = format!(
             "SELECT CAST((started_at_ms - ?1) / {DAY_MS} AS INTEGER) AS day_index,
                     COUNT(*),
+                    SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN message_coverage = 'partial' THEN 1 ELSE 0 END),
                     {SUM_COLUMNS}
              FROM sessions AS s
              WHERE started_at_ms IS NOT NULL
@@ -91,13 +93,21 @@ impl UsageStore {
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(rusqlite::params![day_start_ms, end_ms, client], |row| {
             let index: i64 = row.get(0)?;
-            Ok((index, row.get::<_, i64>(1)?, read_sums(row, 2)?))
+            Ok((
+                index,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                read_sums(row, 4)?,
+            ))
         })?;
         let mut message_counts = std::collections::HashMap::new();
         for row in rows {
-            let (index, sessions, sums) = row?;
+            let (index, sessions, sessions_without_usage, sessions_partial, sums) = row?;
             if let Some(bucket) = buckets.get_mut(index.max(0) as usize) {
                 bucket.sessions = sessions;
+                bucket.sessions_without_usage = sessions_without_usage;
+                bucket.sessions_partial = sessions_partial;
                 bucket.sums = sums;
             }
         }

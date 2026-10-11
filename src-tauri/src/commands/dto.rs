@@ -156,6 +156,8 @@ pub struct DailyTokenBucketDto {
     pub clients: Vec<DailyClientTokensDto>,
     pub day_start_ms: i64,
     pub sessions: i64,
+    pub sessions_without_usage: i64,
+    pub sessions_partial: i64,
     pub messages: i64,
     pub totals: TokenTotalsDto,
 }
@@ -166,6 +168,8 @@ impl From<DailyBucket> for DailyTokenBucketDto {
             clients: Vec::new(),
             day_start_ms: bucket.day_start_ms,
             sessions: bucket.sessions,
+            sessions_without_usage: bucket.sessions_without_usage,
+            sessions_partial: bucket.sessions_partial,
             messages: bucket.messages,
             totals: bucket.sums.into(),
         }
@@ -489,5 +493,8 @@ impl From<SyncBatch> for SyncReportDto {
 #[serde(rename_all = "camelCase")]
 pub struct DailyClientTokensDto {
     pub client: String,
+    pub sessions: i64,
+    pub sessions_without_usage: i64,
+    pub sessions_partial: i64,
     pub total_tokens: i64,
 }

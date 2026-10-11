@@ -35,9 +35,19 @@ export type OverviewStats = {
 };
 
 export type DailyTokenBucket = {
-  clients: { client: ClientKey; totalTokens: number }[];
+  clients: {
+    client: ClientKey;
+    totalTokens: number;
+    sessions: number;
+    sessionsWithoutUsage: number;
+    sessionsPartial: number;
+  }[];
   dayStartMs: number;
   sessions: number;
+  /** 总量未知的会话数；已知求和为 0 时用于区分未知与实测零。 */
+  sessionsWithoutUsage: number;
+  /** 请求明细不完整的会话数，与 Token 总量是否已知独立。 */
+  sessionsPartial: number;
   messages: number;
   totals: TokenTotals;
 };
