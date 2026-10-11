@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+__pycache__/
+*.pyc
+release-artifacts/
+release-assets/
+*.key
+*.key.pub
 
 # TypeScript
 *.tsbuildinfo

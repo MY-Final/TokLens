@@ -7,6 +7,27 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UpdateState } from "@/lib/settings-types";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
+export function getUpdateState(): Promise<UpdateState> {
+  return invoke("get_update_state");
+}
+export function checkUpdates(): Promise<UpdateState> {
+  return invoke("check_updates");
+}
+export function downloadUpdate(): Promise<UpdateState> {
+  return invoke("download_update");
+}
+export function installUpdate(): Promise<void> {
+  return invoke("install_update");
+}
+export function onUpdateState(callback: (state: UpdateState) => void): Promise<UnlistenFn> {
+  return listen<UpdateState>("update-state", (event) => callback(event.payload));
+}
+export function openProjectPage(): Promise<void> {
+  return openUrl("https://github.com/MY-Final/TokLens");
+}
 import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
 
 export function getDesktopStatus(): Promise<{ trayAvailable: boolean }> {

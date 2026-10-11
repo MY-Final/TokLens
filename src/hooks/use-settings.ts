@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useTheme } from "next-themes";
+import { useAppTheme } from "@/hooks/use-app-theme";
 import { getAppInfo, getSettings, onDesktopEvent, toErrorMessage, updateSettings } from "@/lib/api";
 import type { AppInfo, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
 
@@ -9,16 +9,12 @@ export function useSettings() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  const { setTheme } = useTheme();
+  useAppTheme(snapshot?.settings.theme ?? "system");
 
-  const accept = useCallback(
-    (next: SettingsSnapshot) => {
-      setSnapshot(next);
-      setTheme(next.settings.theme);
-      setError(null);
-    },
-    [setTheme],
-  );
+  const accept = useCallback((next: SettingsSnapshot) => {
+    setSnapshot(next);
+    setError(null);
+  }, []);
 
   const reload = useCallback(async () => {
     try {

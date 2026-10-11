@@ -41,7 +41,8 @@ pub fn start(app: &tauri::AppHandle) {
                 .exit_requested
                 .load(std::sync::atomic::Ordering::Relaxed)
             {
-                break;
+                std::thread::sleep(Duration::from_secs(15));
+                continue;
             }
             if let Ok(snapshot) = app.state::<SettingsStore>().snapshot()
                 && schedule.due(
@@ -52,6 +53,7 @@ pub fn start(app: &tauri::AppHandle) {
             {
                 let _ = request_sync(&app, false);
             }
+            crate::updates::maybe_check_automatically(&app);
             std::thread::sleep(Duration::from_secs(15));
         }
     });

@@ -38,12 +38,13 @@ pub fn update(app: &AppHandle, patch: SettingsPatch) -> Result<SettingsSnapshot,
             CommandError::new("设置保存失败，且无法恢复系统自启状态，请检查系统设置")
         })?;
     }
-    let snapshot = snapshot.map_err(CommandError::new)?;
+    snapshot.map_err(CommandError::new)?;
     let _ = app.emit("settings-changed", ());
     if resume {
         let _ = crate::commands::request_sync(app, false);
     }
-    Ok(snapshot)
+    // Return the effective OS state even if login items were changed outside TokLens.
+    self::snapshot(app)
 }
 fn set_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
     let launcher = app.autolaunch();

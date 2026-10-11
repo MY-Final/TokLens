@@ -38,9 +38,7 @@ pub fn initialize(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tray_available
         .store(tray::create(app).is_ok(), Ordering::Relaxed);
     app.manage(state);
-    let preferences = app
-        .state::<SettingsStore>()
-        .snapshot()
+    let preferences = preferences::snapshot(app)
         .map_err(std::io::Error::other)?
         .settings;
     if let Some(window) = app.get_webview_window("main") {

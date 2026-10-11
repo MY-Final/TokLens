@@ -2,6 +2,7 @@ pub mod collectors;
 pub mod commands;
 pub mod desktop;
 pub mod settings;
+pub mod updates;
 pub mod usage;
 
 use serde::Serialize;
@@ -23,6 +24,12 @@ fn app_info() -> AppInfo {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    let product_name = context
+        .config()
+        .product_name
+        .clone()
+        .unwrap_or_else(|| "TokLens".into());
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             if !args.iter().any(|arg| arg == "--autostart") {
@@ -30,8 +37,10 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_autostart::Builder::new()
+                .app_name(product_name)
                 .arg("--autostart")
                 .build(),
         )
@@ -48,6 +57,7 @@ pub fn run() {
             let state = commands::AppState::initialize(&data_dir)?;
             app.manage(state);
             app.manage(settings::SettingsStore::load(&data_dir));
+            app.manage(updates::UpdateManager::default());
             desktop::initialize(app.handle())?;
             // 启动即做一次增量同步：首次运行导入历史，之后只处理变化的文件。
             let preferences = app
@@ -63,6 +73,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            updates::check::get_update_state,
+            updates::check::check_updates,
+            updates::download::download_update,
+            updates::install::install_update,
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::maintenance::clear_statistics,
@@ -80,7 +94,7 @@ pub fn run() {
             commands::queries::sync_codex,
             commands::queries::sync_usage,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("TokLens cannot initialize the desktop runtime")
         .run(|app, event| match event {
             tauri::RunEvent::ExitRequested { api, .. }

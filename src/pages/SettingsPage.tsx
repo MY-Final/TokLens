@@ -5,6 +5,8 @@ import type { CloseBehavior, Theme } from "@/lib/settings-types";
 import { RANGE_OPTIONS } from "@/lib/ranges";
 import { CollectionSettings } from "@/components/CollectionSettings";
 import { DataSettings } from "@/components/DataSettings";
+import { UpdateSettings } from "@/components/UpdateSettings";
+import type { UpdatesController } from "@/hooks/use-updates";
 
 const CLOSE_OPTIONS: { value: CloseBehavior; label: string }[] = [
   { value: "ask", label: "每次询问" },
@@ -17,7 +19,13 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: "dark", label: "深色" },
 ];
 
-export function SettingsPage({ controller }: { controller: SettingsController }) {
+export function SettingsPage({
+  controller,
+  updates,
+}: {
+  controller: SettingsController;
+  updates: UpdatesController;
+}) {
   const { settings, busy, error, warning, patch, reload } = controller;
   if (!settings)
     return error ? (
@@ -102,6 +110,7 @@ export function SettingsPage({ controller }: { controller: SettingsController })
         />
       </SettingsSection>
       <CollectionSettings controller={controller} />
+      <UpdateSettings controller={controller} updates={updates} />
       <DataSettings controller={controller} />
     </div>
   );

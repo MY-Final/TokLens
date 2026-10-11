@@ -11,6 +11,7 @@ import { SessionsPage } from "@/pages/SessionsPage";
 import { SourcesPage } from "@/pages/SourcesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useSettings } from "@/hooks/use-settings";
+import { useUpdates } from "@/hooks/use-updates";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { resolveRange, type RangeKey } from "@/lib/ranges";
@@ -19,6 +20,7 @@ export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
   const [selectedRange, setRangeKey] = useState<RangeKey | null>(null);
   const settings = useSettings();
+  const updates = useUpdates();
   const rangeKey = selectedRange ?? settings.settings?.defaultRange ?? "30d";
   const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
 
@@ -58,6 +60,7 @@ export default function App() {
       <AppShell
         page={page}
         version={settings.appInfo?.version ?? null}
+        collectionPaused={settings.settings?.collectionPaused ?? false}
         rangeKey={rangeKey}
         status={status}
         syncBusy={syncBusy}
@@ -88,9 +91,9 @@ export default function App() {
             onSync={handleSync}
           />
         ) : null}
-        {page === "settings" ? <SettingsPage controller={settings} /> : null}
+        {page === "settings" ? <SettingsPage controller={settings} updates={updates} /> : null}
       </AppShell>
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
       <CloseWindowDialog />
     </TooltipProvider>
   );

@@ -98,8 +98,9 @@ fn spawn_sync(app: AppHandle, force: bool, clients: Vec<Client>) {
             }
         }
         let dto = state.sync_state();
-        state.activity.finish_sync();
         let _ = app.emit(SYNC_EVENT, dto);
+        // Clear/exit must not overtake the final event and publish an older snapshot afterwards.
+        state.activity.finish_sync();
     });
 }
 

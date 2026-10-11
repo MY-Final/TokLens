@@ -4335,6 +4335,8 @@ dependencies = [
 name = "toklens"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "minisign-verify",
  "rusqlite",
  "serde",
  "serde_json",

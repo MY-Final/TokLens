@@ -1,0 +1,88 @@
+name: Signed desktop release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy,rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+      - run: python scripts/release.py validate --tag "${{ github.ref_name }}"
+      - run: python -m unittest discover -s scripts -p "test_*.py"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm rust:check
+      - name: Build signed packages
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - run: python scripts/release.py collect --tag "${{ github.ref_name }}" --target ${{ matrix.target }} --output release-artifacts/${{ matrix.target }}
+      - name: Verify generated update signatures
+        env:
+          TOKLENS_RELEASE_ARTIFACTS: ${{ github.workspace }}/release-artifacts/${{ matrix.target }}
+        run: cargo test --manifest-path src-tauri/Cargo.toml --test updater_signature
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}
+          path: release-artifacts/${{ matrix.target }}
+          if-no-files-found: error
+
+  draft:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signed-*
+          path: release-artifacts
+      - run: python scripts/release.py assemble --tag "${{ github.ref_name }}" --input release-artifacts --output release-assets
+      - name: Create draft after every platform succeeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" release-assets/* --draft --verify-tag --title "TokLens ${{ github.ref_name }}" --notes-file RELEASE_NOTES.md

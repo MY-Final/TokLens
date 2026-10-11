@@ -45,6 +45,10 @@ impl ActivityGate {
     pub fn is_clearing(&self) -> bool {
         self.lock().clearing
     }
+    pub fn resume_after_failed_install(&self) {
+        self.lock().exiting = false;
+        self.changed.notify_all();
+    }
     pub fn begin_clear(&self) -> Result<ClearGuard<'_>, String> {
         let mut state = self.lock();
         if state.exiting || state.clearing {
@@ -83,6 +87,9 @@ mod tests {
         gate.finish_sync();
         thread.join().expect("shutdown completes after scan");
         assert!(gate.start_sync().is_err());
+        gate.resume_after_failed_install();
+        assert_eq!(gate.start_sync(), Ok(true));
+        gate.finish_sync();
     }
     #[test]
     fn maintenance_blocks_scans_and_releases_on_drop() {

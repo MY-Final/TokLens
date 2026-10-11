@@ -9,7 +9,9 @@
 
 新增 `settings/`（版本化 JSON、校验与原子保存）、`desktop/`（托盘、窗口生命周期）、
 `updates/`（官方签名更新）与 command 后台调度模块。前端新增设置页与共享设置 Hook，
-仍通过 `lib/api.ts` 调用后端，使用 React 内置状态和已有 next-themes，不引入状态管理库。
+仍通过 `lib/api.ts` 调用后端，使用 React 内置状态，不引入状态管理库。
+主题 Hook 使用系统 matchMedia 与原生设置同步 CSS class，不通过 next-themes 注入脚本
+（React 19 原生客户端渲染会对该脚本报错）；next-themes 仅保留已有 vendor Toaster 依赖。
 设置位于 TokLens 应用数据目录；统计清除使用 usage/store 事务，不删除源文件。
 调度、退出、清除与更新安装共用同步互斥边界，隐藏窗口不影响采集。
 
@@ -23,6 +25,10 @@ updater 引入原生 HTTPS / 签名校验依赖；默认不发请求，仅显式
 发布目标为 Windows x64 NSIS、macOS x64/arm64 DMG 与签名更新包；GitHub Actions 汇总后生成草稿 Release。
 更新私钥仅保存在仓库外和 GitHub Secrets；公钥入配置。首版不使用系统代码签名或 Apple 公证。
 发布规则与配置步骤见 `docs/releases.md`；新配置不能改变已有 Token 口径。
+`scripts/release.py` 使用 Python 标准库完成版本验证、制品收集与清单汇总；测试使用合成文件与注入日期。
+Rust 测试使用已有 updater 的 base64 / minisign-verify 同版本依赖校验制品及篡改拒绝，不增加运行时依赖树。
+`updates/` 按 state / policy / check / download / install / errors 拆分；入口仅组织模块与导出。
+前端 settings-types 与后端 DTO 对应；不新增通用插件 IPC 权限，所有更新通过主窗口的自有 command。
 
 ### MiMoCode / Pi Desktop 采集器决策（2026-10-11）
 
@@ -142,6 +148,10 @@ usage/tokens ────────→ usage/client
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
 处理原生关闭流程。`clear_statistics` 在后台维护边界中暂停并清除统计；`reset_settings` 仅重置偏好；
 `open_app_data_dir` 只打开固定 TokLens 目录。`settings-changed` 通知前端重读；统计清除复用 `usage-sync` 刷新事件。
+
+更新命令：`get_update_state`（无网络）、`check_updates`（显式或已开启自动检查）、`download_update`
+（只下载已检查版本并验证签名）、`install_update`（只接受内存中已验证的制品）。
+`update-state` 广播阶段、版本、纯文本说明、下载字节数和可读错误，不发送本地用量或路径。
 
 ## 4. 客户端适配器规范
 

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -51,6 +52,7 @@ const PAGE_TITLES: Record<PageKey, string> = {
 export function AppShell({
   page,
   version,
+  collectionPaused,
   rangeKey,
   children,
   status,
@@ -63,6 +65,7 @@ export function AppShell({
 }: {
   page: PageKey;
   version: string | null;
+  collectionPaused: boolean;
   rangeKey: RangeKey;
   children: ReactNode;
   status: DataSourceStatus | null;
@@ -138,7 +141,14 @@ export function AppShell({
             <span className="size-1.5 rounded-full bg-client-codex" aria-hidden="true" />
             本地 AI 工作空间
           </span>
-          <SyncControl sync={sync} busy={syncBusy} onSync={onSync} compact />
+          <div className="flex items-center gap-3">
+            {collectionPaused && (
+              <button onClick={() => onNavigate("settings")} aria-label="采集已暂停，打开设置">
+                <Badge variant="outline">采集已暂停</Badge>
+              </button>
+            )}
+            <SyncControl sync={sync} busy={syncBusy} onSync={onSync} compact />
+          </div>
         </header>
         <div className="mx-auto w-full max-w-[1600px] space-y-5 p-5 lg:p-7">
           <div className="flex flex-wrap items-center justify-between gap-3">

@@ -178,14 +178,17 @@ export function SourcesPage({
                 />
                 {client.supported ? (
                   <Badge variant="secondary" className="font-normal">
-                    {report?.clients.find((result) => result.client === client.client)?.error
-                      ? "同步异常"
-                      : report?.clients.find((result) => result.client === client.client)?.report
-                            ?.rootMissing
-                        ? "未发现数据源"
-                        : client.sessions > 0
-                          ? "已连接"
-                          : "暂无数据"}
+                    {settingsController.settings &&
+                    !settingsController.settings.enabledClients.includes(client.client)
+                      ? "已停用"
+                      : report?.clients.find((result) => result.client === client.client)?.error
+                        ? "同步异常"
+                        : report?.clients.find((result) => result.client === client.client)?.report
+                              ?.rootMissing
+                          ? "未发现数据源"
+                          : client.sessions > 0
+                            ? "已连接"
+                            : "暂无数据"}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="font-normal text-muted-foreground">
