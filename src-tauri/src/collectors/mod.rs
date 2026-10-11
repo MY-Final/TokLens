@@ -4,6 +4,7 @@ pub mod claude_code;
 pub mod codex;
 pub mod dsh;
 mod files;
+pub mod kimi_code;
 pub mod opencode;
 mod sync;
 mod types;

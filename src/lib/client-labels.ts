@@ -7,6 +7,7 @@ export const CLIENT_LABELS: Record<ClientKey, string> = {
   claude_code: "Claude Code",
   opencode: "OpenCode",
   dsh: "DSH",
+  kimi_code: "Kimi Code",
 };
 
 export function clientLabel(client: ClientKey): string {

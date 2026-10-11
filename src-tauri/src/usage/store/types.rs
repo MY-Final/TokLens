@@ -5,6 +5,7 @@ use crate::usage::client::Client;
 /// 源文件类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceFileKind {
+    /// Text JSON family, including session metadata sidecars (stable schema v1 id).
     Jsonl,
     Sqlite,
 }

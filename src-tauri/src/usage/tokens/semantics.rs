@@ -90,12 +90,24 @@ pub const DSH_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "DSH token-meter contract: input/cache read/cache write disjoint; reasoning included in output",
 };
 
+/// Native provider adapters and addUsage/usageTotal sum four disjoint buckets.
+pub const KIMI_CODE_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "kimi_code.usage_record.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::NotProvided,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: false,
+    basis: "Kimi provider/addUsage contract: inputOther + output + inputCacheRead + inputCacheCreation",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
         Client::ClaudeCode => &CLAUDE_CODE_SEMANTICS,
         Client::OpenCode => &OPENCODE_SEMANTICS,
         Client::Dsh => &DSH_SEMANTICS,
+        Client::KimiCode => &KIMI_CODE_SEMANTICS,
     }
 }
 

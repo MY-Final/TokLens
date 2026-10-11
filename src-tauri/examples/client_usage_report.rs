@@ -7,7 +7,12 @@ use toklens_lib::usage::store::UsageStore;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let store = UsageStore::open_in_memory()?;
-    let clients = [Client::ClaudeCode, Client::OpenCode, Client::Dsh];
+    let clients = [
+        Client::ClaudeCode,
+        Client::OpenCode,
+        Client::Dsh,
+        Client::KimiCode,
+    ];
     let batch = sync_clients(
         &store,
         &CollectorRoots::from_environment(),

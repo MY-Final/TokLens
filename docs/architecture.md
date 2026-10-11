@@ -5,6 +5,19 @@
 
 ## 1. 现状
 
+### Kimi Code 采集器接入决策（2026-10-11）
+
+新增 `collectors/kimi_code/`，按发现 / 会话元数据 / wire 白名单解析 / 同步拆分；
+`usage/normalize/kimi_code.rs` 负责独立的字段语义与记录归一化。
+根目录尊重客户端 `KIMI_CODE_HOME`（默认 `~/.kimi-code`），只读 `sessions` 中会话根的 `state.json`
+与 `agents/<agent>/wire.jsonl`。支持已核对的旧会话元数据与 v2，以及 wire 1.4 / 1.5。
+使用现有完整快照事务与文件指纹，失败 / 未完成写入 / 未知版本不推进水位；无新增依赖、权限或联网能力。
+`source_files.kind = jsonl` 兼容标识文本 JSON 家族，包含用于定位与指纹的 JSON 元数据侧文件，不修改 v1 迁移。
+只统计 `usage.record` 增量样本（包含 turn / session scope），不叠加 token_counting 上下文计数或服务端镜像。
+输入、缓存读取、缓存创建互不重叠；输出没有单独 reasoning 字段。总量由四桶求和，必需字段缺失保持未知。
+会话标识取 state.id，旧格式取客户端 `session_*` 目录名；请求键为 agent 目录 + wire 行序号，完整重扫幂等。
+界面使用已有 LobeHub `Kimi` 标识与独立 `client-kimi` 语义色。
+
 ### Claude Code / OpenCode / DSH 采集器接入决策（2026-10-11）
 
 新增 `collectors/claude_code/`（发现、白名单解析、会话聚合、同步）与 `collectors/opencode/`
@@ -19,7 +32,7 @@ Claude Code 首先检查文件集合与大小 / mtime / 解析版本：任一变
 单事务替换该客户端完整元数据快照（含水位），使源数据修正、删除或截断可以反映到统计中；
 此 API 只接受完整扫描，不复用 Codex 的累计值陈旧保护，不改变 Codex 导入行为。
 
-后台调度分别执行四个采集器，单客户端失败不阻止其他客户端；DTO 增加逐客户端结果，
+后台调度分别执行各客户端采集器，单客户端失败不阻止其他客户端；DTO 增加逐客户端结果，
 新命令 `sync_usage` 同步全部客户端，旧 `sync_codex` 保留仅 Codex 的兼容语义。
 
 DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/session.jsonl`
@@ -33,7 +46,7 @@ DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/se
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-Claude Code、OpenCode、DSH 采集器已接入；费用换算未实现（不展示统一金额）。
+Claude Code、OpenCode、DSH、Kimi Code 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -44,7 +57,7 @@ Claude Code、OpenCode、DSH 采集器已接入；费用换算未实现（不展
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -84,7 +97,7 @@ usage/tokens ────────→ usage/client
 | ------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
 | `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`      | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
 | `get_daily_token_trend`  | `fromMs` / `dayCount` / `client`                  | 每日分桶（缺失日期补 0）                                       |
-| `get_client_usage`       | `fromMs` / `toMs`                                 | 四个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_client_usage`       | `fromMs` / `toMs`                                 | 五个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`            | 模型与项目排行                                                 |
 | `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset` | 会话摘要列表（只含元数据与用量）                               |
 | `get_data_source_status` | —                                                 | 客户端接入状态、同步状态、库路径、数据时间范围                 |
@@ -94,7 +107,7 @@ usage/tokens ────────→ usage/client
 
 ## 4. 客户端适配器规范
 
-每个客户端一个独立模块（`codex`、`claude_code`、`opencode`、`dsh`，后续新增同理），并遵守：
+每个客户端一个独立模块（`codex`、`claude_code`、`opencode`、`dsh`、`kimi_code`，后续新增同理），并遵守：
 
 1. **发现（discover）与解析（parse）分离**：发现函数定位候选文件；解析函数接收文件内容/路径，输出归一化事件，便于用 fixture 单测。
 2. **只读**：以只读方式打开文件，绝不写入、移动或删除客户端数据。
@@ -154,7 +167,7 @@ usage/tokens ────────→ usage/client
 
 | 模块                      | 子模块职责                                                                                                                     |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `usage/normalize/`        | `codex`、`claude_code`、`opencode`、`dsh` 分别归一化为统一记录；`rollup` 对完整字段安全求和，测试随客户端规则组织              |
+| `usage/normalize/`        | `codex`、`claude_code`、`opencode`、`dsh`、`kimi_code` 分别归一化为统一记录；`rollup` 对完整字段安全求和，测试随客户端规则组织 |
 | `usage/time.rs`           | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
 | `usage/store/`            | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
 | `usage/analytics/`        | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
@@ -162,6 +175,7 @@ usage/tokens ────────→ usage/client
 | `collectors/claude_code/` | JSONL 白名单解析、跨文件去重聚合与完整快照同步                                                                                 |
 | `collectors/opencode/`    | 只读 SQLite 元数据查询与完整快照同步；每次读取 WAL 可见的事务快照                                                              |
 | `collectors/dsh/`         | v0 JSONL / Zstandard 解析、步骤 usage 替换与完整快照同步                                                                       |
+| `collectors/kimi_code/`   | 会话目录发现、v2 / 旧版元数据、wire 1.4 / 1.5 白名单解析与原子快照同步                                                         |
 | `collectors/` 公共模块    | `files` 发现与指纹；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                               |
 | `commands/`               | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
 | `src/lib/usage-types.ts`  | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                  |
@@ -228,6 +242,6 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 `sync_usage` 为前端统一刷新入口，`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
 `get_overview_stats` 增加可选 `client`，与趋势 / 排行筛选一致。
-`DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH）。
+`DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH / Kimi Code）。
 `ClientUsage.shareBps` 由领域查询按已知规范总量计算，10000 表示 100%，前端只格式化，不重新聚合。
 共享 DTO 类型仍在 `usage-types.ts`，`sync_codex` 保留仅 Codex 的语义。数据库 schema 保持 v1，无需迁移。

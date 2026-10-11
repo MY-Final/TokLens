@@ -2,7 +2,7 @@
 
 use super::{
     SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
-    dsh::DshCollector, opencode::OpenCodeCollector,
+    dsh::DshCollector, kimi_code::KimiCodeCollector, opencode::OpenCodeCollector,
 };
 use crate::usage::client::Client;
 use crate::usage::store::UsageStore;
@@ -14,6 +14,7 @@ pub struct CollectorRoots {
     pub claude_code: Option<PathBuf>,
     pub opencode: Option<PathBuf>,
     pub dsh: Option<PathBuf>,
+    pub kimi_code: Option<PathBuf>,
 }
 
 impl CollectorRoots {
@@ -23,6 +24,7 @@ impl CollectorRoots {
             claude_code: ClaudeCodeCollector::default_root(),
             opencode: OpenCodeCollector::default_database(),
             dsh: DshCollector::default_root(),
+            kimi_code: KimiCodeCollector::default_root(),
         }
     }
 }
@@ -72,6 +74,10 @@ pub fn sync_clients(
                 .opencode
                 .as_ref()
                 .map(|root| OpenCodeCollector::new(root).sync(store, options)),
+            Client::KimiCode => roots
+                .kimi_code
+                .as_ref()
+                .map(|root| KimiCodeCollector::new(root).sync(store, options)),
             Client::Dsh => roots
                 .dsh
                 .as_ref()

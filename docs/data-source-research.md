@@ -336,3 +336,21 @@
 该范围与已持久化核心请求日志一致，不能宣称覆盖 DSH 所有插件调用。token-meter 的客户端无关投影契约与 pi-ai 适配器也已核对；SQLite 后端未验证，未知持久化格式拒绝提交。
 检查只输出字段形态与聚合数值，不输出会话正文、标题、系统提示词或凭据；未修改任何源文件。
 最新三客户端对账数字及缺失情况见 `data-model.md` 第 10 节。
+
+## Kimi Code — 本机数据与客户端契约（2026-10-11）
+
+只读检查用户指定 `.kimi-code`：2 份会话 state 与 2 份 agent wire（协议 1.4 / 1.5）。
+另有插件 state，仅含 enabled，不属于会话，按目录形状排除。
+现代 state version 2 含 id / cwd / 毫秒时间；旧版无 id，workDir / ISO UTC 时间，
+客户端迁移逻辑回退到完整 session_* 目录名。根目录由客户端 `KIMI_CODE_HOME` 配置覆盖。
+
+证据来自已安装 kimi.exe 内嵌 JavaScript 的 provider adapter、addUsage、usageTotal、record 与 migration 代码，
+只检索字段/函数契约，未运行客户端命令、未输出正文或凭据。
+OpenAI adapter 的 inputOther = promptTokens - cached；Anthropic adapter 的 inputOther 与缓存字段独立。
+usageTotal = inputOther + output + inputCacheRead + inputCacheCreation；record 默认 session scope，
+turn scope 也计入会话累计，故 `usage.record` 是增量而非累计；相同 usage 值不可内容去重。
+`token_counting.measured` / `turn_recorded` 是上下文长度，服务端镜像不重复扫描。
+
+独立只读脚本与内存库导入对账：2 会话、2 usage、普通输入 31,422、输出 925、缓存读取 28,800、
+缓存写入 0、规范总量 61,147；另一个会话无 usage，保留未知。没有未识别行。
+这些是本次采样结果，不是固定 fixture；自动测试仅使用合成数据。

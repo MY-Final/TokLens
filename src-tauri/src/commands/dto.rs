@@ -50,6 +50,7 @@ pub enum ClientParam {
     #[serde(rename = "opencode")]
     OpenCode,
     Dsh,
+    KimiCode,
 }
 
 impl From<ClientParam> for Client {
@@ -59,6 +60,7 @@ impl From<ClientParam> for Client {
             ClientParam::ClaudeCode => Client::ClaudeCode,
             ClientParam::OpenCode => Client::OpenCode,
             ClientParam::Dsh => Client::Dsh,
+            ClientParam::KimiCode => Client::KimiCode,
         }
     }
 }
@@ -67,7 +69,7 @@ impl From<ClientParam> for Client {
 pub fn is_supported(client: Client) -> bool {
     matches!(
         client,
-        Client::Codex | Client::ClaudeCode | Client::OpenCode | Client::Dsh
+        Client::Codex | Client::ClaudeCode | Client::OpenCode | Client::Dsh | Client::KimiCode
     )
 }
 
@@ -171,7 +173,7 @@ pub struct ClientUsageDto {
     pub totals: TokenTotalsDto,
 }
 
-/// 按固定顺序（Codex / Claude Code / OpenCode / DSH）输出四个客户端，缺失数据补 0。
+/// 按固定顺序（Codex / Claude Code / OpenCode / DSH / Kimi Code）输出五个客户端，缺失数据补 0。
 pub fn client_usage_dto(usage: &[ClientUsage]) -> Vec<ClientUsageDto> {
     Client::ALL
         .into_iter()
@@ -392,7 +394,7 @@ mod tests {
             },
         ];
         let dto = client_usage_dto(&rows);
-        assert_eq!(dto.len(), 4);
+        assert_eq!(dto.len(), 5);
         assert_eq!(dto[0].client, "codex");
         assert!(dto[0].supported);
         assert_eq!(dto[0].totals.total_tokens, 1_112);

@@ -7,6 +7,7 @@
 mod claude_code;
 mod codex;
 pub mod dsh;
+pub mod kimi_code;
 mod opencode;
 mod rollup;
 pub use rollup::sum_complete_counts;

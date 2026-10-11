@@ -1,4 +1,4 @@
-import { ClaudeCode, Codex, DeepSeek, OpenCode } from "@lobehub/icons";
+import { ClaudeCode, Codex, DeepSeek, Kimi, OpenCode } from "@lobehub/icons";
 import type { ComponentType } from "react";
 
 import type { ClientKey } from "@/lib/usage-types";
@@ -10,6 +10,7 @@ const CLIENT_STYLES = {
   claude_code: { icon: ClaudeCode, className: "bg-client-claude/10 text-client-claude" },
   opencode: { icon: OpenCode, className: "bg-client-opencode/10 text-client-opencode" },
   dsh: { icon: DeepSeek, className: "bg-client-dsh/10 text-client-dsh" },
+  kimi_code: { icon: Kimi, className: "bg-client-kimi/10 text-client-kimi" },
 } satisfies Record<ClientKey, { icon: ComponentType<{ size: number }>; className: string }>;
 
 export function ClientIdentity({
