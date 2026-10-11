@@ -168,6 +168,26 @@ usage/tokens ────────→ usage/client
 
 待登记（引入前补一行）：前端状态管理、前端测试框架、错误类型库（当前 `UsageError` 为模块内自定义枚举）、价格表来源。
 
+### AI 品牌图标（2026-10-11）
+
+| 日期       | 决策                                                                  | 状态   | 理由 / 影响                                |
+| ---------- | --------------------------------------------------------------------- | ------ | ------------------------------------------ |
+| 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文 |
+
+按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
+由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode` 的单色 SVG 组件。
+业务组件仍通过 shadcn/ui 组合布局；通用操作与导航继续使用 lucide-react。
+品牌图标使用现有 `client-*` 语义颜色，随应用本地打包，不使用 CDN、远程图片或遥测。
+
+依赖来自 npm 官方 registry；LobeHub 开源维护、MIT 授权，采用当前维护版本 `5.23.0`
+（npm 最近更新 2026-10-10）。包发布体积约 9.5 MB（未压缩，包含全图标集），标记 `sideEffects: false`；
+本次生产 JS 从 822.85 kB 增至 871.44 kB（+48.59 kB），gzip 从 250.52 kB 增至 260.74 kB（+10.22 kB）。
+其声明的 `antd` / `@lobehub/ui` peer 依赖由包管理器解析，
+仅服务图标库的兼容入口，不作为 TokLens 的业务 UI 组件库使用。
+
+该版本的传递依赖 `@emoji-mart/react@1.1.1` 声明 React 16–18 peer，与项目 React 19 存在安装提示。
+TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 peer 兼容规则，升级图标库时复查。
+
 ### UI 组件结构（2026-10-11）
 
 业务组件和页面采用 PascalCase 文件名；`DashboardCard` 组合 shadcn Card 统一面板外观，`ClientIdentity` 提供稳定客户端标识，`StatCard`、`TokenTrendChart`、`ClientUsageCard`、`RankingCard`、`SessionTable` 分别负责呈现。图表采用 shadcn Chart + 已有 Recharts，无新增运行时依赖。统计查询与 DTO 保持不变，费用来源未落地前 Tooltip 显示暂不可用，不反推金额。
