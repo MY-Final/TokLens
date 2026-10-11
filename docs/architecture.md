@@ -95,7 +95,7 @@ Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop 采集器已接
 ```text
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
-commands/queries ────→ usage/analytics ──→ usage/store
+commands/queries + request_queries ────→ usage/analytics ──→ usage/store
 commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
@@ -139,6 +139,8 @@ usage/tokens ────────→ usage/client
 | `get_client_usage`       | `fromMs` / `toMs`                                          | 七个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
 | `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
+| `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries`             | 完整范围请求汇总、最多 400 日本地日桶与全已导入日期覆盖计数    |
+| `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`          | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）   |
 | `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                 |
 | `sync_usage`             | `force`                                                    | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败             |
 | `sync_codex`             | `force`                                                    | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
@@ -208,6 +210,16 @@ usage/tokens ────────→ usage/client
 - 聚合在 Rust 侧完成，前端只做展示层格式化；单次返回给前端的数据量应可控（分页或预聚合）。
 
 ## 8. 架构决策记录（ADR）
+
+### 请求时间统计与元数据会话详情（2026-10-11）
+
+在现有目录内新增 `usage/analytics/requests.rs` 与 `session_detail.rs`，分别处理请求时间聚合与单会话元数据分页；
+`commands/request_queries.rs` 仅校验参数并调用领域查询，`request_dto.rs` 负责跨端转换。
+前端 `lib/api.ts` 封装 `get_request_activity` / `get_session_detail`，类型位于 `lib/usage-types.ts`。
+默认请求时间与保留的会话累计为独立查询路径：请求聚合不兜底累计值，会话累计仍只使用 sessions Token。
+请求日桶接收本地日历零点边界，区间汇总与最多 400 日显示桶分离；覆盖计数忽略日期。
+详情按客户端与会话 ID 查询已有统计库，不读取源文件正文；默认 100 条、最多 200 条，稳定排序与 offset 分页。
+不增加目录、schema、迁移、依赖、权限、状态管理或网络能力。口径版本 2.3，详见 `data-metrics.md`。
 
 ### 首版热力图与逐日完整度（2026-10-11）
 

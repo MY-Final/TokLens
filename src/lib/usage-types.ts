@@ -149,3 +149,65 @@ export type RangeArgs = {
   fromMs: number | null;
   toMs: number | null;
 };
+
+/** Request-time sums contain only recorded, non-estimated, timestamped requests. */
+export type RequestTotals = {
+  sessions: number;
+  requests: number;
+  requestsWithUsage: number;
+  requestsWithoutUsage: number;
+  measuredRequests: number;
+  derivedRequests: number;
+  totals: TokenTotals;
+};
+export type RequestDailyBucket = {
+  dayStartMs: number;
+  totals: RequestTotals;
+  clients: { client: ClientKey; totals: RequestTotals }[];
+};
+/** All imported records for the selected client, independent of the selected dates. */
+export type RequestCoverage = {
+  recordedRequests: number;
+  timedRequests: number;
+  untimedRequests: number;
+  estimatedRequests: number;
+  sessionsPartial: number;
+  sessionsWithoutRequests: number;
+};
+export type RequestActivity = {
+  range: RequestTotals;
+  daily: RequestDailyBucket[];
+  coverage: RequestCoverage;
+};
+export type RequestDetail = {
+  dedupKey: string;
+  seq: number | null;
+  createdAtMs: number | null;
+  completedAtMs: number | null;
+  model: string | null;
+  agent: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  reasoningTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  totalTokens: number | null;
+  sourceKind: "measured" | "derived" | "estimated";
+  sourceRef: string | null;
+  isSidechain: boolean;
+  unknownRelations: string[];
+};
+export type RequestCoverageDetail = {
+  total: number;
+  timed: number;
+  untimed: number;
+  withUsage: number;
+  withoutUsage: number;
+  estimated: number;
+  partial: boolean;
+};
+export type SessionDetail = {
+  session: SessionSummary;
+  requests: RequestDetail[];
+  requestCoverage: RequestCoverageDetail;
+};

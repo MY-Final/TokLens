@@ -54,12 +54,14 @@ export function SessionTable({
   error,
   onRetry,
   onOpenAll,
+  onOpenSession,
 }: {
   sessions: SessionSummary[] | null;
   loading: boolean;
   error: string | null;
   onRetry: () => void;
   onOpenAll?: () => void;
+  onOpenSession?: (session: SessionSummary) => void;
 }) {
   const rows = sessions ?? [];
   return (
@@ -85,6 +87,7 @@ export function SessionTable({
                 <TableHead className="w-20 text-right">明细</TableHead>
                 <TableHead className="w-24 text-right">Token</TableHead>
                 <TableHead className="w-32">状态</TableHead>
+                {onOpenSession ? <TableHead className="w-24">操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -117,6 +120,18 @@ export function SessionTable({
                   <TableCell>
                     <CoverageBadge session={session} />
                   </TableCell>
+                  {onOpenSession ? (
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-label={`查看会话 ${session.clientSessionId} 的详情`}
+                        onClick={() => onOpenSession(session)}
+                      >
+                        查看详情
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

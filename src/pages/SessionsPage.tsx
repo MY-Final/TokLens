@@ -8,16 +8,49 @@ import { useState } from "react";
 
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SessionTable } from "@/components/SessionTable";
+import { SessionDetailPanel } from "@/components/SessionDetailPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
-import { getSessions } from "@/lib/api";
-import type { ClientKey } from "@/lib/usage-types";
+import { getSessionDetail, getSessions } from "@/lib/api";
+import type { ClientKey, SessionSummary } from "@/lib/usage-types";
 import { formatNumber } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
 
 const SESSION_LIMIT = 200;
 
+function SelectedSessionDetail({
+  session,
+  refreshToken,
+  onClose,
+}: {
+  session: SessionSummary;
+  refreshToken: number;
+  onClose: () => void;
+}) {
+  const [offset, setOffset] = useState(0);
+  const detail = useAsyncData(
+    () =>
+      getSessionDetail({
+        client: session.client,
+        clientSessionId: session.clientSessionId,
+        limit: 100,
+        offset,
+      }),
+    `session-detail:${session.client}:${session.clientSessionId}:${refreshToken}:${offset}`,
+  );
+  return (
+    <SessionDetailPanel
+      selectedSession={session}
+      detail={detail}
+      onClose={onClose}
+      offset={offset}
+      onOffsetChange={setOffset}
+    />
+  );
+}
+
 export function SessionsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
   const [clientValue, setClientValue] = useState("all");
+  const [selectedSession, setSelectedSession] = useState<SessionSummary | null>(null);
   const client: ClientKey | null = clientValue === "all" ? null : (clientValue as ClientKey);
   const keySuffix = `${range.key}:${clientValue}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
 
@@ -68,6 +101,7 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
             loading={sessions.loading}
             error={sessions.error}
             onRetry={sessions.reload}
+            onOpenSession={setSelectedSession}
           />
         </CardContent>
       </DashboardCard>
@@ -76,6 +110,14 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
         列表按会话开始时间倒序；Token 为会话累计值（父子集字段已扣除），"—"
         表示客户端没有记录该会话的用量。 会话内容、提示词与工具输出不读取、不保存。
       </p>
+      {selectedSession ? (
+        <SelectedSessionDetail
+          key={`${selectedSession.client}:${selectedSession.clientSessionId}`}
+          session={selectedSession}
+          refreshToken={refreshToken}
+          onClose={() => setSelectedSession(null)}
+        />
+      ) : null}
     </div>
   );
 }

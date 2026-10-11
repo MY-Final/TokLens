@@ -196,19 +196,21 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 
 ## 9. 统计查询口径（analytics）
 
+本节原有汇总表与每日趋势描述属于保留的“会话累计”模式；默认“请求时间”模式见文末“请求时间与会话详情查询”2.3 补充。
+
 实现：`src-tauri/src/usage/analytics/`；命令层只做参数校验与 DTO 转换（`src-tauri/src/commands/`）。
 
-| 规则       | 说明                                                                                                     |
-| ---------- | -------------------------------------------------------------------------------------------------------- |
-| 事实来源   | 所有 token 汇总取自 `sessions` 表（唯一事实来源）；`messages` 只用于计数与时间序列，二者绝不相加         |
-| 区间过滤   | 按会话的 `started_at_ms` 过滤；边界由前端按本地日历传入（`fromMs`/`toMs`，`toMs` 为排他上界）            |
-| 每日趋势   | 按会话开始时间归属到本地日期，缺失日期补 0；桶按 24 小时整除，含夏令时的时区会有偏差（待引入时间库修正） |
-| 模型排行   | 按会话主模型（`sessions.model`）聚合；Codex 的逐请求模型未落库，故不按请求维度排行                       |
-| 项目排行   | 按 `sessions.project_path` 聚合，跨客户端合并                                                            |
-| 未知值     | `total_tokens` 为 NULL 的会话不计入任何合计，单独计数为 `sessions_without_usage`（界面显示 “—”）         |
-| 不完整数据 | `message_coverage = partial`（源文件被分页/续接）单独计数，界面加标注                                    |
-| 口径冲突   | 客户端自报总量与其分项之和不一致时按客户端值计入，并计数为 `sessions_total_mismatch`                     |
-| 费用       | 当前恒不展示（`costAvailable: false`），避免虚构金额                                                     |
+| 规则       | 说明                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| 事实来源   | 会话累计 token 汇总取自 `sessions` 表（该模式唯一事实来源）；`messages` 只用于计数与时间序列，二者绝不相加 |
+| 区间过滤   | 按会话的 `started_at_ms` 过滤；边界由前端按本地日历传入（`fromMs`/`toMs`，`toMs` 为排他上界）              |
+| 每日趋势   | 按会话开始时间归属到本地日期，缺失日期补 0；桶按 24 小时整除，含夏令时的时区会有偏差（待引入时间库修正）   |
+| 模型排行   | 按会话主模型（`sessions.model`）聚合；Codex 的逐请求模型未落库，故不按请求维度排行                         |
+| 项目排行   | 按 `sessions.project_path` 聚合，跨客户端合并                                                              |
+| 未知值     | `total_tokens` 为 NULL 的会话不计入任何合计，单独计数为 `sessions_without_usage`（界面显示 “—”）           |
+| 不完整数据 | `message_coverage = partial`（源文件被分页/续接）单独计数，界面加标注                                      |
+| 口径冲突   | 客户端自报总量与其分项之和不一致时按客户端值计入，并计数为 `sessions_total_mismatch`                       |
+| 费用       | 当前恒不展示（`costAvailable: false`），避免虚构金额                                                       |
 
 分桶之和应等于规范总量；唯一例外是上一行的 `client_total_mismatch` 会话（总量取客户端值，分项按其原始字段计算）。
 
@@ -335,3 +337,30 @@ Pi 提交前复核文件集合/指纹，截断尾行保留上次快照；重复�
 会话 Token / 完整度查询与请求计数查询均按 `sessions.started_at_ms >= from_ms AND sessions.started_at_ms < to_ms` 过滤，并同时限制在显示桶范围内。
 请求自身时间不参与区间过滤或分桶。缺失日期、未知总量及 partial 完整度字段保持原语义。
 `daily_token_trend` 保留为不额外筛选精确范围的兼容包装；固定 24 小时桶与夏令时限制保持不变。
+
+### 请求时间与会话详情查询（口径 2.3，2026-10-11）
+
+`usage/analytics/requests.rs` 提供 `request_activity(filter, day_boundaries)`，
+`session_detail.rs` 提供 `session_detail(filter, client_session_id, limit, offset)`。
+两者只查询现有 `messages` / `sessions` 表，无迁移；command 参数和 DTO 见 `architecture.md`。
+
+请求范围以 `messages.created_at_ms >= from_ms AND messages.created_at_ms < to_ms` 过滤，
+同时支持客户端 / 项目条件，仅保留 `source_kind IN ('measured', 'derived')` 且创建时间非 NULL 的记录。
+`RequestTotals` 返回区间去重会话数、请求数、总量已知 / 未知请求数、measured / derived 请求数与规范 Token 求和。
+总量直接求和已记录 `messages.total_tokens`；各分项独立对已知值求和，不重算总量，不从 `sessions` 补请求缺口。
+SQL 求和空集合返回 0；UI 必须结合请求数与未知总量计数区分无活动、真实零、全部未知与已知子集。
+`countedCacheWriteTokens` 仍按已有客户端语义计入，原始缓存写入不因此被重复叠加。
+
+`RequestDailyBucket` 使用调用方传入的本地日历零点边界（最多 401 个递增边界 / 400 日），
+每个半开日桶还受完整查询范围约束，可支持夏令时 23 / 25 小时日。
+`range` 不受显示桶截断；`daily` 补全空桶并提供逐客户端值。
+每日独立 `COUNT(DISTINCT session_id)` 不具可加性，不能由每日会话数推算区间去重会话数。
+`RequestCoverage` 忽略日期，只应用客户端 / 项目条件，返回全部已导入记录计数；
+`recordedRequests` 包含估算，`timedRequests` / `untimedRequests` 仅计非估算记录，估算另列。
+`sessionsPartial` 与 `sessionsWithoutRequests` 是独立会话计数，不是完整率或未知 Token 比例。
+
+会话详情必须指定客户端与客户端会话 ID，不应用列表的日期 / 项目条件。
+`SessionDetail` 包含 `SessionSummary`、当前页 `RequestDetail[]` 和全会话 `RequestCoverageDetail`。
+默认 100 条、上限 200 条，按 `created_at_ms IS NULL, created_at_ms, seq IS NULL, seq, id` 稳定排序，NULL 时间最后。
+请求字段限定为去重键、序号、创建 / 完成时间、模型、agent、归一化 Token、`source_kind`、`source_ref`、
+sidechain 和 unknown relations；不包含正文，详情查询不回读源文件。未知 Token 保持 NULL，覆盖计数不随分页改变。

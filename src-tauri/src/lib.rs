@@ -90,6 +90,8 @@ pub fn run() {
             commands::queries::get_client_usage,
             commands::queries::get_rankings,
             commands::queries::get_sessions,
+            commands::request_queries::get_request_activity,
+            commands::request_queries::get_session_detail,
             commands::queries::get_data_source_status,
             commands::queries::sync_codex,
             commands::queries::sync_usage,

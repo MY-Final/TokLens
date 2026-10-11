@@ -10,6 +10,9 @@ import { useState } from "react";
 import type { PageKey } from "@/components/AppShell";
 import { ClientUsageCard } from "@/components/ClientUsageCard";
 import { CalendarHeatmap } from "@/components/CalendarHeatmap";
+import { RequestActivityView } from "@/components/RequestActivityView";
+import { UsageBasisSelect } from "@/components/UsageBasisSelect";
+import type { UsageBasis } from "@/components/UsageBasisSelect";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RankingCard } from "@/components/RankingCard";
@@ -31,17 +34,28 @@ import type { DateRange } from "@/lib/ranges";
 const TOTAL_TOOLTIP =
   "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
 
-export function OverviewPage({
-  range,
-  nowMs,
-  refreshToken,
-  onNavigate,
-}: {
+type OverviewPageProps = {
   range: DateRange;
   nowMs: number;
   refreshToken: number;
   onNavigate: (page: PageKey) => void;
-}) {
+};
+
+export function OverviewPage(props: OverviewPageProps) {
+  const [basis, setBasis] = useState<UsageBasis>("requests");
+  return (
+    <div className="space-y-4">
+      <UsageBasisSelect value={basis} onChange={setBasis} />
+      {basis === "requests" ? (
+        <RequestActivityView range={props.range} refreshToken={props.refreshToken} />
+      ) : (
+        <SessionOverview {...props} />
+      )}
+    </div>
+  );
+}
+
+function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPageProps) {
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const todayStart = startOfDay(nowMs).getTime();

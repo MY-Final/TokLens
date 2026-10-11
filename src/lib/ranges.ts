@@ -30,6 +30,13 @@ export const RANGE_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> =
   ...RANGE_OPTIONS.slice(1),
 ];
 const MS_PER_MINUTE = 60_000;
+
+/** Consecutive local calendar midnights; Rust assigns request timestamps to these buckets. */
+export function localDayBoundaries(range: DateRange): number[] {
+  return Array.from({ length: range.dayCount + 1 }, (_, index) =>
+    addDays(range.dayStartMs, index).getTime(),
+  );
+}
 function displayDays(fromMs: number, toMs: number): Pick<DateRange, "dayStartMs" | "dayCount"> {
   const firstDay = startOfDay(fromMs);
   const lastDay = startOfDay(toMs - 1);

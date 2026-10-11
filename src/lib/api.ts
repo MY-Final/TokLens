@@ -77,6 +77,8 @@ import type {
   DailyTokenBucket,
   OverviewStats,
   RangeArgs,
+  RequestActivity,
+  SessionDetail,
   Rankings,
   SessionSummary,
   SyncState,
@@ -124,6 +126,25 @@ export function getOverviewStats(
   args: RangeArgs & { todayFromMs: number; client?: ClientKey | null },
 ): Promise<OverviewStats> {
   return invoke<OverviewStats>("get_overview_stats", { ...args, client: args.client ?? null });
+}
+
+export function getRequestActivity(
+  args: RangeArgs & { dayBoundaries: number[]; client?: ClientKey | null },
+): Promise<RequestActivity> {
+  return invoke("get_request_activity", { ...args, client: args.client ?? null });
+}
+
+export function getSessionDetail(args: {
+  client: ClientKey;
+  clientSessionId: string;
+  limit?: number;
+  offset?: number;
+}): Promise<SessionDetail> {
+  return invoke("get_session_detail", {
+    ...args,
+    limit: args.limit ?? 100,
+    offset: args.offset ?? 0,
+  });
 }
 
 export function getDailyTokenTrend(args: {

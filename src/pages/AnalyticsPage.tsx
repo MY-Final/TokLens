@@ -3,6 +3,9 @@
 import { EmptyBlock } from "@/components/StateBlocks";
 import { DashboardCard } from "@/components/DashboardCard";
 import { ClientDateHeatmap } from "@/components/ClientDateHeatmap";
+import { RequestActivityView } from "@/components/RequestActivityView";
+import { UsageBasisSelect } from "@/components/UsageBasisSelect";
+import type { UsageBasis } from "@/components/UsageBasisSelect";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 
 import { useState } from "react";
@@ -32,8 +35,43 @@ const CLIENT_FILTERS: ReadonlyArray<{ value: string; label: string; client: Clie
 
 export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
   const [clientValue, setClientValue] = useState("all");
+  const [basis, setBasis] = useState<UsageBasis>("requests");
   const selected = CLIENT_FILTERS.find((entry) => entry.value === clientValue) ?? CLIENT_FILTERS[0];
   const client = selected?.client ?? null;
+  return (
+    <div className="space-y-4">
+      <UsageBasisSelect value={basis} onChange={setBasis} />
+      <Select value={clientValue} onValueChange={setClientValue}>
+        <SelectTrigger size="sm" className="w-52" aria-label="选择客户端">
+          <SelectValue />
+        </SelectTrigger>
+        <FilterSelectContent>
+          {CLIENT_FILTERS.map((entry) => (
+            <SelectItem key={entry.value} value={entry.value}>
+              {entry.label}
+            </SelectItem>
+          ))}
+        </FilterSelectContent>
+      </Select>
+      {basis === "requests" ? (
+        <RequestActivityView range={range} refreshToken={refreshToken} client={client} />
+      ) : (
+        <SessionAnalytics range={range} refreshToken={refreshToken} client={client} />
+      )}
+    </div>
+  );
+}
+
+function SessionAnalytics({
+  range,
+  refreshToken,
+  client,
+}: {
+  range: DateRange;
+  refreshToken: number;
+  client: ClientKey | null;
+}) {
+  const clientValue = client ?? "all";
   const keySuffix = `${range.key}:${clientValue}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const trendRangeLabel =
     range.fromMs !== null && range.fromMs < range.dayStartMs
@@ -113,24 +151,6 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Select value={clientValue} onValueChange={setClientValue}>
-          <SelectTrigger size="sm" className="w-52" aria-label="选择客户端">
-            <SelectValue />
-          </SelectTrigger>
-          <FilterSelectContent>
-            {CLIENT_FILTERS.map((entry) => (
-              <SelectItem key={entry.value} value={entry.value}>
-                {entry.label}
-              </SelectItem>
-            ))}
-          </FilterSelectContent>
-        </Select>
-        <span className="text-xs text-muted-foreground">
-          统计本机 Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode 与 Pi Desktop 的已知用量。
-        </span>
-      </div>
-
       {overview.error ? <ErrorBlock message={overview.error} onRetry={overview.reload} /> : null}
 
       {overview.error ? null : overview.loading ? (
