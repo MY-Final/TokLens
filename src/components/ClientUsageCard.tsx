@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import type { ClientKey, ClientUsage } from "@/lib/api";
+import type { ClientKey, ClientUsage } from "@/lib/usage-types";
 import { formatCompactTokens, formatNumber } from "@/lib/format";
 
 const PENDING_CLIENTS: readonly ClientKey[] = ["claude_code", "opencode"];

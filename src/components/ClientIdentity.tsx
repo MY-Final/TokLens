@@ -1,6 +1,6 @@
 import { Box, Code2, Terminal } from "lucide-react";
 
-import type { ClientKey } from "@/lib/api";
+import type { ClientKey } from "@/lib/usage-types";
 import { clientLabel } from "@/lib/client-labels";
 import { cn } from "@/lib/utils";
 

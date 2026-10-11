@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-import {
-  getDataSourceStatus,
-  onSyncEvent,
-  syncCodex,
-  toErrorMessage,
-  type DataSourceStatus,
-  type SyncState,
-} from "@/lib/api";
+import { getDataSourceStatus, onSyncEvent, syncCodex, toErrorMessage } from "@/lib/api";
+import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 
 const RUNNING_POLL_MS = 2_000;
 

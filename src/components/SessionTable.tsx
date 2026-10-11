@@ -13,7 +13,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { ClientIdentity } from "@/components/ClientIdentity";
-import type { SessionSummary } from "@/lib/api";
+import type { SessionSummary } from "@/lib/usage-types";
 import { formatCompactOrDash, formatDateTime, formatNumber, shortenPath } from "@/lib/format";
 
 function CoverageBadge({ session }: { session: SessionSummary }) {

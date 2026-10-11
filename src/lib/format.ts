@@ -1,5 +1,5 @@
 /** 展示层格式化：只做单位与显示处理，不改变统计口径。 */
-import type { SyncState } from "@/lib/api";
+import type { SyncState } from "@/lib/usage-types";
 
 const NUMBER_FORMAT = new Intl.NumberFormat("zh-CN");
 

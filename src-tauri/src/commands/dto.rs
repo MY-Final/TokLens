@@ -1,4 +1,4 @@
-//! Tauri Command 的 DTO：字段名统一 camelCase，与前端 `src/lib/api.ts` 的类型逐字对应。
+//! Tauri Command 的 DTO：字段名统一 camelCase，与前端 `src/lib/usage-types.ts` 的类型逐字对应。
 //!
 //! - 缺失值一律用 `null`（`Option`），不用 0 代替；
 //! - 只输出元数据与统计值，不含会话正文、提示词或凭据；

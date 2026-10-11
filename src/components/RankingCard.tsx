@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import type { RankingEntry } from "@/lib/api";
+import type { RankingEntry } from "@/lib/usage-types";
 import { formatCompactTokens, formatNumber, shortenPath } from "@/lib/format";
 
 export function RankingCard({

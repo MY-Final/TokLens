@@ -12,7 +12,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { formatCompactTokens, formatDateTime, formatNumber } from "@/lib/format";
-import type { DailyTokenBucket } from "@/lib/api";
+import type { DailyTokenBucket } from "@/lib/usage-types";
 
 const SERIES = [
   { key: "cacheRead", label: "缓存读取", color: "var(--chart-1)", dotClass: "bg-chart-1" },

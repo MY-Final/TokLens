@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock } from "@/components/StateBlocks";
-import type { DataSourceStatus } from "@/lib/api";
+import type { DataSourceStatus } from "@/lib/usage-types";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { RANGE_OPTIONS, type RangeKey } from "@/lib/ranges";
 

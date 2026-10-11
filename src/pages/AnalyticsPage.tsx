@@ -18,7 +18,8 @@ import { StatCard } from "@/components/StatCard";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { TokenTrendChart } from "@/components/TokenTrendChart";
 import { useAsyncData } from "@/hooks/use-async-data";
-import { getDailyTokenTrend, getOverviewStats, getRankings, type ClientKey } from "@/lib/api";
+import { getDailyTokenTrend, getOverviewStats, getRankings } from "@/lib/api";
+import type { ClientKey } from "@/lib/usage-types";
 import { formatCompactTokens, formatNumber, formatPercent } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
 

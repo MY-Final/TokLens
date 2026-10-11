@@ -65,21 +65,21 @@ pnpm tauri build      # 生产打包
 
 ## 3. 目录职责
 
-| 路径                        | 职责                                                                                |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| `src/`                      | 前端应用源码（React）                                                               |
-| `src/components/ui/`        | shadcn CLI 生成的组件：视为 vendor 代码，不手改（已豁免 ESLint/Prettier）           |
-| `src/components/`           | 业务组件（不依赖 Tauri 细节，数据统一来自 `src/lib/api.ts`）                        |
-| `src/lib/`                  | 纯函数与工具（不得依赖 React）；`api.ts` 是唯一 Tauri 调用与 DTO 封装入口           |
-| `src/hooks/`                | 复用 Hook；`use-mobile.ts` 为 shadcn 生成物，同样视为 vendor                        |
-| `src/pages/`                | 页面级组件（总览 / 用量分析 / 会话明细 / 数据源管理）                               |
-| `src-tauri/src/`            | Rust 侧：数据采集、解析、归一化、聚合、持久化与 Tauri command                       |
-| `src-tauri/src/usage/`      | 统一数据模型 / Token 口径 / SQLite 存储（不含采集器与 UI，见 `docs/data-model.md`） |
-| `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（当前仅 Codex，见 `docs/data-model.md` 第 8 节）   |
-| `src-tauri/src/commands/`   | Tauri command 层：应用状态、后台同步调度与前端 DTO（口径仍由 `usage` 提供）         |
-| `src-tauri/capabilities/`   | Tauri 2 权限声明（最小权限，见第 5 节）                                             |
-| `docs/`                     | 规范文档（架构 / UI / 数据统计）                                                    |
-| `public/`                   | 原样拷贝的静态资源                                                                  |
+| 路径                        | 职责                                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/`                      | 前端应用源码（React）                                                                                 |
+| `src/components/ui/`        | shadcn CLI 生成的组件：视为 vendor 代码，不手改（已豁免 ESLint/Prettier）                             |
+| `src/components/`           | 业务组件（不依赖 Tauri 细节，数据统一来自 `src/lib/api.ts`）                                          |
+| `src/lib/`                  | 纯函数与工具（不得依赖 React）；`api.ts` 是唯一 Tauri 调用入口；DTO 定义在纯类型模块 `usage-types.ts` |
+| `src/hooks/`                | 复用 Hook；`use-mobile.ts` 为 shadcn 生成物，同样视为 vendor                                          |
+| `src/pages/`                | 页面级组件（总览 / 用量分析 / 会话明细 / 数据源管理）                                                 |
+| `src-tauri/src/`            | Rust 侧：数据采集、解析、归一化、聚合、持久化与 Tauri command                                         |
+| `src-tauri/src/usage/`      | 统一数据模型 / Token 口径 / SQLite 存储（不含采集器与 UI，见 `docs/data-model.md`）                   |
+| `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（当前仅 Codex，见 `docs/data-model.md` 第 8 节）                     |
+| `src-tauri/src/commands/`   | Tauri command 层：应用状态、后台同步调度与前端 DTO（口径仍由 `usage` 提供）                           |
+| `src-tauri/capabilities/`   | Tauri 2 权限声明（最小权限，见第 5 节）                                                               |
+| `docs/`                     | 规范文档（架构 / UI / 数据统计）                                                                      |
+| `public/`                   | 原样拷贝的静态资源                                                                                    |
 
 约束：
 

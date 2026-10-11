@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import type { DataSourceStatus, SyncState } from "@/lib/api";
+import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 
 const CLIENT_HINTS: Record<string, string> = {

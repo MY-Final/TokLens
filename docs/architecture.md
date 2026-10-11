@@ -17,7 +17,7 @@
 
 ```text
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
-React components ────→ lib/api.ts (只导入 DTO 类型)
+React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries ────→ usage/analytics ──→ usage/store
 commands/sync ───────→ collectors/codex/sync
 collectors/codex/sync ──→ discovery / parser / thread
@@ -48,7 +48,7 @@ usage/tokens ────────→ usage/client
 - 失败时返回 `Result<T, E>`，`E` 必须可序列化且对用户可读；前端负责把错误渲染成可理解的提示。
 - DTO 变更必须同时更新两侧，并在提交说明中标注破坏性变更。
 - Rust 侧 DTO 用 `#[serde(rename_all = "camelCase")]`，命令参数用 `#[tauri::command(rename_all = "camelCase")]`；
-  前端类型定义在 `src/lib/api.ts`，字段与 Rust 逐字对应。
+  前端类型定义在 `src/lib/usage-types.ts`，字段与 Rust 逐字对应；`api.ts` 保留类型重导出以兼容已有调用方。
 - 命令失败返回 `{ message: string }`，前端用 `toErrorMessage` 渲染成可读提示。
 - 跨端与数据库时间使用 Unix 毫秒，字段名以 `Ms` / `_ms` 标注；客户端原始 ISO 8601 UTC 字符串由
   `usage/time.rs` 解析。Token 与费用单位由字段名表达（如 `totalTokens`、`clientCostUsd`），不混用秒与毫秒。
@@ -126,14 +126,15 @@ usage/tokens ────────→ usage/client
 
 保留公开调用路径、DTO、数据库结构与统计口径；目录入口只负责模块组织与显式导出。
 
-| 模块                | 子模块职责                                                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `usage/normalize/`  | `codex`、`claude_code`、`opencode` 分别将客户端结构归一化为统一记录，测试随客户端规则组织                                      |
-| `usage/time.rs`     | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
-| `usage/store/`      | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
-| `usage/analytics/`  | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
-| `collectors/codex/` | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                             |
-| `commands/`         | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
+| 模块                     | 子模块职责                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `usage/normalize/`       | `codex`、`claude_code`、`opencode` 分别将客户端结构归一化为统一记录，测试随客户端规则组织                                      |
+| `usage/time.rs`          | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
+| `usage/store/`           | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
+| `usage/analytics/`       | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
+| `collectors/codex/`      | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                             |
+| `commands/`              | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
+| `src/lib/usage-types.ts` | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                  |
 
 较大的测试模块按行为分组，共享合成数据构造器仅在 `cfg(test)` 下编译。不按行数机械拆文件，
 优先隔离不同的变更原因；模块内部使用私有或 `pub(super)` 可见性，避免为拆分扩大公开接口。

@@ -1,6 +1,6 @@
 /** 客户端展示名（只做展示，不参与统计）。 */
 
-import type { ClientKey } from "@/lib/api";
+import type { ClientKey } from "@/lib/usage-types";
 
 export const CLIENT_LABELS: Record<ClientKey, string> = {
   codex: "Codex",

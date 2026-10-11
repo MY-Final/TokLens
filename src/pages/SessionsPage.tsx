@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { SessionTable } from "@/components/SessionTable";
 import { useAsyncData } from "@/hooks/use-async-data";
-import { getSessions, type ClientKey } from "@/lib/api";
+import { getSessions } from "@/lib/api";
+import type { ClientKey } from "@/lib/usage-types";
 import { formatNumber } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
 

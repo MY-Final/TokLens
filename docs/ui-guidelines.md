@@ -116,3 +116,6 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 ### Codex 总览重构（2026-10-11）
 
 顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持 Codex 总量与互不重叠 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+
+业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
+展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
