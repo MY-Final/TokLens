@@ -30,6 +30,14 @@ GitHub Actions Secrets：
 
 ## 发布步骤
 
+日常 `.github/workflows/ci.yml` 在 main 推送、PR 和手动触发时检查前端、发布脚本，
+并在 Windows x64、macOS Intel、Apple Silicon 上执行 Rust fmt / clippy / tests 与原生生产构建。
+日常检查不打安装包、不使用签名 Secrets；PR 无写权限。重复提交取消同一分支的旧检查。
+首次原生编译使用独立目标缓存，后续提交复用；锁文件必须保持不变。
+工具链为 Node 22、pnpm 10、Python 3.12、Rust stable。
+
+`.github/workflows/release.yml` 仅由稳定版本标签触发，发布任务不会因普通 main 推送执行。
+
 1. 同时修改 package.json、src-tauri/Cargo.toml 与 tauri.conf.json 的版本，并同步 Cargo.lock；更新 RELEASE_NOTES.md。
 2. 运行前端与 Rust 校验；执行 `python -m unittest discover -s scripts -p "test_*.py"`。
 3. 推送对应稳定标签 `vX.Y.Z`。流水线验证版本一致性并构建三个平台，各平台独立上传构建结果。

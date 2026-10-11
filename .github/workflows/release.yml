@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   build:
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -19,7 +20,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis
-          - os: macos-latest
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             bundles: app,dmg
           - os: macos-latest
@@ -52,10 +53,16 @@ jobs:
       - run: pnpm check
       - run: pnpm rust:check
       - name: Build signed packages
+        shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Configure the TAURI_SIGNING_PRIVATE_KEY repository secret before releasing."
+            exit 1
+          fi
+          pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - run: python scripts/release.py collect --tag "${{ github.ref_name }}" --target ${{ matrix.target }} --output release-artifacts/${{ matrix.target }}
       - name: Verify generated update signatures
         env:
@@ -68,6 +75,7 @@ jobs:
           if-no-files-found: error
 
   draft:
+    timeout-minutes: 10
     needs: build
     runs-on: ubuntu-latest
     permissions:

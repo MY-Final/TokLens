@@ -209,6 +209,14 @@ usage/tokens ────────→ usage/client
 
 ## 8. 架构决策记录（ADR）
 
+### 持续集成与发布隔离（2026-10-11）
+
+日常 CI 在 main 推送、PR 与手动触发时运行：Ubuntu 检查前端与 Python 发布脚本，
+Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装包原生生产构建。
+统一使用 Node 22、pnpm 10、Python 3.12 和 Rust stable；缓存按原生目标区分。
+日常 CI 只授予 contents: read，不读取签名 Secret、不发布制品；版本标签流水线才使用
+更新签名 Secret，全部平台成功后由独立任务创建草稿 Release。CI 不改变应用默认离线行为。
+
 ### 按职责拆分后端模块（2026-10-11）
 
 保留公开调用路径、DTO、数据库结构与统计口径；目录入口只负责模块组织与显式导出。
