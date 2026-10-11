@@ -1,0 +1,85 @@
+/** 会话明细：按区间与客户端筛选，展示元数据与用量（无正文）。 */
+
+import { DashboardCard } from "@/components/DashboardCard";
+import { CardContent } from "@/components/ui/card";
+
+import { useState } from "react";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { SessionTable } from "@/components/SessionTable";
+import { useAsyncData } from "@/hooks/use-async-data";
+import { getSessions, type ClientKey } from "@/lib/api";
+import { formatNumber } from "@/lib/format";
+import type { DateRange } from "@/lib/ranges";
+
+const SESSION_LIMIT = 200;
+
+export function SessionsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
+  const [clientValue, setClientValue] = useState("all");
+  const client: ClientKey | null = clientValue === "all" ? null : (clientValue as ClientKey);
+  const keySuffix = `${range.key}:${clientValue}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
+
+  const sessions = useAsyncData(
+    () =>
+      getSessions({
+        fromMs: range.fromMs,
+        toMs: range.toMs,
+        client,
+        limit: SESSION_LIMIT,
+      }),
+    `session-list:${keySuffix}`,
+  );
+
+  const rows = sessions.data ?? [];
+  const withoutUsage = rows.filter((session) => session.totalTokens === null).length;
+  const partial = rows.filter((session) => session.coverage === "partial").length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Select value={clientValue} onValueChange={setClientValue}>
+          <SelectTrigger size="sm" className="w-44" aria-label="选择客户端">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部客户端</SelectItem>
+            <SelectItem value="codex">Codex</SelectItem>
+            <SelectItem value="claude_code" disabled>
+              Claude Code（等待采集）
+            </SelectItem>
+            <SelectItem value="opencode" disabled>
+              OpenCode（等待采集）
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground tabular-nums">
+          显示 {formatNumber(rows.length)} / 最多 {formatNumber(SESSION_LIMIT)} 个会话
+          {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
+          {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
+        </p>
+      </div>
+
+      <DashboardCard>
+        <CardContent className="px-5">
+          <SessionTable
+            sessions={sessions.data}
+            loading={sessions.loading}
+            error={sessions.error}
+            onRetry={sessions.reload}
+          />
+        </CardContent>
+      </DashboardCard>
+
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        列表按会话开始时间倒序；Token 为会话累计值（父子集字段已扣除），"—"
+        表示客户端没有记录该会话的用量。 会话内容、提示词与工具输出不读取、不保存。
+      </p>
+    </div>
+  );
+}

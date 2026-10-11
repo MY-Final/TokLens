@@ -1,35 +1,67 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useCallback, useMemo, useState } from "react";
 
-type AppInfo = {
-  name: string;
-  version: string;
-};
+import { AppShell, type PageKey } from "@/components/AppShell";
+import { useDataSourceStatus } from "@/hooks/use-data-source-status";
+import { AnalyticsPage } from "@/pages/AnalyticsPage";
+import { OverviewPage } from "@/pages/OverviewPage";
+import { SessionsPage } from "@/pages/SessionsPage";
+import { SourcesPage } from "@/pages/SourcesPage";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { resolveRange, type RangeKey } from "@/lib/ranges";
 
-function App() {
-  const [info, setInfo] = useState<AppInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function App() {
+  const [page, setPage] = useState<PageKey>("overview");
+  const [rangeKey, setRangeKey] = useState<RangeKey>("30d");
+  const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
 
-  useEffect(() => {
-    invoke<AppInfo>("app_info")
-      .then(setInfo)
-      .catch((err: unknown) => setError(String(err)));
-  }, []);
+  const range = useMemo(
+    () => resolveRange(rangeKey, status?.firstEventMs ?? null),
+    [rangeKey, status?.firstEventMs],
+  );
 
-  const status = error
-    ? `Rust backend not connected (likely running in a plain browser): ${error}`
-    : info
-      ? `Rust backend connected - ${info.name} v${info.version}`
-      : "Checking Rust backend connection...";
+  const handleSync = useCallback(
+    (force = false) => {
+      void syncNow(force);
+    },
+    [syncNow],
+  );
 
   return (
-    <main className="container">
-      <h1 className="title">TokLens</h1>
-      <p className="stack">Tauri 2 / React / TypeScript / Vite / Rust</p>
-      <p className="status">{status}</p>
-    </main>
+    <TooltipProvider delayDuration={200}>
+      <AppShell
+        page={page}
+        rangeKey={rangeKey}
+        status={status}
+        syncBusy={syncBusy}
+        error={error}
+        onRetry={() => {
+          void reload();
+        }}
+        onNavigate={setPage}
+        onRangeChange={setRangeKey}
+        onSync={handleSync}
+      >
+        {page === "overview" ? (
+          <OverviewPage range={range} refreshToken={refreshToken} onNavigate={setPage} />
+        ) : null}
+        {page === "analytics" ? <AnalyticsPage range={range} refreshToken={refreshToken} /> : null}
+        {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}
+        {page === "sources" ? (
+          <SourcesPage
+            status={status}
+            loading={loading}
+            error={error}
+            syncBusy={syncBusy}
+            refreshToken={refreshToken}
+            onRetry={() => {
+              void reload();
+            }}
+            onSync={handleSync}
+          />
+        ) : null}
+      </AppShell>
+      <Toaster position="bottom-right" />
+    </TooltipProvider>
   );
 }
-
-export default App;
