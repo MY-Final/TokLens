@@ -74,11 +74,51 @@ fn client_usage_groups_by_client() {
     assert_eq!(codex.sessions, 3);
     assert_eq!(codex.messages, 3);
     assert_eq!(codex.sums.total_tokens, 3_400);
+    assert_eq!(codex.share_bps, 8_395);
     let claude = usage
         .iter()
         .find(|entry| entry.client == Client::ClaudeCode)
         .expect("claude usage");
     assert_eq!(claude.sums.total_tokens, 650);
+    assert_eq!(claude.share_bps, 1_604);
+}
+
+#[test]
+fn counted_cache_writes_include_claude_and_dsh_but_exclude_codex() {
+    let store = seeded_store();
+    let mut claude = claude_record(D0, PROJECT_ALPHA, "fixture-model");
+    claude.client_session_id = "cache-write-fixture".into();
+    claude.usage = crate::usage::tokens::normalize_usage(
+        crate::usage::tokens::semantics_for(Client::ClaudeCode),
+        &counts(Some(10), Some(5), Some(0), Some(4), None, None),
+    );
+    store.upsert_session(&claude).expect("claude cache write");
+    let dsh =
+        crate::usage::normalize::dsh::dsh_session(&crate::usage::normalize::dsh::DshSession {
+            id: "cache-write-fixture",
+            parent: None,
+            cwd: None,
+            model: None,
+            start_ms: Some(ms(D0)),
+            end_ms: Some(ms(D0)),
+            message_count: 1,
+            usage: counts(Some(10), Some(5), Some(100), Some(7), Some(2), None),
+        });
+    store.upsert_session(&dsh).expect("dsh cache write");
+    let totals = store
+        .range_totals(&AnalyticsFilter::default())
+        .expect("totals");
+    assert_eq!(totals.sums.cache_write_tokens, 16);
+    assert_eq!(totals.sums.counted_cache_write_tokens, 11);
+    let trend = store.daily_token_trend(ms(D0), 1, None).expect("trend");
+    assert_eq!(trend[0].sums.counted_cache_write_tokens, 11);
+    let codex = store
+        .range_totals(&AnalyticsFilter {
+            client: Some(Client::Codex),
+            ..Default::default()
+        })
+        .expect("codex");
+    assert_eq!(codex.sums.counted_cache_write_tokens, 0);
 }
 
 #[test]

@@ -13,10 +13,12 @@ mod error;
 mod import;
 mod migrations;
 mod queries;
+mod snapshot;
 mod types;
 mod writes;
 
 pub use error::UsageError;
+pub use snapshot::SessionImport;
 pub use types::{
     ImportSummary, SourceFile, SourceFileKind, SourceFileRow, TotalsFilter, UpsertOutcome,
     UsageTotals,

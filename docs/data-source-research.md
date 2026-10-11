@@ -325,3 +325,14 @@
 3. 定义 fixture 规范：从上述结构派生**手工构造**的去敏样本（禁止复制真实会话），覆盖旧/新格式、续接会话、重复写入、缺失字段。
 4. 决策成本口径：价格表来源、自定义/中转模型的"未定价"表现、币种与精度（`docs/data-metrics.md` 第 5、7 节）。
 5. 明确隐私边界：实现时只允许读取本文列出的白名单字段，禁止读取 `thread_items`、`part`、`message.content`、`history.jsonl`、`*.json` 凭据。
+
+## 9. DSH 补充调研（2026-10-11）
+
+用户确认 DSH 指 deepseek-hermes。本机 `~/.dsh/sessions` 存在 8 份 `session.jsonl.zstd` 活动产物与 4 份 v4 迁移备份。
+核对本机 deepseek-harness 源码：`session-persistence-jsonl/src/format.ts` 定义 header / 文件布局，
+`zstd.ts` 定义串联 checksummed Zstandard 帧；`core/session/src/types.ts` 定义 v0 / seq / time / seedLength；
+`llm-deepseek/src/translate.ts` 表明 inputTokens 已扣除缓存命中、outputTokens 为 completion_tokens（含 reasoning）。
+按客户端 token-meter 规则对 assistant/chunk 的早期 usage 与 assistant/message 的最终 usage 按 turn / step 替换；不统计打包文本 / 推理 chunk、标题 / 搜索插件的额外 LLM 调用。
+该范围与已持久化核心请求日志一致，不能宣称覆盖 DSH 所有插件调用。token-meter 的客户端无关投影契约与 pi-ai 适配器也已核对；SQLite 后端未验证，未知持久化格式拒绝提交。
+检查只输出字段形态与聚合数值，不输出会话正文、标题、系统提示词或凭据；未修改任何源文件。
+最新三客户端对账数字及缺失情况见 `data-model.md` 第 10 节。

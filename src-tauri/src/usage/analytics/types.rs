@@ -20,6 +20,7 @@ pub struct TokenSums {
     pub reasoning_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub counted_cache_write_tokens: i64,
     pub total_tokens: i64,
 }
 
@@ -49,6 +50,7 @@ pub struct DailyBucket {
 /// 按客户端聚合。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientUsage {
+    pub share_bps: i64,
     pub client: Client,
     pub sessions: i64,
     pub messages: i64,

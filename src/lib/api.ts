@@ -59,9 +59,9 @@ export function toErrorMessage(error: unknown): string {
 }
 
 export function getOverviewStats(
-  args: RangeArgs & { todayFromMs: number },
+  args: RangeArgs & { todayFromMs: number; client?: ClientKey | null },
 ): Promise<OverviewStats> {
-  return invoke<OverviewStats>("get_overview_stats", args);
+  return invoke<OverviewStats>("get_overview_stats", { ...args, client: args.client ?? null });
 }
 
 export function getDailyTokenTrend(args: {
@@ -105,6 +105,10 @@ export function getSessions(
 
 export function getDataSourceStatus(): Promise<DataSourceStatus> {
   return invoke<DataSourceStatus>("get_data_source_status");
+}
+
+export function syncUsage(force = false): Promise<SyncState> {
+  return invoke<SyncState>("sync_usage", { force });
 }
 
 export function syncCodex(force = false): Promise<SyncState> {

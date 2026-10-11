@@ -12,7 +12,7 @@
 
 ## 1. 项目目标与边界
 
-TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、Claude Code、OpenCode** 等 AI 编程客户端的使用情况
+TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、Claude Code、OpenCode、DSH（deepseek-hermes）** 等 AI 编程客户端的使用情况
 （会话、请求、token、模型、成本、时间分布等）。
 
 必须坚持的三条底线：
@@ -22,7 +22,7 @@ TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、
 3. **隐私默认保护**：只读取统计所需的最小元数据，默认不落盘、不打印、不外传会话正文。
 
 当前仓库状态：已有本地 SQLite 用量库、Codex 只读采集器、Tauri 查询与同步命令，以及总览 / 用量分析 /
-会话明细 / 数据源管理页面。Claude Code 与 OpenCode 采集器、费用换算尚未实现。
+会话明细 / 数据源管理页面。Claude Code、OpenCode 与 DSH 采集器已接入，费用换算尚未实现。
 新增架构组件（持久化、状态管理、测试框架、错误处理库等）前，必须先在 `docs/architecture.md` 的决策记录中登记。
 
 明确不做的事：云端账号体系、远程同步、修改或删除客户端的原始会话数据、绕过客户端自身配置读取数据、采集与统计无关的正文内容。
@@ -77,7 +77,7 @@ pnpm tauri build      # 生产打包
 | `src/pages/`                | 页面级组件（总览 / 用量分析 / 会话明细 / 数据源管理）                                                 |
 | `src-tauri/src/`            | Rust 侧：数据采集、解析、归一化、聚合、持久化与 Tauri command                                         |
 | `src-tauri/src/usage/`      | 统一数据模型 / Token 口径 / SQLite 存储（不含采集器与 UI，见 `docs/data-model.md`）                   |
-| `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（当前仅 Codex，见 `docs/data-model.md` 第 8 节）                     |
+| `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（Codex / Claude Code / OpenCode / DSH，见 `docs/data-model.md`）     |
 | `src-tauri/src/commands/`   | Tauri command 层：应用状态、后台同步调度与前端 DTO（口径仍由 `usage` 提供）                           |
 | `src-tauri/capabilities/`   | Tauri 2 权限声明（最小权限，见第 5 节）                                                               |
 | `docs/`                     | 规范文档（架构 / UI / 数据统计）                                                                      |

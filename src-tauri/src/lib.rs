@@ -41,6 +41,7 @@ pub fn run() {
             commands::queries::get_sessions,
             commands::queries::get_data_source_status,
             commands::queries::sync_codex,
+            commands::queries::sync_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

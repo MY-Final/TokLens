@@ -1,7 +1,7 @@
 /** Cross-platform DTOs. Keep fields aligned with Rust commands/dto.rs. */
 
 /** 客户端标识（与 Rust `Client::as_str()` 一致）。 */
-export type ClientKey = "codex" | "claude_code" | "opencode";
+export type ClientKey = "codex" | "claude_code" | "opencode" | "dsh";
 
 export type TokenTotals = {
   inputTokens: number;
@@ -9,6 +9,8 @@ export type TokenTotals = {
   reasoningTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** 已计入规范总量的缓存写入（当前来自 Claude Code / DSH）。 */
+  countedCacheWriteTokens: number;
   totalTokens: number;
 };
 
@@ -32,6 +34,7 @@ export type OverviewStats = {
 };
 
 export type DailyTokenBucket = {
+  clients: { client: ClientKey; totalTokens: number }[];
   dayStartMs: number;
   sessions: number;
   messages: number;
@@ -39,6 +42,8 @@ export type DailyTokenBucket = {
 };
 
 export type ClientUsage = {
+  /** 后端计算的 Token 占比，10000 表示 100%。 */
+  shareBps: number;
   client: ClientKey;
   /** false 表示该客户端的采集器尚未实现（UI 显示"等待采集"，数值为 0 而非模拟数据）。 */
   supported: boolean;
@@ -95,6 +100,7 @@ export type ClientSourceStatus = {
 };
 
 export type SyncReport = {
+  clients: { client: ClientKey; error: string | null; report: SyncReport | null }[];
   rootMissing: boolean;
   filesSeen: number;
   filesParsed: number;

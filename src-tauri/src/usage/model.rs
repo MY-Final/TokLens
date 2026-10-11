@@ -179,6 +179,9 @@ pub fn dedup_key_note(client: Client) -> &'static str {
         Client::Codex => "response_id | token_count:<ordinal>",
         Client::ClaudeCode => "message.id",
         Client::OpenCode => "message.id",
+        Client::Dsh => {
+            "turn + step (chunk sample replaced by completed message, excluding inherited seed)"
+        }
     }
 }
 

@@ -6,7 +6,10 @@
 
 mod claude_code;
 mod codex;
+pub mod dsh;
 mod opencode;
+mod rollup;
+pub use rollup::sum_complete_counts;
 
 pub use claude_code::{
     ClaudeMessage, ClaudeSessionRollup, claude_code_message, claude_code_session,

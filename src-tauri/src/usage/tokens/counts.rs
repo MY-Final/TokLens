@@ -73,7 +73,7 @@ impl TokenBuckets {
                 continue;
             }
             match value {
-                Some(value) => total += value,
+                Some(value) => total = total.checked_add(value)?,
                 None => return None,
             }
         }
@@ -156,5 +156,17 @@ mod tests {
             },
         ];
         assert_eq!(RawTokenCounts::sum(&items).input, Some(u64::MAX));
+    }
+
+    #[test]
+    fn bucket_total_overflow_is_unknown_instead_of_wrapping() {
+        let buckets = TokenBuckets {
+            input: Some(u64::MAX),
+            output: Some(1),
+            reasoning: None,
+            cache_read: Some(0),
+            cache_write: Some(0),
+        };
+        assert_eq!(buckets.sum_with(&super::super::CLAUDE_CODE_SEMANTICS), None);
     }
 }

@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::collectors::codex::SyncReport;
+use crate::collectors::{ClientSyncResult, SyncBatch, SyncReport};
 use crate::usage::analytics::{
     ClientSourceStatus, ClientUsage, DailyBucket, GroupUsage, RangeTotals, SessionSummary,
     TokenSums,
@@ -47,7 +47,9 @@ impl From<&SyncState> for SyncStateDto {
 pub enum ClientParam {
     Codex,
     ClaudeCode,
+    #[serde(rename = "opencode")]
     OpenCode,
+    Dsh,
 }
 
 impl From<ClientParam> for Client {
@@ -56,13 +58,17 @@ impl From<ClientParam> for Client {
             ClientParam::Codex => Client::Codex,
             ClientParam::ClaudeCode => Client::ClaudeCode,
             ClientParam::OpenCode => Client::OpenCode,
+            ClientParam::Dsh => Client::Dsh,
         }
     }
 }
 
-/// 已接入采集器的客户端。Claude Code / OpenCode 尚未实现，前端显示"待支持"。
+/// 已实现本地采集器的客户端；实际发现状态由逐客户端同步结果提供。
 pub fn is_supported(client: Client) -> bool {
-    matches!(client, Client::Codex)
+    matches!(
+        client,
+        Client::Codex | Client::ClaudeCode | Client::OpenCode | Client::Dsh
+    )
 }
 
 /// token 分桶（互不重叠，可直接相加得到规范总量）。
@@ -74,6 +80,7 @@ pub struct TokenTotalsDto {
     pub reasoning_tokens: i64,
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
+    pub counted_cache_write_tokens: i64,
     pub total_tokens: i64,
 }
 
@@ -85,6 +92,7 @@ impl From<TokenSums> for TokenTotalsDto {
             reasoning_tokens: sums.reasoning_tokens,
             cache_read_tokens: sums.cache_read_tokens,
             cache_write_tokens: sums.cache_write_tokens,
+            counted_cache_write_tokens: sums.counted_cache_write_tokens,
             total_tokens: sums.total_tokens,
         }
     }
@@ -129,9 +137,10 @@ pub struct OverviewStatsDto {
 }
 
 /// 每日趋势的一个桶（`day_start_ms` 为该日本地零点）。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DailyTokenBucketDto {
+    pub clients: Vec<DailyClientTokensDto>,
     pub day_start_ms: i64,
     pub sessions: i64,
     pub messages: i64,
@@ -141,6 +150,7 @@ pub struct DailyTokenBucketDto {
 impl From<DailyBucket> for DailyTokenBucketDto {
     fn from(bucket: DailyBucket) -> Self {
         Self {
+            clients: Vec::new(),
             day_start_ms: bucket.day_start_ms,
             sessions: bucket.sessions,
             messages: bucket.messages,
@@ -153,6 +163,7 @@ impl From<DailyBucket> for DailyTokenBucketDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientUsageDto {
+    pub share_bps: i64,
     pub client: String,
     pub supported: bool,
     pub sessions: i64,
@@ -160,13 +171,14 @@ pub struct ClientUsageDto {
     pub totals: TokenTotalsDto,
 }
 
-/// 按固定顺序（Codex / Claude Code / OpenCode）输出三个客户端，缺失数据补 0。
+/// 按固定顺序（Codex / Claude Code / OpenCode / DSH）输出四个客户端，缺失数据补 0。
 pub fn client_usage_dto(usage: &[ClientUsage]) -> Vec<ClientUsageDto> {
     Client::ALL
         .into_iter()
         .map(|client| {
             let entry = usage.iter().find(|entry| entry.client == client);
             ClientUsageDto {
+                share_bps: entry.map_or(0, |entry| entry.share_bps),
                 client: client.as_str().to_string(),
                 supported: is_supported(client),
                 sessions: entry.map_or(0, |entry| entry.sessions),
@@ -282,6 +294,7 @@ impl From<ClientSourceStatus> for ClientSourceStatusDto {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncReportDto {
+    pub clients: Vec<ClientSyncResultDto>,
     pub root_missing: bool,
     pub files_seen: i64,
     pub files_parsed: i64,
@@ -299,6 +312,7 @@ pub struct SyncReportDto {
 impl From<SyncReport> for SyncReportDto {
     fn from(report: SyncReport) -> Self {
         Self {
+            clients: Vec::new(),
             root_missing: report.root_missing,
             files_seen: report.files_seen as i64,
             files_parsed: report.files_parsed as i64,
@@ -340,12 +354,22 @@ pub fn usage_error_message(error: &UsageError) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_filter_accepts_the_same_ids_returned_to_the_frontend() {
+        for client in Client::ALL {
+            let json = serde_json::to_string(client.as_str()).expect("client id");
+            let param: ClientParam = serde_json::from_str(&json).expect("filter parameter");
+            assert_eq!(Client::from(param), client);
+        }
+    }
     use crate::usage::analytics::{ClientUsage, TokenSums};
 
     #[test]
-    fn client_usage_dto_keeps_fixed_order_and_marks_unsupported() {
+    fn client_usage_dto_keeps_fixed_order_and_marks_supported() {
         let rows = vec![
             ClientUsage {
+                share_bps: 0,
                 client: Client::Codex,
                 sessions: 3,
                 messages: 9,
@@ -355,10 +379,12 @@ mod tests {
                     reasoning_tokens: 2,
                     cache_read_tokens: 1_000,
                     cache_write_tokens: 5,
+                    counted_cache_write_tokens: 0,
                     total_tokens: 1_112,
                 },
             },
             ClientUsage {
+                share_bps: 0,
                 client: Client::OpenCode,
                 sessions: 1,
                 messages: 1,
@@ -366,15 +392,15 @@ mod tests {
             },
         ];
         let dto = client_usage_dto(&rows);
-        assert_eq!(dto.len(), 3);
+        assert_eq!(dto.len(), 4);
         assert_eq!(dto[0].client, "codex");
         assert!(dto[0].supported);
         assert_eq!(dto[0].totals.total_tokens, 1_112);
         assert_eq!(dto[1].client, "claude_code");
-        assert!(!dto[1].supported, "未接入的客户端标记为待支持");
+        assert!(dto[1].supported, "采集器支持不代表已有数据");
         assert_eq!(dto[1].sessions, 0, "没有数据就是 0，不编造");
         assert_eq!(dto[2].client, "opencode");
-        assert!(!dto[2].supported);
+        assert!(dto[2].supported);
     }
 
     #[test]
@@ -393,4 +419,62 @@ mod tests {
         assert_eq!(dto.messages_inserted, 5);
         assert_eq!(dto.unparsed_lines, 0);
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientSyncResultDto {
+    pub client: String,
+    pub error: Option<String>,
+    pub report: Option<SyncReportDto>,
+}
+
+impl From<ClientSyncResult> for ClientSyncResultDto {
+    fn from(result: ClientSyncResult) -> Self {
+        Self {
+            client: result.client.as_str().to_string(),
+            error: result.error,
+            report: result.report.map(SyncReportDto::from),
+        }
+    }
+}
+
+impl From<SyncBatch> for SyncReportDto {
+    fn from(batch: SyncBatch) -> Self {
+        let mut summary = Self {
+            root_missing: !batch.clients.is_empty(),
+            ..Default::default()
+        };
+        for result in &batch.clients {
+            if let Some(report) = &result.report {
+                summary.root_missing &= report.root_missing;
+                summary.files_seen += report.files_seen as i64;
+                summary.files_parsed += report.files_parsed as i64;
+                summary.files_skipped_unchanged += report.files_skipped_unchanged as i64;
+                summary.files_without_identity += report.files_without_identity as i64;
+                summary.files_failed += report.files_failed as i64;
+                summary.unparsed_lines += report.unparsed_lines as i64;
+                summary.sessions_imported += report.sessions_imported as i64;
+                summary.sessions_skipped_stale += report.sessions_skipped_stale as i64;
+                summary.messages_inserted += report.messages_inserted as i64;
+                summary.messages_updated += report.messages_updated as i64;
+                summary.messages_pruned += report.messages_pruned as i64;
+            } else {
+                summary.root_missing = false;
+            }
+        }
+        summary.clients = batch
+            .clients
+            .into_iter()
+            .map(ClientSyncResultDto::from)
+            .collect();
+        summary
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyClientTokensDto {
+    pub client: String,
+    pub total_tokens: i64,
 }

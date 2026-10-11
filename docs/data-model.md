@@ -3,17 +3,17 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                                      | 职责                                       |
-| ---------- | ----------------------------------------- | ------------------------------------------ |
-| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                     |
-| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果             |
-| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据           |
-| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注       |
-| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举          |
-| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode 的独立规则  |
-| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位 |
-| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间      |
-| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要 |
+| 模块       | 文件                                      | 职责                                            |
+| ---------- | ----------------------------------------- | ----------------------------------------------- |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                          |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                  |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注            |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举               |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH 的独立规则 |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位      |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间           |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要      |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -24,32 +24,33 @@
 
 ## 1. Token 字段语义（禁止重复求和）
 
-字段关系全部来自本机实测（证据见 `data-source-research.md`），代码中每条口径都带 `basis` 说明。
+字段关系来自本机实测与客户端源码契约（证据见 `data-source-research.md`），代码中每条口径都带 `basis` 说明。
 
 | 客户端      | 口径 id                          | `cache_read` 相对 `input` | `reasoning` 相对 `output` | `cache_write` 相对 `input` | 客户端是否提供总量                                      |
 | ----------- | -------------------------------- | ------------------------- | ------------------------- | -------------------------- | ------------------------------------------------------- |
 | Codex       | `codex.usage.v1`                 | 包含（子集）              | 包含（子集）              | 未知                       | 是（`total = input + output`）                          |
 | Claude Code | `claude_code.anthropic_usage.v1` | 独立                      | 客户端不提供              | 独立                       | 否                                                      |
 | OpenCode    | `opencode.message.v1`            | 独立                      | 独立                      | 未知                       | 是（`total = input + output + reasoning + cache.read`） |
+| DSH         | `dsh.token_usage.v1`             | 独立                      | 包含（子集）              | 独立                       | 否（按 token-meter 四个独立桶求和）                     |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
-| 分桶                        | Codex                       | Claude Code                  | OpenCode                    |
-| --------------------------- | --------------------------- | ---------------------------- | --------------------------- |
-| `input`（未命中缓存的输入） | `input − cache_read`        | `input`                      | `input`                     |
-| `output`（不含推理）        | `output − reasoning`        | `output`                     | `output`                    |
-| `reasoning`                 | `reasoning`                 | 不提供（NULL）               | `reasoning`                 |
-| `cache_read`                | `cache_read`                | `cache_read`                 | `cache.read`                |
-| `cache_write`               | `cache_write`（不计入总量） | `cache_creation`（计入总量） | `cache.write`（不计入总量） |
+| 分桶                        | Codex                       | Claude Code                  | OpenCode                    | DSH                              |
+| --------------------------- | --------------------------- | ---------------------------- | --------------------------- | -------------------------------- |
+| `input`（未命中缓存的输入） | `input − cache_read`        | `input`                      | `input`                     | `inputTokens`                    |
+| `output`（不含推理）        | `output − reasoning`        | `output`                     | `output`                    | `outputTokens − reasoningTokens` |
+| `reasoning`                 | `reasoning`                 | 不提供（NULL）               | `reasoning`                 | `reasoningTokens`                |
+| `cache_read`                | `cache_read`                | `cache_read`                 | `cache.read`                | `cacheReadTokens`                |
+| `cache_write`               | `cache_write`（不计入总量） | `cache_creation`（计入总量） | `cache.write`（不计入总量） | `cacheWriteTokens`（计入总量）   |
 
 规范总量 `total_tokens`：
 
 1. 客户端提供总量时（Codex、OpenCode）直接采用客户端值（`total_basis = client_reported`），
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
-2. 客户端不提供总量时（Claude Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
+2. 客户端不提供总量时（Claude Code / DSH）由分桶求和得出（`total_basis = derived_from_buckets`）。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
 4. `cache_write` 是否计入总量由口径决定：Codex/OpenCode 的客户端总量本身不含它，故不计入且标注未知；
-   Claude Code 未提供总量、且已证伪 cache 字段与 input 的包含关系，故计入。
+   Claude Code / DSH 的 cache_write 与 input 独立，故计入。DSH 缓存字段省略时按协议默认 0，详见第 10 节。
 
 ## 2. 未确认的语义（明确标注，不推断）
 
@@ -68,15 +69,16 @@
 | Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id`；旧格式无该字段时 `token_count:<ordinal>` | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节 |
 | Claude Code | `sessionId`                                         | `message.id`                                            | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                     |
 | OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                            | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
+| DSH         | header `id`                                         | `step:<turn>:<step>`                                    | 同一步最终 usage 替换 chunk 的早期样本；没有最终 usage 时保留早期样本，排除继承 seed                  |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
 - `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
 - `client_reported`：OpenCode，直接使用会话聚合列。
-- `sum_of_messages`：Claude Code，由去重后的消息求和得出。
+- `sum_of_messages`：Claude Code / DSH，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；其他客户端默认 `complete`，由采集器按实际导入结果覆盖。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
 
 ## 4. SQLite 表结构（v1）
 
@@ -203,3 +205,59 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 | 费用       | 当前恒不展示（`costAvailable: false`），避免虚构金额                                                     |
 
 分桶之和应等于规范总量；唯一例外是上一行的 `client_total_mismatch` 会话（总量取客户端值，分项按其原始字段计算）。
+
+## 10. 新采集器（2026-10-11）
+
+### Claude Code
+
+`collectors/claude_code/` 扫描 `CLAUDE_CONFIG_DIR/projects`（未配置时 `~/.claude/projects`），
+只读所有 JSONL，包括 `subagents/agent-*.jsonl`。只保留会话标识、时间、cwd、模型、sidechain 标志和 usage。
+忽略 `<synthetic>` 模型；用户记录只提供会话元数据，不计为请求。
+按 `(sessionId, message.id)` 跨文件去重，时间较新的记录覆盖，平局按稳定文件 / 行顺序取最后一条。
+消息定位保存真实源文件关联；子代理归属记录自身的 sessionId，不从路径推断另一会话。
+
+任一文件追加、截断、替换、消失或解析版本变化时，重新聚合整个文件集合。
+必需字段在任一请求中缺失，该会话对应字段与总量保持未知，已知请求数仍可展示。
+完整扫描后以 `replace_client_snapshot` 原子替换该客户端快照与水位；因此删除或修正源记录会反映到统计中。
+读取失败、目录枚举失败、末尾半行或扫描期间文件变化时不提交；完整但损坏的行计数并标记快照明细不完整。
+根目录缺失不会清除历史。未变化的文件集合跳过；同大小同 mtime 替换需要强制重扫。
+
+### OpenCode
+
+`collectors/opencode/` 只读 `XDG_DATA_HOME/opencode/opencode.db`
+（未配置时 `~/.local/share/opencode/opencode.db`）。使用 SQLite READ_ONLY 与一次只读事务，
+只选择 session 元数据、token 聚合列和 message 的允许 JSON 路径，禁止读取 part / credential / account。
+每次扫描元数据快照，避免主库大小或 mtime 未变化时漏掉 WAL 内容；不依赖不完整的 event 表作为水位。
+
+`session` / `session_v2` 按 id 合并，更新时间较新的优先，平局取 `session_v2`；不把两份聚合相加。
+消息只导入 assistant，按 message.id 去重，兼容扁平与嵌套模型字段；缺失聚合列保持未知。
+聚合表无总量列时，由完整聚合分桶确定性换算总量；保留客户端自报成本，但不视作统一 USD 定价依据。
+成功读取后原子替换完整客户端快照；读取 / schema 失败保留原快照。
+当前支持 SQLite 格式；旧 `storage/session|message` JSON 格式未经验证，未接入。
+
+### DSH / deepseek-hermes
+
+`collectors/dsh/` 读取 `DSH_SESSIONS_DIR`（TokLens 的显式扫描覆盖）或 `~/.dsh/sessions`，
+只发现 `session.jsonl` / `session.jsonl.zstd`；支持本机持久化源码的格式 v0 与多帧 Zstandard。
+不读 `session.v*.jsonl.zstd` 迁移备份、归档插件、usage 插件账单、正文、凭据或 settings。
+同一会话多份活动产物只选择结束时间较新的快照，平局按稳定文件顺序取最后一份，不相加。
+JSONL 白名单只含 header、request/header.config 的 provider / model 和 assistant/message 与 assistant/chunk 的 turn / step / seq / time / usage。
+以 `(header.id, turn, step)` 去重；chunk 的 usage 是早期样本，assistant/message 的最终 usage 覆盖同一请求，只有早期样本的失败请求也保留。
+排除 `seq < header.seedLength` 的继承事件，保留 parentSession 与 subagent 标记。
+
+DSH 的 `inputTokens` 已由 DeepSeek 适配器扣除缓存读取；`outputTokens` 来自 completion_tokens，包含 reasoning。
+口径 id 为 `dsh.token_usage.v1`：input / cache_read 独立，reasoning 从 output 拆分；cache_write 与 input 独立，计入总量。
+已知总量为 `inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens`，来源为 derived。
+DSH token-meter / pi-ai 适配器明确把省略的可选缓存字段按 0 编码和统计，解析按该协议默认值处理（非估算）；显式 null / 非数值缓存字段拒绝并计数。必需 input / output 或整个 usage 缺失仍保持未知；推理缺失时保留原输出并标注无法拆分。
+口径依据 DSH 的客户端无关 token-meter 投影契约，同时核对 DeepSeek 与 pi-ai 两个适配器；未验证的新持久化格式仍需独立接入。
+同步策略与 Claude Code 相同；未知版本、损坏 / 未完成压缩帧或扫描期间变化时不提交、不修改源文件。
+
+### 手动对账
+
+运行 `cargo run --manifest-path src-tauri/Cargo.toml --example client_usage_report`，仅输出聚合元数据，使用内存库。
+2026-10-11 本机对照独立只读解析：Claude Code 1721 个去重请求，已知总量 223724672；
+OpenCode 50 个合并会话、5490 个请求，总量 1304431888；
+DSH 8 个会话、643 个请求，已知总量 182506906。各已知字段与独立解析一致。
+Claude Code 47 个会话中 18 个只有用户元数据，另 1 个 assistant 会话缺少完整 usage，总量未知；
+DSH 2 个会话因无请求或必需 usage 缺失，总量未知。它们不贡献总量，不做估算。
+这些数字是本机时点快照，不作为自动化测试输入。

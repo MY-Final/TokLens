@@ -150,6 +150,7 @@ impl UsageStore {
                 continue;
             };
             usage.push(ClientUsage {
+                share_bps: 0,
                 client: parsed,
                 sessions,
                 messages: self.count_messages(&AnalyticsFilter {
@@ -158,6 +159,15 @@ impl UsageStore {
                 })?,
                 sums,
             });
+        }
+        let total: i128 = usage
+            .iter()
+            .map(|entry| i128::from(entry.sums.total_tokens))
+            .sum();
+        if total > 0 {
+            for entry in &mut usage {
+                entry.share_bps = (i128::from(entry.sums.total_tokens) * 10_000 / total) as i64;
+            }
         }
         Ok(usage)
     }

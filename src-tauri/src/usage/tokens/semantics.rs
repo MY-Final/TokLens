@@ -80,11 +80,22 @@ pub const OPENCODE_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "local measurement: total == input + output + reasoning + cache.read",
 };
 
+pub const DSH_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "dsh.token_usage.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::IncludedIn,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: false,
+    basis: "DSH token-meter contract: input/cache read/cache write disjoint; reasoning included in output",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
         Client::ClaudeCode => &CLAUDE_CODE_SEMANTICS,
         Client::OpenCode => &OPENCODE_SEMANTICS,
+        Client::Dsh => &DSH_SEMANTICS,
     }
 }
 

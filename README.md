@@ -1,17 +1,19 @@
 # TokLens
 
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
-**Codex**, **Claude Code**, and **OpenCode** on this machine (sessions, requests, tokens, models, cost).
+**Codex**, **Claude Code**, **OpenCode**, and **DSH (deepseek-hermes)** on this machine (sessions, requests, tokens, models, cost).
 
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
 - a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
+- read-only Claude Code JSONL, OpenCode SQLite, and DSH JSONL/Zstandard collectors (`src-tauri/src/collectors/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
-Claude Code and OpenCode collectors are not implemented yet (the UI marks them as unsupported) and no cost
-figures are shown, because there is no reliable cost source on this machine.
+All four clients participate in startup/manual sync, filters, trends, and rankings. OpenCode's old JSON
+storage and unverified DSH persistence formats are not supported. No unified cost figures are shown;
+client-reported costs are preserved as metadata without treating them as a shared pricing source.
 
 Development rules live in [`AGENTS.md`](./AGENTS.md) with details under [`docs/`](./docs/README.md):
 
@@ -112,7 +114,7 @@ TokLens/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
       ├─ commands/          # State, errors, DTOs, queries & background sync
-      ├─ collectors/        # Client collectors (Codex implemented)
+      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH collectors
       └─ usage/
          ├─ client.rs        # Stable client identity
          ├─ model.rs         # Unified records and deduplication identifiers
@@ -129,9 +131,10 @@ TokLens/
 - The local usage database lives in the app data directory: `%APPDATA%\com.toklens.app\toklens-usage.sqlite3`.
   Client data directories are only ever read, never written.
 - Commands: `get_overview_stats`, `get_daily_token_trend`, `get_client_usage`, `get_rankings`, `get_sessions`,
-  `get_data_source_status`, `sync_codex` (plus `app_info`). Queries read the local database;
-  `sync_codex` reads client files and updates only TokLens's own database.
+  `get_data_source_status`, `sync_usage`, `sync_codex` (plus `app_info`). Queries read the local database;
+  `sync_usage` updates only TokLens's own database. `sync_codex` retains Codex-only compatibility.
 - Usage accuracy can be reconciled against Codex's own counters with
   `cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report`.
+  For the other three clients, use `--example client_usage_report`; it imports into memory and prints aggregate metadata only.
 - Statistics must distinguish measured data from estimated data, and local session data is private by default:
   see [`docs/data-metrics.md`](./docs/data-metrics.md).

@@ -35,11 +35,12 @@ pub fn get_overview_stats(
     from_ms: Option<i64>,
     to_ms: Option<i64>,
     today_from_ms: Option<i64>,
+    client: Option<ClientParam>,
 ) -> Result<OverviewStatsDto, CommandError> {
     let store = state.store()?;
-    let range = store.range_totals(&filter(from_ms, to_ms, None))?;
+    let range = store.range_totals(&filter(from_ms, to_ms, client))?;
     let today = match today_from_ms {
-        Some(from) => store.range_totals(&filter(Some(from), None, None))?,
+        Some(from) => store.range_totals(&filter(Some(from), None, client))?,
         None => Default::default(),
     };
     let (first_event_ms, last_event_ms) = store.data_bounds()?;
@@ -62,10 +63,23 @@ pub fn get_daily_token_trend(
     let store = state.store()?;
     let day_count = day_count.clamp(1, 400);
     let buckets = store.daily_token_trend(from_ms, day_count, client.map(Client::from))?;
-    Ok(buckets.into_iter().map(DailyTokenBucketDto::from).collect())
+    let mut dtos: Vec<_> = buckets.into_iter().map(DailyTokenBucketDto::from).collect();
+    for entry in Client::ALL {
+        if client.is_some_and(|filter| Client::from(filter) != entry) {
+            continue;
+        }
+        let daily = store.daily_token_trend(from_ms, day_count, Some(entry))?;
+        for (dto, bucket) in dtos.iter_mut().zip(daily) {
+            dto.clients.push(super::dto::DailyClientTokensDto {
+                client: entry.as_str().to_string(),
+                total_tokens: bucket.sums.total_tokens,
+            });
+        }
+    }
+    Ok(dtos)
 }
 
-/// 客户端用量分布：固定返回三个客户端，未接入的标记 `supported: false` 且数值为 0。
+/// 客户端用量分布：固定返回四个客户端，空数据保持为 0，占比由领域查询提供。
 #[tauri::command(rename_all = "camelCase")]
 pub fn get_client_usage(
     state: State<'_, AppState>,
@@ -154,6 +168,15 @@ pub fn get_data_source_status(
 /// 手动触发 Codex 同步（后台执行，完成后广播 `usage-sync` 事件）。
 #[tauri::command(rename_all = "camelCase")]
 pub fn sync_codex(
+    app: tauri::AppHandle,
+    force: Option<bool>,
+) -> Result<SyncStateDto, CommandError> {
+    super::sync::request_codex_sync(&app, force.unwrap_or(false))
+}
+
+/// Refresh all implemented collectors. Individual failures are reported separately.
+#[tauri::command(rename_all = "camelCase")]
+pub fn sync_usage(
     app: tauri::AppHandle,
     force: Option<bool>,
 ) -> Result<SyncStateDto, CommandError> {

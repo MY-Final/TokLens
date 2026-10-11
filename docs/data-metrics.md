@@ -46,7 +46,7 @@
 
 | 字段                                       | 类型               | 必需 | 等级     | 说明                                               |
 | ------------------------------------------ | ------------------ | ---- | -------- | -------------------------------------------------- |
-| `client`                                   | enum               | 是   | measured | `codex` / `claude_code` / `opencode`               |
+| `client`                                   | enum               | 是   | measured | `codex` / `claude_code` / `opencode` / `dsh`       |
 | `session_id`                               | string             | 是   | measured | 客户端提供的会话标识，缺失时用文件路径哈希兜底     |
 | `event_id`                                 | string             | 是   | derived  | 会话内序号/记录哈希，用于去重                      |
 | `timestamp`                                | ISO 8601（含时区） | 是   | measured | 事件时间                                           |
@@ -64,18 +64,18 @@
 
 每个指标必须同时声明五要素：**定义、单位、时间范围、来源等级、计算方式**。当前登记如下（状态列区分数据模型、采集器与查询的落地程度）：
 
-| 指标                   | 单位  | 时间范围 | 等级                        | 计算方式                                                                                    | 状态                       |
-| ---------------------- | ----- | -------- | --------------------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| 会话数                 | 个    | 选定区间 | measured                    | 去重后的 `session_id` 数量                                                                  | Codex 采集与查询已实现     |
-| 请求数                 | 次    | 选定区间 | measured                    | 事件条数（去重后）                                                                          | Codex 采集与查询已实现     |
-| 输入 token             | token | 选定区间 | measured                    | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | Codex 采集与查询已实现     |
-| 输出 token             | token | 选定区间 | measured/estimated          | 非推理输出分桶求和（Codex 需扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现             | Codex 采集与查询已实现     |
-| 缓存 token             | token | 选定区间 | measured                    | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | Codex 采集与查询已实现     |
-| 成本                   | USD   | 选定区间 | measured（客户端自报）      | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | 仅数据模型；费用采集未实现 |
-| 活跃时长               | 小时  | 选定区间 | estimated                   | 相邻事件间隔去尾求和（见第 7 节）                                                           | 未实现                     |
-| 按客户端/模型/项目分布 | %     | 选定区间 | measured（分母为 measured） | 子集指标 ÷ 同等级总量                                                                       | Codex 采集与查询已实现     |
+| 指标                   | 单位  | 时间范围 | 等级                   | 计算方式                                                                                    | 状态                                 |
+| ---------------------- | ----- | -------- | ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 会话数                 | 个    | 选定区间 | measured               | 去重后的 `session_id` 数量                                                                  | 四客户端采集与查询已实现             |
+| 请求数                 | 次    | 选定区间 | measured               | 事件条数（去重后）                                                                          | 四客户端采集与查询已实现             |
+| 输入 token             | token | 选定区间 | measured / derived     | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 四客户端采集与查询已实现             |
+| 输出 token             | token | 选定区间 | measured / derived     | 非推理输出分桶求和（Codex / DSH 扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现         | 四客户端采集与查询已实现             |
+| 缓存 token             | token | 选定区间 | measured               | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 四客户端采集与查询已实现             |
+| 成本                   | USD   | 选定区间 | measured（客户端自报） | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | OpenCode 自报值已采集；UI 金额未开放 |
+| 活跃时长               | 小时  | 选定区间 | estimated              | 相邻事件间隔去尾求和（见第 7 节）                                                           | 未实现                               |
+| 按客户端/模型/项目分布 | %     | 选定区间 | derived                | 已知规范用量（measured / derived，排除 estimated）子集 ÷ 已知总量                           | 四客户端采集与查询已实现             |
 
-当前只接入 Codex。Claude Code / OpenCode 的归一化模型与测试已存在，采集器尚未实现。
+已接入 Codex、Claude Code、OpenCode、DSH。新采集器的格式、快照 / 去重与限制见 `data-model.md` 第 10 节。
 区间以会话开始时间过滤；趋势按会话开始日期归属（不表示该日所有请求发生时间），
 每日桶目前固定 24 小时，夏令时限制见 `data-model.md` 第 9 节。
 
@@ -133,13 +133,23 @@
 
 ## 9. 口径版本与变更
 
-- 本文维护一个口径版本号，格式 `MAJOR.MINOR`，当前为 `1.0`。
+- 本文维护一个口径版本号，格式 `MAJOR.MINOR`，当前为 `1.1`。
 - 破坏性变更（去重规则、token 计入口径、价格表来源、时区处理）升 `MAJOR`；新增指标或字段升 `MINOR`。
 - 每次变更需在提交说明中记录：变更内容、原因、对历史数据展示的影响。
 - 界面展示的统计需与本文版本一致；发布说明中注明本次口径版本。
 
-本次模块重构（2026-10-11）只调整文件组织，并修正文档中“最新累计值”“追加续读”和落地状态的过时说明。
+此前模块重构（2026-10-11）只调整文件组织，并修正文档中“最新累计值”“追加续读”和落地状态的过时说明。
 统计公式、去重键、迁移与 DTO 不变，口径版本保持 `1.0`；测试使用原有合成记录验证行为。
+
+### 1.1 — 新客户端与展示字段（2026-10-11）
+
+新增 Claude Code / OpenCode 采集链路与 DSH 口径；Codex / Claude Code / OpenCode 的既有字段关系不变。
+DSH 已知总量为 inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens，reasoning 属 output 子集，不重复相加；
+省略可选缓存字段按 DSH 协议默认 0；必需 input / output 或整个 usage 缺失保持未知，不按字符或均值估算。去重键为 session header id + turn + step，排除 header.seedLength 内的继承事件。
+新客户端完整快照允许反映源数据修正 / 删除，读取失败时不更新历史；Codex 仍保留累计值不回退规则。
+新增 `countedCacheWriteTokens`（仅计入总量的缓存写入）与后端客户端占比 `shareBps`（已知总量子集 ÷ 已知总量，基点整数向下取整）。
+`cacheWriteTokens` 仍保留全部客户端自报缓存写入，混合图表只能堆叠 counted 子集。
+缺失必需字段的请求使会话相应字段未知；不得将部分已知字段当成完整会话总量。
 
 ## 10. 隐私与安全
 

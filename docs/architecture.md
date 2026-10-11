@@ -5,10 +5,35 @@
 
 ## 1. 现状
 
+### Claude Code / OpenCode / DSH 采集器接入决策（2026-10-11）
+
+新增 `collectors/claude_code/`（发现、白名单解析、会话聚合、同步）与 `collectors/opencode/`
+（只读 SQLite 查询、同步），共用 `collectors/types.rs` 的同步选项与结果。
+不新增依赖、权限或网络能力。Claude Code 尊重 `CLAUDE_CONFIG_DIR`，OpenCode 尊重 `XDG_DATA_HOME`。
+JSONL 用 serde 白名单结构反序列化，忽略正文；SQLite 只查询允许的元数据列及 JSON 路径。
+
+Claude Code 首先检查文件集合与大小 / mtime / 解析版本：任一变化时重读全部转录，跨文件按
+`(sessionId, message.id)` 去重，纳入子代理；全部未变化时跳过。OpenCode 每次在只读事务中查询
+元数据快照，避免仅按主数据库 mtime 跳过 WAL 更新；双表按更新时间取新、平局选 `session_v2`。
+读取失败或发现文件在扫描中变化时保留已有数据和水位。成功后通过 `usage/store/snapshot.rs`
+单事务替换该客户端完整元数据快照（含水位），使源数据修正、删除或截断可以反映到统计中；
+此 API 只接受完整扫描，不复用 Codex 的累计值陈旧保护，不改变 Codex 导入行为。
+
+后台调度分别执行四个采集器，单客户端失败不阻止其他客户端；DTO 增加逐客户端结果，
+新命令 `sync_usage` 同步全部客户端，旧 `sync_codex` 保留仅 Codex 的兼容语义。
+
+DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/session.jsonl`
+及 `session.jsonl.zstd`，依据本机 deepseek-harness 持久化源代码支持格式 v0；忽略迁移备份
+`session.v*.jsonl.zstd`，不读配置、凭据或插件账单。默认根可由 `DSH_SESSIONS_DIR` 显式指定。
+新增 Rust `zstd`（0.13，MIT，底层 Zstandard BSD）用于流式解压多个压缩帧，关闭非必需默认特性；
+无网络、遥测或运行时外部进程。它会引入本地 C 解压器与编译依赖，具体版本以 Cargo.lock 为准。
+只提取 header 元数据、请求模型与 usage 样本；chunk 与完成消息的 usage 不重复相加，
+按会话 + turn / step 去重，并排除 header `seedLength` 指定的继承事件。未知格式保留旧数据并报错。
+
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-**Claude Code 与 OpenCode 采集器未实现（界面显示「等待采集」）；费用模块未实现（不展示任何金额）**。
+Claude Code、OpenCode、DSH 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -19,7 +44,7 @@
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/codex/sync
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -55,20 +80,21 @@ usage/tokens ────────→ usage/client
 
 ### 3.1 命令清单（2026-10-11）
 
-| 命令                     | 参数                                              | 返回                                                       |
-| ------------------------ | ------------------------------------------------- | ---------------------------------------------------------- |
-| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs`                 | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数    |
-| `get_daily_token_trend`  | `fromMs` / `dayCount` / `client`                  | 每日分桶（缺失日期补 0）                                   |
-| `get_client_usage`       | `fromMs` / `toMs`                                 | 三个客户端的会话/明细/token（未接入的 `supported: false`） |
-| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`            | 模型与项目排行                                             |
-| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset` | 会话摘要列表（只含元数据与用量）                           |
-| `get_data_source_status` | —                                                 | 客户端接入状态、同步状态、库路径、数据时间范围             |
-| `sync_codex`             | `force`                                           | 触发后台同步；完成后广播 `usage-sync` 事件                 |
-| `app_info`               | —                                                 | 应用名与版本（连通性检查）                                 |
+| 命令                     | 参数                                              | 返回                                                           |
+| ------------------------ | ------------------------------------------------- | -------------------------------------------------------------- |
+| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`      | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
+| `get_daily_token_trend`  | `fromMs` / `dayCount` / `client`                  | 每日分桶（缺失日期补 0）                                       |
+| `get_client_usage`       | `fromMs` / `toMs`                                 | 四个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`            | 模型与项目排行                                                 |
+| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset` | 会话摘要列表（只含元数据与用量）                               |
+| `get_data_source_status` | —                                                 | 客户端接入状态、同步状态、库路径、数据时间范围                 |
+| `sync_usage`             | `force`                                           | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败             |
+| `sync_codex`             | `force`                                           | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
+| `app_info`               | —                                                 | 应用名与版本（连通性检查）                                     |
 
 ## 4. 客户端适配器规范
 
-每个客户端一个独立模块（`codex`、`claude_code`、`opencode`，后续新增同理），并遵守：
+每个客户端一个独立模块（`codex`、`claude_code`、`opencode`、`dsh`，后续新增同理），并遵守：
 
 1. **发现（discover）与解析（parse）分离**：发现函数定位候选文件；解析函数接收文件内容/路径，输出归一化事件，便于用 fixture 单测。
 2. **只读**：以只读方式打开文件，绝不写入、移动或删除客户端数据。
@@ -84,7 +110,7 @@ usage/tokens ────────→ usage/client
 **Codex**（`src-tauri/src/collectors/codex/`）：扫描 `%USERPROFILE%\.codex\sessions` 下的 `rollout-*.jsonl`，
 增量判定用 `(size_bytes, mtime_ms, parser_version)`，变化时整文件重新解析，并以单事务覆盖写回
 （水位 + 会话累计值 + 该文件的请求明细）。新旧两套 Token 记录、累计值取值与隐私白名单见
-`docs/data-model.md` 第 8 节。Claude Code 与 OpenCode 尚未实现。
+`docs/data-model.md` 第 8 节。其他采集器的完整快照策略与格式限制见 `data-model.md` 第 10 节。
 
 新增客户端时的检查清单：
 
@@ -126,15 +152,19 @@ usage/tokens ────────→ usage/client
 
 保留公开调用路径、DTO、数据库结构与统计口径；目录入口只负责模块组织与显式导出。
 
-| 模块                     | 子模块职责                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `usage/normalize/`       | `codex`、`claude_code`、`opencode` 分别将客户端结构归一化为统一记录，测试随客户端规则组织                                      |
-| `usage/time.rs`          | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
-| `usage/store/`           | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
-| `usage/analytics/`       | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
-| `collectors/codex/`      | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                             |
-| `commands/`              | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
-| `src/lib/usage-types.ts` | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                  |
+| 模块                      | 子模块职责                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `usage/normalize/`        | `codex`、`claude_code`、`opencode`、`dsh` 分别归一化为统一记录；`rollup` 对完整字段安全求和，测试随客户端规则组织              |
+| `usage/time.rs`           | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
+| `usage/store/`            | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
+| `usage/analytics/`        | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
+| `collectors/codex/`       | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                             |
+| `collectors/claude_code/` | JSONL 白名单解析、跨文件去重聚合与完整快照同步                                                                                 |
+| `collectors/opencode/`    | 只读 SQLite 元数据查询与完整快照同步；每次读取 WAL 可见的事务快照                                                              |
+| `collectors/dsh/`         | v0 JSONL / Zstandard 解析、步骤 usage 替换与完整快照同步                                                                       |
+| `collectors/` 公共模块    | `files` 发现与指纹；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                               |
+| `commands/`               | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
+| `src/lib/usage-types.ts`  | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                  |
 
 较大的测试模块按行为分组，共享合成数据构造器仅在 `cfg(test)` 下编译。不按行数机械拆文件，
 优先隔离不同的变更原因；模块内部使用私有或 `pub(super)` 可见性，避免为拆分扩大公开接口。
@@ -175,7 +205,7 @@ usage/tokens ────────→ usage/client
 | 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文 |
 
 按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
-由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode` 的单色 SVG 组件。
+由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode`、`DeepSeek`（DSH）的单色 SVG 组件。
 业务组件仍通过 shadcn/ui 组合布局；通用操作与导航继续使用 lucide-react。
 品牌图标使用现有 `client-*` 语义颜色，随应用本地打包，不使用 CDN、远程图片或遥测。
 
@@ -191,3 +221,11 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 ### UI 组件结构（2026-10-11）
 
 业务组件和页面采用 PascalCase 文件名；`DashboardCard` 组合 shadcn Card 统一面板外观，`ClientIdentity` 提供稳定客户端标识，`StatCard`、`TokenTrendChart`、`ClientUsageCard`、`RankingCard`、`SessionTable` 分别负责呈现。图表采用 shadcn Chart + 已有 Recharts，无新增运行时依赖。统计查询与 DTO 保持不变，费用来源未落地前 Tooltip 显示暂不可用，不反推金额。
+
+### 多客户端 DTO 与查询（2026-10-11）
+
+`sync_usage` 为前端统一刷新入口，`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
+`get_overview_stats` 增加可选 `client`，与趋势 / 排行筛选一致。
+`DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH）。
+`ClientUsage.shareBps` 由领域查询按已知规范总量计算，10000 表示 100%，前端只格式化，不重新聚合。
+共享 DTO 类型仍在 `usage-types.ts`，`sync_codex` 保留仅 Codex 的语义。数据库 schema 保持 v1，无需迁移。
