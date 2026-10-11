@@ -22,7 +22,7 @@ updater 引入原生 HTTPS / 签名校验依赖；默认不发请求，仅显式
 原生 command 封装固定目录打开和固定 GitHub 更新端点，权限仅授予主窗口；CSP 仅允许本地资源，
 样式内联用于现有 shadcn/Recharts，不允许远程脚本。
 
-发布目标为 Windows x64 NSIS、macOS x64/arm64 DMG 与签名更新包；GitHub Actions 汇总后生成草稿 Release。
+发布目标为 Windows x64 NSIS、macOS x64/arm64 DMG 与签名更新包；GitHub Actions 在全部平台校验成功并汇总后自动正式发布 Release。
 更新私钥仅保存在仓库外和 GitHub Secrets；公钥入配置。首版不使用系统代码签名或 Apple 公证。
 发布规则与配置步骤见 `docs/releases.md`；新配置不能改变已有 Token 口径。
 `scripts/release.py` 使用 Python 标准库完成版本验证、制品收集与清单汇总；测试使用合成文件与注入日期。
@@ -248,7 +248,7 @@ DSH JSONL 采集兼容已核对的 v0–v4 统计元数据。`collectors/dsh/for
 Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装包原生生产构建。
 统一使用 Node 22、pnpm 10、Python 3.12 和 Rust stable；缓存按原生目标区分。
 日常 CI 只授予 contents: read，不读取签名 Secret、不发布制品；版本标签流水线才使用
-更新签名 Secret，全部平台成功后由独立任务创建草稿 Release。CI 不改变应用默认离线行为。
+更新签名 Secret，全部平台构建、签名校验与清单汇总成功后由独立任务正式发布 Release 并标记 Latest。CI 不改变应用默认离线行为。
 
 ### 按职责拆分后端模块（2026-10-11）
 
