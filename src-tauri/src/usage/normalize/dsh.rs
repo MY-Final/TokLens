@@ -34,6 +34,7 @@ pub struct DshMessage<'a> {
     pub seq: i64,
     pub turn: i64,
     pub step: i64,
+    pub attempt: u64,
     pub time_ms: Option<i64>,
     pub model: Option<&'a str>,
     pub usage: RawTokenCounts,
@@ -44,7 +45,11 @@ pub fn dsh_message(raw: &DshMessage<'_>) -> MessageRecord {
     MessageRecord {
         client: Client::Dsh,
         client_session_id: raw.session_id.to_string(),
-        dedup_key: format!("step:{}:{}", raw.turn, raw.step),
+        dedup_key: if raw.attempt == 0 {
+            format!("step:{}:{}", raw.turn, raw.step)
+        } else {
+            format!("step:{}:{}:attempt:{}", raw.turn, raw.step, raw.attempt)
+        },
         seq: Some(raw.seq),
         created_at_ms: raw.time_ms,
         completed_at_ms: None,

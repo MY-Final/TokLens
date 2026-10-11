@@ -1,6 +1,6 @@
 //! Detect changed transcripts, then import one complete cross-file snapshot.
 
-use super::{PARSER_VERSION, parser};
+use super::{PARSER_VERSION, format, parser};
 use crate::collectors::files::{discover_files, fingerprint, home_dir};
 use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
@@ -33,7 +33,7 @@ impl DshCollector {
             report.root_missing = true;
             return Ok(report);
         }
-        let paths = discover_files(&self.root, &mut report, parser::accepts)?;
+        let paths = format::select(discover_files(&self.root, &mut report, format::accepts)?);
         let mut sources = Vec::new();
         let mut unchanged = !options.force_rescan;
         for path in &paths {
@@ -57,21 +57,31 @@ impl DshCollector {
                 unparsed_records: 0,
             });
         }
-        unchanged &= store.source_paths(Client::Dsh)?
-            == sources
-                .iter()
-                .map(|source| source.path.clone())
-                .collect::<Vec<_>>();
+        let mut source_paths = sources
+            .iter()
+            .map(|source| source.path.clone())
+            .collect::<Vec<_>>();
+        // PathBuf order on Windows differs from SQLite's string order for nested paths.
+        source_paths.sort();
+        unchanged &= store.source_paths(Client::Dsh)? == source_paths;
         if unchanged {
             report.files_skipped_unchanged = paths.len();
             return Ok(report);
         }
         let mut sessions: BTreeMap<String, crate::usage::store::SessionImport> = BTreeMap::new();
+        let mut successful_sources = Vec::new();
         for (path, source) in paths.iter().zip(&mut sources) {
-            let parsed = parser::parse_file(path)?;
+            let parsed = match parser::parse_file(path) {
+                Ok(parsed) => parsed,
+                Err(_) => {
+                    report.files_failed += 1;
+                    continue;
+                }
+            };
             report.files_parsed += 1;
             report.unparsed_lines += parsed.unparsed;
             source.unparsed_records = parsed.unparsed as i64;
+            successful_sources.push(source.clone());
             let id = parsed.import.session.client_session_id.clone();
             let replace = sessions.get(&id).is_none_or(|existing| {
                 parsed.import.session.ended_at_ms >= existing.session.ended_at_ms
@@ -81,7 +91,13 @@ impl DshCollector {
             }
         }
         // Never publish a snapshot that raced an append, replacement or newly discovered file.
-        if paths != discover_files(&self.root, &mut SyncReport::default(), parser::accepts)? {
+        if paths
+            != format::select(discover_files(
+                &self.root,
+                &mut SyncReport::default(),
+                format::accepts,
+            )?)
+        {
             return Err(SyncError::ChangedDuringScan);
         }
         for (path, source) in paths.iter().zip(&sources) {
@@ -91,7 +107,11 @@ impl DshCollector {
             }
         }
         let sessions = sessions.into_values().collect::<Vec<_>>();
-        let imported = store.replace_client_snapshot(Client::Dsh, &sources, &sessions)?;
+        let imported = if report.files_failed == 0 {
+            store.replace_client_snapshot(Client::Dsh, &successful_sources, &sessions)?
+        } else {
+            store.merge_client_snapshot(Client::Dsh, &successful_sources, &sessions)?
+        };
         report.sessions_imported = sessions.len();
         report.messages_inserted = imported.messages_inserted;
         report.messages_pruned = imported.messages_pruned;

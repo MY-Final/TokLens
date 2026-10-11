@@ -72,7 +72,7 @@
 | Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id`；旧格式无该字段时 `token_count:<ordinal>` | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节 |
 | Claude Code | `sessionId`                                         | `message.id`                                            | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                     |
 | OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                            | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
-| DSH         | header `id`                                         | `step:<turn>:<step>`                                    | 同一步最终 usage 替换 chunk 的早期样本；没有最终 usage 时保留早期样本，排除继承 seed                  |
+| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                      | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                          |
 | Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                   | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
 | MiMoCode    | session.id                                          | message.id                                              | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
 | Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                            | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
@@ -244,29 +244,38 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 ### DSH / deepseek-hermes
 
 `collectors/dsh/` 读取 `DSH_SESSIONS_DIR`（TokLens 的显式扫描覆盖）或 `~/.dsh/sessions`，
-只发现 `session.jsonl` / `session.jsonl.zstd`；支持本机持久化源码的格式 v0 与多帧 Zstandard。
-不读 `session.v*.jsonl.zstd` 迁移备份、归档插件、usage 插件账单、正文、凭据或 settings。
-同一会话多份活动产物只选择结束时间较新的快照，平局按稳定文件顺序取最后一份，不相加。
-JSONL 白名单只含 header、request/header.config 的 provider / model 和 assistant/message 与 assistant/chunk 的 turn / step / seq / time / usage。
-以 `(header.id, turn, step)` 去重；chunk 的 usage 是早期样本，assistant/message 的最终 usage 覆盖同一请求，只有早期样本的失败请求也保留。
-排除 `seq < header.seedLength` 的继承事件，保留 parentSession 与 subagent 标记。
+递归发现规范文件名 `session.jsonl[.zstd]`（v0）与 `session.vN.jsonl[.zstd]`（v1–v4），支持串联 Zstandard 帧。
+版本化文件是正式日志，不是可忽略的备份。同一会话目录只选最高版本；同版本优先纯文本日志，不叠加压缩副本。
+最高版本不支持或损坏时不回退旧代。不同目录的同一 header.id 按结束时间取新、平局按稳定顺序取最后一份，不相加。
+不读临时 / 非规范备份文件、归档插件、usage 插件账单、凭据或 settings。
+Serde 白名单仅包含 header、请求模型、usage、turn / step / seq / time 与继承 / 重试标记，不反序列化正文。
+v0/v1 的 assistant/chunk 样本由最终 assistant/message usage 替换；v2–v4 优先最终 usage，否则取内嵌 stream 最后一个 usage chunk，兼容 assistant/attempt。
+去重键首尝试为 `step:<turn>:<step>`；`llm/retry-started` 关闭当前替换槽，后续尝试追加 `:attempt:<n>`，避免漏算真实重试。
+v0/v1 排除 `seq < header.seedLength`；v2–v4 根据 `isSeeded` 与最后一个 `session/end-seed.data.inherited = true` 的 seq 排除继承前缀。
+继承标记缺失或与 header 矛盾时拒绝该文件，保留 parentSession 与 subagent 标记。
 
 DSH 的 `inputTokens` 已由 DeepSeek 适配器扣除缓存读取；`outputTokens` 来自 completion_tokens，包含 reasoning。
 口径 id 为 `dsh.token_usage.v1`：input / cache_read 独立，reasoning 从 output 拆分；cache_write 与 input 独立，计入总量。
 已知总量为 `inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens`，来源为 derived。
 DSH token-meter / pi-ai 适配器明确把省略的可选缓存字段按 0 编码和统计，解析按该协议默认值处理（非估算）；显式 null / 非数值缓存字段拒绝并计数。必需 input / output 或整个 usage 缺失仍保持未知；推理缺失时保留原输出并标注无法拆分。
 口径依据 DSH 的客户端无关 token-meter 投影契约，同时核对 DeepSeek 与 pi-ai 两个适配器；未验证的新持久化格式仍需独立接入。
-同步策略与 Claude Code 相同；未知版本、损坏 / 未完成压缩帧或扫描期间变化时不提交、不修改源文件。
+解析器版本提升为 2，已有水位会触发重扫。完整成功扫描原子替换客户端快照；部分文件失败时事务替换成功会话，保留失败及未确认删除的历史会话与水位。
+下一次仍重试失败文件，后续完整扫描再清理已删除来源；扫描期间文件变化仍拒绝整次发布。不修改源文件。
 
 ### 手动对账
 
-运行 `cargo run --manifest-path src-tauri/Cargo.toml --example client_usage_report`，仅输出聚合元数据，使用内存库。
+运行 `cargo run --manifest-path src-tauri/Cargo.toml --example client_usage_report`，仅输出聚合元数据，使用内存库；追加参数 `-- dsh` 可只对账 DSH。
 2026-10-11 本机对照独立只读解析：Claude Code 1721 个去重请求，已知总量 223724672；
 OpenCode 50 个合并会话、5490 个请求，总量 1304431888；
-DSH 8 个会话、643 个请求，已知总量 182506906。各已知字段与独立解析一致。
+DSH 旧解析器时点快照为 8 个会话、643 个请求，已知总量 182506906（只覆盖当时 v0 文件，不能用作 v1–v4 修复后的对账基线）。各旧版已知字段与独立解析一致。
 Claude Code 47 个会话中 18 个只有用户元数据，另 1 个 assistant 会话缺少完整 usage，总量未知；
 DSH 2 个会话因无请求或必需 usage 缺失，总量未知。它们不贡献总量，不做估算。
 这些数字是本机时点快照，不作为自动化测试输入。
+
+v0–v4 修复后的本机只读对账（2026-10-11）：13 份规范候选日志按目录选出 11 份最高代，导入 11 个会话、1357 个请求；
+已知总量 362803932，3 个会话总量未知。独立只读解析得到相同会话数、请求数、已知总量与未知会话数。
+当前正式 v4 的 system/message、model/selection、workspace/changes、delivery-accepted、compaction/prune 属非用量事件，明确忽略；未知事件仍计数。
+该结果只验证本机数据，用户公司电脑尚未进行实际数量对账。
 
 ## 11. Kimi Code 采集器
 
