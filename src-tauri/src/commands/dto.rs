@@ -14,6 +14,33 @@ use crate::usage::analytics::{
 use crate::usage::store::UsageError;
 use crate::usage::tokens::Client;
 
+use super::SyncState;
+
+/// 同步状态 DTO（也是事件负载）。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncStateDto {
+    pub running: bool,
+    pub started_at_ms: Option<i64>,
+    pub finished_at_ms: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub error: Option<String>,
+    pub report: Option<SyncReportDto>,
+}
+
+impl From<&SyncState> for SyncStateDto {
+    fn from(state: &SyncState) -> Self {
+        Self {
+            running: state.running,
+            started_at_ms: state.started_at_ms,
+            finished_at_ms: state.finished_at_ms,
+            duration_ms: state.duration_ms,
+            error: state.error.clone(),
+            report: state.report.clone().map(SyncReportDto::from),
+        }
+    }
+}
+
 /// 前端传入的客户端筛选参数。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -293,7 +320,7 @@ impl From<SyncReport> for SyncReportDto {
 #[serde(rename_all = "camelCase")]
 pub struct DataSourceStatusDto {
     pub clients: Vec<ClientSourceStatusDto>,
-    pub sync: super::SyncStateDto,
+    pub sync: SyncStateDto,
     pub database_path: String,
     pub first_event_ms: Option<i64>,
     pub last_event_ms: Option<i64>,

@@ -6,7 +6,7 @@ TokLens is a local-first desktop app that summarizes how you use AI coding clien
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
-- a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex.rs`),
+- a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
@@ -101,7 +101,7 @@ TokLens/
 │  ├─ index.css             # Tailwind v4 entry and design tokens
 │  ├─ components/ui/        # shadcn/ui generated components (vendor code)
 │  ├─ hooks/                # Reusable hooks (use-mobile.ts from shadcn)
-│  └─ lib/                  # Framework-free helpers
+│  └─ lib/                  # Pure helpers & DTOs; api.ts is the Tauri bridge
 └─ src-tauri/               # Rust / Tauri backend
    ├─ Cargo.toml            # Rust crate manifest
    ├─ build.rs              # Tauri build script
@@ -111,9 +111,16 @@ TokLens/
    └─ src/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
-      ├─ commands/          # Command layer: DTOs, queries, background sync
+      ├─ commands/          # State, errors, DTOs, queries & background sync
       ├─ collectors/        # Client collectors (Codex implemented)
-      └─ usage/             # Data model, token semantics, SQLite store & analytics
+      └─ usage/
+         ├─ client.rs        # Stable client identity
+         ├─ model.rs         # Unified records and deduplication identifiers
+         ├─ time.rs          # UTC timestamp parsing and system clock
+         ├─ tokens/          # Counts, semantics registry & normalization
+         ├─ normalize/       # Per-client record normalization
+         ├─ store/           # Connections, migrations, writes & imports
+         └─ analytics/       # Aggregates, rankings & metadata queries
 ```
 
 ## Notes

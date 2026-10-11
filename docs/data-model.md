@@ -3,15 +3,24 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                               | 职责                                          |
-| ---------- | ---------------------------------- | --------------------------------------------- |
-| Token 口径 | `src-tauri/src/usage/tokens.rs`    | 字段关系、去重叠换算、规范总量、未知项标注    |
-| 领域模型   | `src-tauri/src/usage/model.rs`     | 会话/消息结构、去重标识、口径枚举、时间戳解析 |
-| 归一化     | `src-tauri/src/usage/normalize.rs` | Codex / Claude Code / OpenCode 的独立规则     |
-| 存储       | `src-tauri/src/usage/store.rs`     | 表结构、版本化迁移、幂等导入、增量同步水位    |
+| 模块       | 文件                                      | 职责                                       |
+| ---------- | ----------------------------------------- | ------------------------------------------ |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                     |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果             |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据           |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注       |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举          |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode 的独立规则  |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位 |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间      |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要 |
 
-边界：本模块只负责"数据模型 / 统计口径 / 存储"；客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）
-与 UI 呈现；采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
+边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
+客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
+
+目录入口保持 `usage::tokens` / `normalize` / `store` / `analytics` 的公开调用路径，
+内部职责与可见性约定见 `architecture.md`。`store/initial-schema.sql` 是 v1 原始迁移，
+后续变更只能追加迁移，不编辑已发布 SQL。`model` 的时间函数重导出仅用于兼容，新增代码使用 `usage::time`。
 
 ## 1. Token 字段语义（禁止重复求和）
 
@@ -78,14 +87,14 @@
 
 ### `source_files`（增量同步水位）
 
-| 列                        | 说明                                   |
-| ------------------------- | -------------------------------------- |
-| `client` / `path`         | 唯一约束 `(client, path)`              |
-| `kind`                    | `jsonl` / `sqlite`                     |
-| `size_bytes` / `mtime_ms` | 上次扫描时的文件特征，用于判断是否变化 |
-| `content_offset`          | 已消费字节偏移，支持 JSONL 追加续读    |
-| `parser_version`          | 解析器版本，变化时应重新解析           |
-| `unparsed_records`        | 未识别记录数，供 UI 提示（不静默丢弃） |
+| 列                        | 说明                                                   |
+| ------------------------- | ------------------------------------------------------ |
+| `client` / `path`         | 唯一约束 `(client, path)`                              |
+| `kind`                    | `jsonl` / `sqlite`                                     |
+| `size_bytes` / `mtime_ms` | 上次扫描时的文件特征，用于判断是否变化                 |
+| `content_offset`          | 已消费字节偏移；Codex 当前用于变化判定，不用于追加续读 |
+| `parser_version`          | 解析器版本，变化时应重新解析                           |
+| `unparsed_records`        | 未识别记录数，供 UI 提示（不静默丢弃）                 |
 
 ### `sessions`（统计总量的唯一事实来源）
 
@@ -110,11 +119,11 @@
 - **原子导入**：`UsageStore::import_session(file, session, messages)` 在单事务内写水位 + 会话 + 明细，
   中断不留半截数据。
 - **绝对值快照**：所有写入是覆盖而不是累加，因此重复导入同一份数据不改变行数与统计结果。
-- **陈旧保护**：累计值口径下新的累计值小于库中值（或时间更早）时，整次导入被忽略（`SkippedStale`），
-  避免用旧文件/备份回退数据。
+- **陈旧保护**：累计值口径下新的累计值小于库中值（或时间更早）时，会话快照被忽略（`SkippedStale`），
+  避免用旧文件/备份回退总量；明细是否重建由导入 API 决定，见第 8 节。
 - **增量同步**：先按 `(client, path)` 读回水位；`size_bytes`/`mtime_ms` 未变化且 `parser_version` 相同时跳过，
-  变化时从 `content_offset` 续读。
-- **重启恢复**：水位与数据都在本地库中，进程重启后直接续读，不需要重建索引。
+  变化时整文件重解析并通过 `replace_file_import` 覆盖该文件的明细（见第 8 节）。
+- **重启恢复**：水位与数据都在本地库中，进程重启后继续按水位判断是否重解析，不需要重建索引。
 
 ## 6. 费用与 Token 解耦
 
@@ -137,7 +146,7 @@
 
 ## 8. Codex 采集器（已实现）
 
-实现：`src-tauri/src/collectors/codex.rs`；扫描 `%USERPROFILE%\.codex\sessions` 下的 `rollout-*.jsonl`（只读）。
+实现：`src-tauri/src/collectors/codex/`；扫描 `%USERPROFILE%\.codex\sessions` 下的 `rollout-*.jsonl`（只读）。
 
 ### 8.1 新旧格式混排规则（实测口径）
 
@@ -156,7 +165,8 @@
 - 写入是"覆盖式"的：先删除该源文件此前的明细，再写入本次结果，单事务提交（`replace_file_import`）。
   因此重复导入不会重复计数，文件被截断/替换后旧明细也不会残留。
 - 中断安全：解析失败或进程被杀时水位不前进，下次运行重新解析该文件。
-- 累计值不回退：新快照的累计值更小或时间更早时整条会话记录被忽略（`SkippedStale`，全有或全无）。
+- 累计值不回退：新快照的累计值更小或时间更早时会话快照不被覆盖（`SkippedStale`）。
+  `import_session` 同时跳过明细写入；`replace_file_import` 仍覆盖对应源文件的明细与水位，保证截断后明细可重建。
 - 已知限制：大小与 mtime 都没变的"同尺寸内容替换"无法察觉（rollout 为追加写入，视为异常）；
   `SyncOptions::force_rescan` 提供显式全量重扫。
 
@@ -178,7 +188,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 
 ## 9. 统计查询口径（analytics）
 
-实现：`src-tauri/src/usage/analytics.rs`；命令层只做参数校验与 DTO 转换（`src-tauri/src/commands/`）。
+实现：`src-tauri/src/usage/analytics/`；命令层只做参数校验与 DTO 转换（`src-tauri/src/commands/`）。
 
 | 规则       | 说明                                                                                                     |
 | ---------- | -------------------------------------------------------------------------------------------------------- |

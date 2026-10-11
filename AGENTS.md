@@ -1,7 +1,7 @@
 # AGENTS.md - TokLens 开发规范
 
 本文件是 TokLens 的唯一入口规范，适用于本仓库内的全部代码、脚本与文档，人和 AI Agent 同样遵守。
-更细的规则拆分为三份配套文档（索引见 `docs/README.md`），出现冲突时以本文件的约束优先级为准：
+更细的规则拆分为四份配套文档（索引见 `docs/README.md`），出现冲突时以本文件的约束优先级为准：
 
 | 文档                    | 负责内容                                        |
 | ----------------------- | ----------------------------------------------- |
@@ -83,10 +83,15 @@ pnpm tauri build      # 生产打包
 
 约束：
 
-- 依赖方向单向：前端（呈现）→ Tauri command → Rust 领域逻辑 → 客户端适配器。禁止反向依赖与跨层跳步
-  （例如前端直接读文件、command 里写统计口径）。
+- 依赖方向单向：前端 → Tauri command；查询 command → `usage/analytics` → `usage/store`；
+  同步 command → `collectors` → `usage/normalize` / `usage/store`。`usage` 不反向依赖 command 或采集器。
+  禁止跨层跳步（例如前端直接读文件、command 里写统计口径），模块图见 `docs/architecture.md`。
 - 业务组件、领域模块等新目录在引入时同步登记到 `docs/architecture.md`，不要先建目录后补文档。
 - `src/components/ui/` 内不得添加业务逻辑；业务组件不要直接 import 具体客户端解析细节。
+- 按变更原因拆分职责：Token 类型 / 语义 / 换算、客户端归一化、文件发现 / 解析 / 同步、连接 / 迁移 / 写入 / 查询分开。
+  不按固定行数拆文件，不为每个结构体创建文件；较大模块用目录组织，`mod.rs` 保持薄入口与显式导出。
+- 模块内部默认私有，跨子模块优先 `pub(super)`；拆分不扩大公开接口。公开路径可用重导出兼容，避免连带改动调用方。
+- 结构重构保留统计规则、DTO 与迁移 SQL；口径或行为修复另做提交并补相应测试，不与文件搬移混在一起。
 
 ## 4. 代码规范
 
@@ -113,7 +118,7 @@ pnpm tauri build      # 生产打包
 ### 提交信息
 
 采用 `type(scope): 描述` 形式（与仓库现有 `chore: ...` 风格一致），`type` 取 `feat` / `fix` / `chore` / `docs` /
-`refactor` / `test` / `build` / `ci`。一次提交只做一件事，描述说清"做了什么"。
+`refactor` / `test` / `build` / `ci`。描述统一使用英文，与已有提交历史保持一致；一次提交只做一件事，说明做了什么。
 
 ## 5. 安全要求
 
@@ -141,12 +146,14 @@ pnpm tauri build      # 生产打包
 
 ## 7. 测试要求
 
-现状：Rust 侧已有单元测试（`src-tauri/src/usage/`，`pnpm rust:test`），前端尚未配置测试框架（无 Vitest）。引入前端框架时先在 `docs/architecture.md` 登记并补脚本。
+现状：Rust 侧已有领域、采集器与命令层单元测试（`pnpm rust:test`），前端尚未配置测试框架（无 Vitest）。引入前端框架时先在 `docs/architecture.md` 登记并补脚本。
 
 口径类改动（Token 语义、去重键、累计值、迁移）必须带 `#[cfg(test)]` 单测，且只能使用合成数据。
 
 必须覆盖的内容：
 
+- **测试组织**：小模块测试跟随实现；较大的模块按行为分成 `#[cfg(test)] mod tests` 子模块，
+  共享合成 fixture 构造器仅在测试时编译；重构必须保留原有用例与断言。
 - **Rust**：解析器、归一化、聚合、去重等纯函数使用 `#[cfg(test)]` 单测；测试数据放去敏 fixture，不得使用真实会话内容。
 - **前端**：`src/lib/` 纯函数与关键 Hook 的单测（引入 Vitest + Testing Library 后）。
 - **估算公式**：每个估算规则必须有单测，覆盖边界（字段缺失、0 值、跨天、超大值）。
@@ -173,6 +180,6 @@ pnpm tauri build      # 生产打包
 
 - 单一事实来源：命令以 `package.json` 为准，统计口径以 `docs/data-metrics.md` 为准，视觉规范以 `docs/ui-guidelines.md` 为准，
   结构与边界以 `docs/architecture.md` 为准。
-- 修改任一规范文件后，检查其余三份文件是否出现表述冲突（术语、路径、命令、分级命名）。
+- 修改任一规范文件后，检查其余规范文件是否出现表述冲突（术语、路径、命令、分级命名）。
 - 规则取舍优先级：本地优先 > 最小权限 > 可验证（有自动化检查）> 实现便利。
 - 能由工具检查的规则优先写进 `eslint.config.js` / `.prettierrc.json` / `tsconfig.json` / `Cargo.toml`，文档只解释"为什么"。

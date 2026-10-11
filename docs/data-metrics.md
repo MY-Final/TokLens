@@ -66,14 +66,18 @@
 
 | 指标                   | 单位  | 时间范围 | 等级                        | 计算方式                                                                                    | 状态                       |
 | ---------------------- | ----- | -------- | --------------------------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| 会话数                 | 个    | 选定区间 | measured                    | 去重后的 `session_id` 数量                                                                  | 数据模型已实现（无采集器） |
-| 请求数                 | 次    | 选定区间 | measured                    | 事件条数（去重后）                                                                          | 数据模型已实现（无采集器） |
-| 输入 token             | token | 选定区间 | measured                    | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 数据模型已实现（无采集器） |
-| 输出 token             | token | 选定区间 | measured/estimated          | 非推理输出分桶求和（Codex 需扣除 `reasoning`）；缺失时按第 7 节估算（未实现）               | 数据模型已实现（无采集器） |
-| 缓存 token             | token | 选定区间 | measured                    | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 数据模型已实现（无采集器） |
-| 成本                   | USD   | 选定区间 | measured（客户端自报）      | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | 数据模型已实现（无采集器） |
+| 会话数                 | 个    | 选定区间 | measured                    | 去重后的 `session_id` 数量                                                                  | Codex 采集与查询已实现     |
+| 请求数                 | 次    | 选定区间 | measured                    | 事件条数（去重后）                                                                          | Codex 采集与查询已实现     |
+| 输入 token             | token | 选定区间 | measured                    | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | Codex 采集与查询已实现     |
+| 输出 token             | token | 选定区间 | measured/estimated          | 非推理输出分桶求和（Codex 需扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现             | Codex 采集与查询已实现     |
+| 缓存 token             | token | 选定区间 | measured                    | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | Codex 采集与查询已实现     |
+| 成本                   | USD   | 选定区间 | measured（客户端自报）      | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | 仅数据模型；费用采集未实现 |
 | 活跃时长               | 小时  | 选定区间 | estimated                   | 相邻事件间隔去尾求和（见第 7 节）                                                           | 未实现                     |
-| 按客户端/模型/项目分布 | %     | 选定区间 | measured（分母为 measured） | 子集指标 ÷ 同等级总量                                                                       | 数据模型已实现（无采集器） |
+| 按客户端/模型/项目分布 | %     | 选定区间 | measured（分母为 measured） | 子集指标 ÷ 同等级总量                                                                       | Codex 采集与查询已实现     |
+
+当前只接入 Codex。Claude Code / OpenCode 的归一化模型与测试已存在，采集器尚未实现。
+区间以会话开始时间过滤；趋势按会话开始日期归属（不表示该日所有请求发生时间），
+每日桶目前固定 24 小时，夏令时限制见 `data-model.md` 第 9 节。
 
 口径细则：
 
@@ -81,24 +85,25 @@
   客户端总量 `total = input + output`；Claude Code 的 `cache_read` / `cache_creation` 与 `input` 互不重叠
   （本机存在 `cache_read > input` 的记录）且无总量字段；OpenCode 的 `total = input + output + reasoning + cache.read`。
   换算公式、未确认项（如 Codex/OpenCode 的 `cache_write` 与 `input` 关系）见 `docs/data-model.md`。
-- **去重与幂等**：Codex 按 `thread_id` 取最新累计值（多个 rollout 文件不得相加）；Claude Code 按
+- **去重与幂等**：Codex 按 `thread_id` 取最大累计值（多个 rollout 文件不得相加）；Claude Code 按
   `(sessionId, message.id)` 去重（同一消息最多被重复写入 15 次）；OpenCode 按 `message.id`，且 `session` 与
-  `session_v2` 按 `time_updated` 取新、不得相加。增量扫描依据文件 `mtime` + 大小与已消费字节偏移。
+  `session_v2` 按 `time_updated` 取新、不得相加。Codex 增量扫描依据文件 `mtime` + 大小 + 解析版本，变化时整文件重解析并覆盖该文件明细。
 - **时区与边界**：按系统本地时区聚合；"今天/本周/本月"按本地日历边界计算，跨时区展示需注明时区。
 - **成本与价格表（待实现）**：价格表需内置、本地、版本化并含生效日期；未匹配价格的模型显示"未定价"并在 UI 提示，
   不得静默按 0 处理。价格表更新视为口径变更（见第 9 节）。当前阶段成本只保存客户端自报值，不做换算。
 - **成本与 Token 解耦**：价格表落地前不计算成本，只保存客户端自报值（OpenCode）；未定价模型保持 NULL 并在 UI 提示。
 - **取整与显示**：token 取整；成本保留 4 位小数，`<$0.01` 时显示 `<$0.01`；百分比保留 1 位小数。
 - **缓存 token 口径**：缓存读写作为独立分桶；Codex 的 `cache_read` 需先从 `input` 中扣除再分桶，
-  规范总量 = 互不重叠分桶之和（见 `docs/data-model.md` 第 1 节），禁止对存在包含关系的字段重复求和。
+  客户端提供总量时采用客户端值并校验分桶之和；否则由完整的必需分桶求和（见 `docs/data-model.md` 第 1 节），禁止对存在包含关系的字段重复求和。
 
 ## 6. 数据清洗
 
 - 不修改原始文件：清洗只发生在内存中的归一化阶段。
 - 无法解析的记录：跳过并计数，在界面显示"未识别记录 N 条"，不猜测字段含义。
-- 异常时间戳（早于 2023 或晚于当前时间 + 1 天）：标记为异常并排除出统计，计数上报。
-- 重复记录：按去重键处理（Codex `thread_id` 累计值取最新、`response_id` 为消息键；Claude Code `(sessionId, message.id)`；
-  OpenCode `message.id`），保留最新值并计数，不重复计入统计。
+- 当前时间解析仅支持 ISO 8601 UTC `Z` 形式，无法解析时保持缺失。按日期范围识别异常时间戳
+  （早于 2023 或晚于当前时间 + 1 天）与计数上报尚未实现，不宣称已过滤。
+- 重复记录：按去重键处理（Codex `thread_id` 累计值取最大、`response_id` 为消息键；Claude Code `(sessionId, message.id)`；
+  OpenCode `message.id`），以绝对值快照 upsert，不重复计入统计；陈旧保护与覆盖式导入见 `data-model.md` 第 5、8 节。
 
 ## 7. 估算规则（必须可追溯）
 
@@ -120,7 +125,8 @@
 ## 8. 数据质量与校验
 
 - **对账**：每个客户端适配器上线前，抽样与客户端自身统计对比，记录差异率、差异原因（如缓存口径、时区）。
-- **fixture**：解析与聚合必须有去敏 fixture 单测（`src-tauri/tests/fixtures/<client>/`），
+- **fixture**：解析与聚合必须有合成 fixture 单测（可在 `#[cfg(test)]` 模块中构造；共享文件放
+  `src-tauri/tests/fixtures/<client>/`），
   包含未知字段、字段缺失、空文件、异常时间戳等边界。
 - **覆盖率优先项**：估算公式（E1/E2/E4）、去重逻辑、时间边界聚合必须有测试。
 - **不做**：依赖真实数据目录、当前时间或网络的自动化测试。
@@ -131,6 +137,9 @@
 - 破坏性变更（去重规则、token 计入口径、价格表来源、时区处理）升 `MAJOR`；新增指标或字段升 `MINOR`。
 - 每次变更需在提交说明中记录：变更内容、原因、对历史数据展示的影响。
 - 界面展示的统计需与本文版本一致；发布说明中注明本次口径版本。
+
+本次模块重构（2026-10-11）只调整文件组织，并修正文档中“最新累计值”“追加续读”和落地状态的过时说明。
+统计公式、去重键、迁移与 DTO 不变，口径版本保持 `1.0`；测试使用原有合成记录验证行为。
 
 ## 10. 隐私与安全
 

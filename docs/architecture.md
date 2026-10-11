@@ -6,50 +6,52 @@
 ## 1. 现状
 
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
-（`src-tauri/src/collectors/codex.rs`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
+（`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
 **Claude Code 与 OpenCode 采集器未实现（界面显示「等待采集」）；费用模块未实现（不展示任何金额）**。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
 
-```
-React 呈现层 (src/)
-    │  invoke(DTO)          ← 唯一跨端方式
-Tauri command 层 (src-tauri/src/commands/：状态 + DTO + 查询/同步命令)
-    │
-领域/聚合层 (聚合、去重、口径计算，纯函数，可单测)
-    │
-归一化层 (每个客户端一套规则 → 统一的 SessionRecord / MessageRecord)
-    │
-客户端适配器层 (src-tauri/src/collectors/：每个客户端一个模块，只读；当前已实现 codex)
-    │
-本地用量库 (TokLens 自有 SQLite：sessions / messages / source_files，只有 store.rs 写)
-    │
-本地数据源 (客户端自己的会话/日志文件)
+模块依赖（箭头表示调用 / import 方向）：
+
+```text
+React pages / hooks ──→ lib/api.ts ──→ Tauri commands
+React components ────→ lib/api.ts (只导入 DTO 类型)
+commands/queries ────→ usage/analytics ──→ usage/store
+commands/sync ───────→ collectors/codex/sync
+collectors/codex/sync ──→ discovery / parser / thread
+collectors/codex/parser + thread ──→ usage/normalize
+collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
+usage/normalize ─────→ usage/model / tokens / time
+usage/store ─────────→ usage/model / client / time
+usage/tokens ────────→ usage/client
 ```
 
-依赖只能自上而下，禁止反向或跨层跳步：
-
-- 前端不得直接读文件、不得自行推算统计口径；只消费 command 返回的 DTO。
-- command 层只做参数校验、调用领域层、组装 DTO；不得内联解析逻辑。
-- 适配器只负责"文件 → 归一化事件"，不得计算 UI 指标、不写数据库、不发网络请求。
-- 领域层不依赖 Tauri / 文件系统 API，保持纯函数以便单测。
-- 存储层（`src-tauri/src/usage/store.rs`）只接受已归一化的记录，不解析客户端原始格式；它是唯一允许写
-  TokLens 本地库的模块，客户端数据库一律只读。
-- 统一数据模型、Token 口径与去重键见 `docs/data-model.md`。
+- 前端只消费 DTO；不得直接读文件或自行推算统计口径。`api.ts` 是 Tauri 调用和事件订阅入口，
+  其余 `src/lib/` 模块不依赖 React 或 Tauri 运行时。
+- command 层负责参数校验、状态与后台调度、DTO 转换；不得内联解析或统计规则。
+- 采集器的发现与解析模块只读客户端文件、输出元数据；线程聚合选择累计快照；
+  同步协调模块调用 `usage/store` 的事务 API，不直接执行 SQL、不写客户端目录、不发网络请求。
+- `usage/model`、`tokens` 与 `normalize` 是可用合成数据测试的纯领域逻辑，不依赖 Tauri、采集器或文件系统。
+  `time::now_ms` 是明确的系统时间入口，时间解析不依赖当前时间。
+- `usage/store/` 负责连接、迁移和本地库写入，只接受统一记录，不解析原始客户端格式。
+  `usage/analytics/` 只做读查询；二者不依赖 command 或 collectors，避免反向依赖。
+- 数据流是「只读客户端文件 → 解析与归一化 → 本地用量库 → 查询 → DTO → UI」，
+  不等同于 Rust 模块的 import 方向。统一数据模型、Token 口径与去重键见 `docs/data-model.md`。
 
 ## 3. 前后端契约
 
 - 跨端调用统一使用 `invoke<Dto>("command_name")`，命令名 `snake_case`，与 Rust 函数名一致。
-- DTO 使用 `serde::Serialize` / `Deserialize`，字段名与前端 `type` 逐字对应；可选字段在两侧都标可选，
+- DTO 使用 `serde::Serialize` / `Deserialize`，字段名与前端 `type` 逐字对应；可缺失的返回值在 Rust 使用 `Option<T>`、前端使用 `T | null`，
   不要用"空字符串/0"代替缺失值。
 - 失败时返回 `Result<T, E>`，`E` 必须可序列化且对用户可读；前端负责把错误渲染成可理解的提示。
 - DTO 变更必须同时更新两侧，并在提交说明中标注破坏性变更。
 - Rust 侧 DTO 用 `#[serde(rename_all = "camelCase")]`，命令参数用 `#[tauri::command(rename_all = "camelCase")]`；
   前端类型定义在 `src/lib/api.ts`，字段与 Rust 逐字对应。
 - 命令失败返回 `{ message: string }`，前端用 `toErrorMessage` 渲染成可读提示。
-- 时间统一使用 ISO 8601 字符串（含时区偏移），单位在字段名中体现（如 `total_tokens`、`cost_usd`）。
+- 跨端与数据库时间使用 Unix 毫秒，字段名以 `Ms` / `_ms` 标注；客户端原始 ISO 8601 UTC 字符串由
+  `usage/time.rs` 解析。Token 与费用单位由字段名表达（如 `totalTokens`、`clientCostUsd`），不混用秒与毫秒。
 
 ### 3.1 命令清单（2026-10-11）
 
@@ -74,18 +76,19 @@ Tauri command 层 (src-tauri/src/commands/：状态 + DTO + 查询/同步命令)
 4. **可降级**：无法识别的文件计入"未解析文件数"并上报给 UI，不 panic、不静默丢弃。
 5. **不落正文**：解析过程中不保存消息正文，只保留统计所需的元数据。
 6. **大文件安全**：JSONL 类日志按行流式处理，避免整文件读入内存。
-7. **fixture 驱动**：每个适配器都应有去敏 fixture（放 `src-tauri/tests/fixtures/<client>/`），格式如下：会话文件、期望的事件数、期望的 token/模型。
+7. **fixture 驱动**：使用手工构造的合成记录及期望事件数 / token / 模型。小样本可在 `#[cfg(test)]`
+   模块内构造；需要共享完整文件时放 `src-tauri/tests/fixtures/<client>/`，不得复制真实会话。
 
 ### 4.1 已实现的采集器
 
-**Codex**（`src-tauri/src/collectors/codex.rs`）：扫描 `%USERPROFILE%\.codex\sessions` 下的 `rollout-*.jsonl`，
+**Codex**（`src-tauri/src/collectors/codex/`）：扫描 `%USERPROFILE%\.codex\sessions` 下的 `rollout-*.jsonl`，
 增量判定用 `(size_bytes, mtime_ms, parser_version)`，变化时整文件重新解析，并以单事务覆盖写回
 （水位 + 会话累计值 + 该文件的请求明细）。新旧两套 Token 记录、累计值取值与隐私白名单见
 `docs/data-model.md` 第 8 节。Claude Code 与 OpenCode 尚未实现。
 
 新增客户端时的检查清单：
 
-- [ ] 新增 `<client>` 适配器模块，只依赖归一化层
+- [ ] 新增 `<client>` 适配器模块；解析依赖归一化层，同步协调通过存储 API 导入
 - [ ] 补充去敏 fixture 与解析单测（含未知字段、字段缺失、空文件）
 - [ ] 在 `docs/data-metrics.md` 登记该客户端新增/变化的指标与来源等级
 - [ ] 确认没有新增 Tauri 权限、没有新增网络访问
@@ -118,6 +121,30 @@ Tauri command 层 (src-tauri/src/commands/：状态 + DTO + 查询/同步命令)
 - 聚合在 Rust 侧完成，前端只做展示层格式化；单次返回给前端的数据量应可控（分页或预聚合）。
 
 ## 8. 架构决策记录（ADR）
+
+### 按职责拆分后端模块（2026-10-11）
+
+保留公开调用路径、DTO、数据库结构与统计口径；目录入口只负责模块组织与显式导出。
+
+| 模块                | 子模块职责                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `usage/normalize/`  | `codex`、`claude_code`、`opencode` 分别将客户端结构归一化为统一记录，测试随客户端规则组织                                      |
+| `usage/time.rs`     | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                             |
+| `usage/store/`      | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                          |
+| `usage/analytics/`  | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                    |
+| `collectors/codex/` | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                             |
+| `commands/`         | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验 |
+
+较大的测试模块按行为分组，共享合成数据构造器仅在 `cfg(test)` 下编译。不按行数机械拆文件，
+优先隔离不同的变更原因；模块内部使用私有或 `pub(super)` 可见性，避免为拆分扩大公开接口。
+
+### Token 领域模块边界（2026-10-11）
+
+`usage/client.rs` 仅定义客户端标识与字符串映射；`usage/tokens/` 内按职责分为
+`counts.rs`（原始计数、规范分桶、归一化结果）、`semantics.rs`（字段关系、版本化客户端口径与证据）、
+`normalize.rs`（按口径换算分桶、总量选择与异常标注）。`tokens/mod.rs` 只组织模块与导出，
+兼容已有 `usage::tokens` 调用路径。测试跟随对应职责，不复制换算算法。
+本次为结构重构，不改变字段、口径版本、统计公式、数据库或 DTO。
 
 新增架构组件（持久化、状态管理、测试框架、错误处理库、调度/后台任务等）必须在下表登记，
 一次决策一行，包含日期、决策、状态、理由/影响。只记录已决定的，不要预填未定项。

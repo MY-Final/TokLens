@@ -1,246 +1,7 @@
-//! Token 字段语义与去重叠规则。
-//!
-//! 三个客户端的 token 字段语义并不相同，直接相加会重复计数。这里的规则全部来自
-//! `docs/data-source-research.md` 的本机实测结论（每个客户端给出判定依据），
-//! 无法判定的关系一律标记为 [`FieldRelation::Unknown`]，不计入总量并在记录上标注，
-//! 不做任何推测。
+//! 按声明的字段关系换算用量，并标注缺失、未知关系与总量不一致。
 
-use std::fmt;
-
-/// TokLens 支持的客户端。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Client {
-    Codex,
-    ClaudeCode,
-    OpenCode,
-}
-
-impl Client {
-    pub const ALL: [Client; 3] = [Client::Codex, Client::ClaudeCode, Client::OpenCode];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Client::Codex => "codex",
-            Client::ClaudeCode => "claude_code",
-            Client::OpenCode => "opencode",
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Client> {
-        match value {
-            "codex" => Some(Client::Codex),
-            "claude_code" => Some(Client::ClaudeCode),
-            "opencode" => Some(Client::OpenCode),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for Client {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// 一个字段相对另一个字段的关系。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FieldRelation {
-    /// 是另一个字段的子集：求和前必须扣除（例如 Codex 的 cache_read 属于 input）。
-    IncludedIn,
-    /// 与其它字段互不重叠：本机数据已证伪"包含"假设（例如存在 cache_read > input 的记录）。
-    Separate,
-    /// 客户端不提供该字段：缺失是预期行为，不算数据不完整。
-    NotProvided,
-    /// 无法判定：不计入总量，并在记录的 `unknown_relations` 中标注。
-    Unknown,
-}
-
-/// 客户端口径标识与字段关系。
-#[derive(Debug, Clone, Copy)]
-pub struct TokenSemantics {
-    /// 口径标识，随记录写入数据库，便于日后按口径重算。
-    pub id: &'static str,
-    /// `cache_read` 相对 `input` 的关系。
-    pub cache_read: FieldRelation,
-    /// `reasoning` 相对 `output` 的关系。
-    pub reasoning: FieldRelation,
-    /// `cache_write` 相对 `input` 的关系。
-    pub cache_write_in_input: FieldRelation,
-    /// `cache_write` 是否计入 TokLens 规范总量。
-    pub cache_write_counts_in_total: bool,
-    /// 客户端是否直接提供总量字段。
-    pub client_reports_total: bool,
-    /// 判定依据（本机实测数字，写入文档与代码注释）。
-    pub basis: &'static str,
-}
-
-/// Codex（`token_usage_record` 与旧版 `event_msg.token_count` 语义一致）。
-///
-/// 依据：本机 19 385 条 `token_usage_record` 中 `total == input + output` 恒成立，
-/// 且 `cached_input <= input`、`reasoning_output <= output` 恒成立，说明
-/// cache_read 与 reasoning 分别是 input / output 的子集；`cache_write` 非 0 时
-/// 总量仍等于 input + output，故不计入总量，其与 input 的关系无法判定。
-pub const CODEX_SEMANTICS: TokenSemantics = TokenSemantics {
-    id: "codex.usage.v1",
-    cache_read: FieldRelation::IncludedIn,
-    reasoning: FieldRelation::IncludedIn,
-    cache_write_in_input: FieldRelation::Unknown,
-    cache_write_counts_in_total: false,
-    client_reports_total: true,
-    basis: "local measurement: total == input + output for all 19385 records",
-};
-
-/// Claude Code（Anthropic `message.usage`）。
-///
-/// 依据：本机 4 956 条 assistant 记录中，`cache_read_input_tokens > input_tokens` 出现在
-/// 3 927 条、`cache_creation_input_tokens > input_tokens` 出现在 112 条，
-/// 二者不可能是 input 的子集；客户端不提供 reasoning 与总量字段。
-pub const CLAUDE_CODE_SEMANTICS: TokenSemantics = TokenSemantics {
-    id: "claude_code.anthropic_usage.v1",
-    cache_read: FieldRelation::Separate,
-    reasoning: FieldRelation::NotProvided,
-    cache_write_in_input: FieldRelation::Separate,
-    cache_write_counts_in_total: true,
-    client_reports_total: false,
-    basis: "local measurement: cache_read > input on 3927/4956 records",
-};
-
-/// OpenCode（`message.data.tokens`）。
-///
-/// 依据：本机 5 490 条消息中 `total == input + output + reasoning + cache.read` 恒成立，
-/// 且 `cache.read > input` 出现在 5 099 条，说明 cache_read 与 reasoning 均为独立字段；
-/// `cache.write` 本机全为 0，与 input 的关系无法判定，故不计入总量。
-pub const OPENCODE_SEMANTICS: TokenSemantics = TokenSemantics {
-    id: "opencode.message.v1",
-    cache_read: FieldRelation::Separate,
-    reasoning: FieldRelation::Separate,
-    cache_write_in_input: FieldRelation::Unknown,
-    cache_write_counts_in_total: false,
-    client_reports_total: true,
-    basis: "local measurement: total == input + output + reasoning + cache.read",
-};
-
-pub fn semantics_for(client: Client) -> &'static TokenSemantics {
-    match client {
-        Client::Codex => &CODEX_SEMANTICS,
-        Client::ClaudeCode => &CLAUDE_CODE_SEMANTICS,
-        Client::OpenCode => &OPENCODE_SEMANTICS,
-    }
-}
-
-/// 客户端原始计数。`None` 表示"未提供/缺失"，与 `0` 语义不同。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct RawTokenCounts {
-    pub input: Option<u64>,
-    pub output: Option<u64>,
-    pub cache_read: Option<u64>,
-    pub cache_write: Option<u64>,
-    pub reasoning: Option<u64>,
-    /// 客户端自报总量（Codex/OpenCode 有，Claude Code 无）。
-    pub client_total: Option<u64>,
-}
-
-impl RawTokenCounts {
-    /// 按字段逐项求和。仅在同一客户端、同一口径的记录之间使用（去重叠是线性运算）。
-    pub fn sum<'a, I>(items: I) -> RawTokenCounts
-    where
-        I: IntoIterator<Item = &'a RawTokenCounts>,
-    {
-        let mut out = RawTokenCounts::default();
-        for item in items {
-            add_opt(&mut out.input, item.input);
-            add_opt(&mut out.output, item.output);
-            add_opt(&mut out.cache_read, item.cache_read);
-            add_opt(&mut out.cache_write, item.cache_write);
-            add_opt(&mut out.reasoning, item.reasoning);
-            add_opt(&mut out.client_total, item.client_total);
-        }
-        out
-    }
-}
-
-/// 累加到 `Option<u64>`：`None` 表示缺失，缺失字段不会被当成 0 参与求和。
-fn add_opt(slot: &mut Option<u64>, value: Option<u64>) {
-    if let Some(value) = value {
-        *slot = Some(slot.unwrap_or(0).saturating_add(value));
-    }
-}
-
-impl RawTokenCounts {}
-
-/// 互不重叠的规范分桶：任意两项相加都不会重复计入同一批 token。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct TokenBuckets {
-    /// 未命中缓存的输入。
-    pub input: Option<u64>,
-    /// 不含推理的输出。
-    pub output: Option<u64>,
-    /// 推理 token（Codex 从 output 中拆出，OpenCode 独立字段，Claude Code 不提供）。
-    pub reasoning: Option<u64>,
-    /// 缓存读取。
-    pub cache_read: Option<u64>,
-    /// 缓存写入。仅在口径允许时计入总量（见 [`TokenSemantics::cache_write_counts_in_total`]）。
-    pub cache_write: Option<u64>,
-}
-
-impl TokenBuckets {
-    /// 各分桶之和（不含口径排除项）。任一必需分桶缺失时返回 `None`。
-    pub fn sum_with(&self, semantics: &TokenSemantics) -> Option<u64> {
-        let mut total = 0u64;
-        for (value, required) in [
-            (self.input, true),
-            (self.output, true),
-            (
-                self.reasoning,
-                semantics.reasoning != FieldRelation::NotProvided,
-            ),
-            (self.cache_read, true),
-            (self.cache_write, semantics.cache_write_counts_in_total),
-        ] {
-            if !required {
-                continue;
-            }
-            match value {
-                Some(value) => total += value,
-                None => return None,
-            }
-        }
-        Some(total)
-    }
-}
-
-/// 规范总量的取值依据。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UsageTotalBasis {
-    /// 直接使用客户端自报总量（measured）。
-    ClientReported,
-    /// 由互不重叠的分桶求和得出（derived）。
-    DerivedFromBuckets,
-    /// 字段缺失或关系未知，无法给出总量。
-    Unavailable,
-}
-
-impl UsageTotalBasis {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            UsageTotalBasis::ClientReported => "client_reported",
-            UsageTotalBasis::DerivedFromBuckets => "derived_from_buckets",
-            UsageTotalBasis::Unavailable => "unavailable",
-        }
-    }
-}
-
-/// 归一化后的用量：分桶 + 规范总量 + 未知项标注。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NormalizedUsage {
-    pub buckets: TokenBuckets,
-    pub total_tokens: Option<u64>,
-    pub total_basis: UsageTotalBasis,
-    /// 无法确认的关系或缺失项（需要在 UI/导出中标注），按字典序稳定输出。
-    pub unknown_relations: Vec<&'static str>,
-    /// 客户端自报总量与分桶求和不一致（正常情况下应为 false，用于发现口径漂移）。
-    pub client_total_mismatch: bool,
-}
+use super::counts::{NormalizedUsage, RawTokenCounts, TokenBuckets, UsageTotalBasis};
+use super::semantics::{FieldRelation, TokenSemantics};
 
 /// 未知关系标识：`cache_write` 与 `input` 的关系无法判定（Codex/OpenCode）。
 pub const UNKNOWN_CACHE_WRITE_RELATION: &str = "cache_write.relation_to_input";
@@ -346,6 +107,7 @@ pub fn normalize_usage(semantics: &TokenSemantics, raw: &RawTokenCounts) -> Norm
 
 #[cfg(test)]
 mod tests {
+    use super::super::{CLAUDE_CODE_SEMANTICS, CODEX_SEMANTICS, OPENCODE_SEMANTICS};
     use super::*;
 
     fn raw(
@@ -490,7 +252,6 @@ mod tests {
                 .contains(&ANOMALY_REASONING_EXCEEDS_OUTPUT)
         );
     }
-
     #[test]
     fn summing_raw_counts_matches_summing_buckets() {
         let items = [
@@ -501,16 +262,5 @@ mod tests {
         let from_sum = normalize_usage(&CODEX_SEMANTICS, &sum);
         assert_eq!(from_sum.buckets.input, Some(180));
         assert_eq!(from_sum.total_tokens, Some(330));
-    }
-
-    #[test]
-    fn semantics_are_registered_for_every_client() {
-        for client in Client::ALL {
-            let semantics = semantics_for(client);
-            assert!(!semantics.id.is_empty());
-            assert!(!semantics.basis.is_empty());
-        }
-        assert_eq!(Client::parse(Client::Codex.as_str()), Some(Client::Codex));
-        assert_eq!(Client::parse("nope"), None);
     }
 }
