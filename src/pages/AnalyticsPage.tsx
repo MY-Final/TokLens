@@ -2,17 +2,12 @@
 
 import { EmptyBlock } from "@/components/StateBlocks";
 import { DashboardCard } from "@/components/DashboardCard";
+import { FilterSelectContent } from "@/components/FilterSelectContent";
 
 import { useState } from "react";
 
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RankingCard } from "@/components/RankingCard";
 import { StatCard } from "@/components/StatCard";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
@@ -106,13 +101,13 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
           <SelectTrigger size="sm" className="w-52" aria-label="选择客户端">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <FilterSelectContent>
             {CLIENT_FILTERS.map((entry) => (
               <SelectItem key={entry.value} value={entry.value}>
                 {entry.label}
               </SelectItem>
             ))}
-          </SelectContent>
+          </FilterSelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
           统计本机 Codex、Claude Code、OpenCode 与 DSH 的已知用量。

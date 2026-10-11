@@ -220,6 +220,8 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 ### UI 组件结构（2026-10-11）
 
+`FilterSelectContent` 组合已有 shadcn SelectContent，统一日期与客户端筛选浮层的定位、宽度与选项间距，生成组件保持不变。
+
 业务组件和页面采用 PascalCase 文件名；`DashboardCard` 组合 shadcn Card 统一面板外观，`ClientIdentity` 提供稳定客户端标识，`StatCard`、`TokenTrendChart`、`ClientUsageCard`、`RankingCard`、`SessionTable` 分别负责呈现。图表采用 shadcn Chart + 已有 Recharts，无新增运行时依赖。统计查询与 DTO 保持不变，费用来源未落地前 Tooltip 显示暂不可用，不反推金额。
 
 ### 多客户端 DTO 与查询（2026-10-11）

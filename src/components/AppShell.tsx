@@ -3,13 +3,7 @@
 import type { ReactNode } from "react";
 import { BarChart3, Database, LayoutDashboard, ListTree, ShieldCheck } from "lucide-react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +18,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { SyncControl } from "@/components/SyncControl";
+import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { ErrorBlock } from "@/components/StateBlocks";
 import type { DataSourceStatus } from "@/lib/usage-types";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -137,13 +132,13 @@ export function AppShell({
                 <SelectTrigger size="sm" className="w-36" aria-label="选择日期范围">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <FilterSelectContent>
                   {RANGE_OPTIONS.map((option) => (
                     <SelectItem key={option.key} value={option.key}>
                       {option.label}
                     </SelectItem>
                   ))}
-                </SelectContent>
+                </FilterSelectContent>
               </Select>
             </div>
           </div>

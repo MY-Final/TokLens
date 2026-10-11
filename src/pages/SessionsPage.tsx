@@ -1,17 +1,12 @@
 /** 会话明细：按区间与客户端筛选，展示元数据与用量（无正文）。 */
 
 import { DashboardCard } from "@/components/DashboardCard";
+import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { CardContent } from "@/components/ui/card";
 
 import { useState } from "react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SessionTable } from "@/components/SessionTable";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getSessions } from "@/lib/api";
@@ -48,13 +43,13 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
           <SelectTrigger size="sm" className="w-44" aria-label="选择客户端">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <FilterSelectContent>
             <SelectItem value="all">全部客户端</SelectItem>
             <SelectItem value="codex">Codex</SelectItem>
             <SelectItem value="claude_code">Claude Code</SelectItem>
             <SelectItem value="opencode">OpenCode</SelectItem>
             <SelectItem value="dsh">DSH</SelectItem>
-          </SelectContent>
+          </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">
           显示 {formatNumber(rows.length)} / 最多 {formatNumber(SESSION_LIMIT)} 个会话
