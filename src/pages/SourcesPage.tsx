@@ -16,8 +16,9 @@ import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 
 const CLIENT_HINTS: Record<string, string> = {
   codex: "读取 %USERPROFILE%\\.codex\\sessions 下的 rollout-*.jsonl（只读）。",
-  claude_code: "采集器尚未实现：接入后会读取 ~/.claude/projects 下的会话转录。",
-  opencode: "采集器尚未实现：接入后会读取本地 opencode.db（只读）。",
+  claude_code: "只读 ~/.claude/projects 下的会话与子代理转录；支持 CLAUDE_CONFIG_DIR。",
+  dsh: "只读 ~/.dsh/sessions 下的 session.jsonl / .jsonl.zstd；支持 DSH_SESSIONS_DIR。",
+  opencode: "只读 ~/.local/share/opencode/opencode.db，包含 WAL 更新；支持 XDG_DATA_HOME。",
 };
 
 export function SourcesPage({
@@ -49,7 +50,7 @@ export function SourcesPage({
           <CardHeader>
             <CardTitle>同步</CardTitle>
             <CardDescription>
-              启动时会自动执行一次增量同步；只解析发生变化的文件，其余直接跳过。
+              启动时同步全部客户端；转录变化时重新聚合，OpenCode 每次读取元数据快照。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -78,7 +79,7 @@ export function SourcesPage({
                 </dl>
                 {report.rootMissing ? (
                   <p className="text-xs text-destructive">
-                    未找到 Codex 数据目录：%USERPROFILE%\.codex\sessions 不存在。
+                    未发现客户端数据源。请确认客户端已产生本地会话记录。
                   </p>
                 ) : null}
                 {report.filesFailed > 0 ? (
@@ -133,7 +134,7 @@ export function SourcesPage({
         </DashboardCard>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         {(status?.clients ?? []).map((client) => (
           <DashboardCard
             key={client.client}
@@ -144,7 +145,14 @@ export function SourcesPage({
                 <ClientIdentity client={client.client} compact />
                 {client.supported ? (
                   <Badge variant="secondary" className="font-normal">
-                    已接入
+                    {report?.clients.find((result) => result.client === client.client)?.error
+                      ? "同步异常"
+                      : report?.clients.find((result) => result.client === client.client)?.report
+                            ?.rootMissing
+                        ? "未发现数据源"
+                        : client.sessions > 0
+                          ? "已连接"
+                          : "暂无数据"}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="font-normal text-muted-foreground">
@@ -155,6 +163,11 @@ export function SourcesPage({
               <CardDescription>{CLIENT_HINTS[client.client]}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
+              {report?.clients.find((result) => result.client === client.client)?.error ? (
+                <p className="text-xs text-destructive">
+                  {report.clients.find((result) => result.client === client.client)?.error}
+                </p>
+              ) : null}
               {client.supported ? (
                 <>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
@@ -199,7 +212,7 @@ export function SourcesPage({
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        口径未知项：Codex
+        口径未知项：Codex / OpenCode
         的“缓存写入”与输入的关系无法从本机数据判定，因此不计入总量，仅在会话与分桶中单独展示。
       </p>
     </div>

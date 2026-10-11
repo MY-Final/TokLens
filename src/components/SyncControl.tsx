@@ -42,7 +42,7 @@ export function SyncControl({
           {running
             ? "同步中"
             : sync?.error
-              ? "同步失败"
+              ? "同步异常"
               : sync?.finishedAtMs
                 ? "已同步"
                 : "尚未同步"}
@@ -76,7 +76,7 @@ export function SyncControl({
             </Button>
           </TooltipTrigger>
           <TooltipContent className="max-w-64 text-xs leading-relaxed">
-            忽略增量水位，重新解析全部 Codex 会话文件（用于修复或文件被替换后重建）。
+            忽略增量水位，重新采集全部客户端用量（用于修复或文件被替换后重建）。
           </TooltipContent>
         </Tooltip>
       </div>

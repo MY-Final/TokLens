@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
-import { getDataSourceStatus, onSyncEvent, syncCodex, toErrorMessage } from "@/lib/api";
+import { getDataSourceStatus, onSyncEvent, syncUsage, toErrorMessage } from "@/lib/api";
 import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 
 const RUNNING_POLL_MS = 2_000;
@@ -101,7 +101,7 @@ export function useDataSourceStatus(): SyncController {
     async (force = false) => {
       setSyncBusy(true);
       try {
-        const state = await syncCodex(force);
+        const state = await syncUsage(force);
         applySync(state);
       } catch (cause: unknown) {
         setError(toErrorMessage(cause));

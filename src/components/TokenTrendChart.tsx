@@ -19,12 +19,35 @@ const SERIES = [
   { key: "input", label: "输入", color: "var(--chart-2)", dotClass: "bg-chart-2" },
   { key: "output", label: "输出", color: "var(--chart-3)", dotClass: "bg-chart-3" },
   { key: "reasoning", label: "推理", color: "var(--chart-4)", dotClass: "bg-chart-4" },
+  {
+    key: "cacheWrite",
+    label: "缓存写入（计入总量）",
+    color: "var(--chart-5)",
+    dotClass: "bg-chart-5",
+  },
 ] as const;
 const TOTAL_SERIES = [
-  { key: "codex", label: "Codex", color: "var(--chart-1)", dotClass: "bg-chart-1" },
+  { key: "codex", label: "Codex", color: "var(--client-codex)", dotClass: "bg-client-codex" },
+  {
+    key: "claude_code",
+    label: "Claude Code",
+    color: "var(--client-claude)",
+    dotClass: "bg-client-claude",
+  },
+  {
+    key: "opencode",
+    label: "OpenCode",
+    color: "var(--client-opencode)",
+    dotClass: "bg-client-opencode",
+  },
+  { key: "dsh", label: "DSH", color: "var(--client-dsh)", dotClass: "bg-client-dsh" },
 ] as const;
 const CHART_CONFIG = {
-  codex: { label: "Codex", color: "var(--chart-1)" },
+  codex: { label: "Codex", color: "var(--client-codex)" },
+  claude_code: { label: "Claude Code", color: "var(--client-claude)" },
+  opencode: { label: "OpenCode", color: "var(--client-opencode)" },
+  dsh: { label: "DSH", color: "var(--client-dsh)" },
+  cacheWrite: { label: "缓存写入（计入总量）", color: "var(--chart-5)" },
   cacheRead: { label: "缓存读取", color: "var(--chart-1)" },
   input: { label: "输入（未命中缓存）", color: "var(--chart-2)" },
   output: { label: "输出（不含推理）", color: "var(--chart-3)" },
@@ -52,7 +75,7 @@ function TokenTooltip(props: ComponentProps<typeof ChartTooltipContent>) {
         )}
       />
       <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-        <p>客户端实测 · 含缓存读取，不含缓存写入</p>
+        <p>客户端记录 · Claude Code / DSH 缓存写入计入总量</p>
         <p>费用暂不可用 · 无可靠价格来源</p>
       </div>
     </div>
@@ -78,14 +101,22 @@ export function TokenTrendChart({
   const gradientId = useId().replace(/:/g, "");
   const data = (buckets ?? []).map((bucket) => ({
     label: formatDateTime(bucket.dayStartMs).split(" ")[0],
-    codex: bucket.totals.totalTokens,
+    total: bucket.totals.totalTokens,
+    codex: bucket.clients.find((client) => client.client === "codex")?.totalTokens ?? 0,
+    claude_code: bucket.clients.find((client) => client.client === "claude_code")?.totalTokens ?? 0,
+    opencode: bucket.clients.find((client) => client.client === "opencode")?.totalTokens ?? 0,
+    dsh: bucket.clients.find((client) => client.client === "dsh")?.totalTokens ?? 0,
+    cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,
     reasoning: bucket.totals.reasoningTokens,
     cacheRead: bucket.totals.cacheReadTokens,
   }));
-  const hasData = data.some((entry) => entry.codex > 0);
-  const series = mode === "client" ? TOTAL_SERIES : SERIES;
+  const hasData = data.some((entry) => entry.total > 0);
+  const visibleClients = TOTAL_SERIES.filter((item) =>
+    buckets?.some((bucket) => bucket.clients.some((client) => client.client === item.key)),
+  );
+  const series = mode === "client" ? visibleClients : SERIES;
   const firstDate = data[0]?.label;
   const lastDate = data[data.length - 1]?.label;
   return (
@@ -100,7 +131,7 @@ export function TokenTrendChart({
         <Tabs value={mode} onValueChange={setMode} aria-label="趋势展示方式">
           <TabsList className="h-8 bg-muted/70">
             <TabsTrigger value="client" className="text-xs">
-              Codex 总量
+              客户端对比
             </TabsTrigger>
             <TabsTrigger value="tokens" className="text-xs">
               Token 构成
@@ -117,13 +148,13 @@ export function TokenTrendChart({
           ) : !hasData ? (
             <EmptyBlock
               title="所选区间没有 Token 记录"
-              description="换个时间范围，或点击刷新同步 Codex 数据。"
+              description="换个时间范围，或点击刷新同步客户端数据。"
             />
           ) : (
             <ChartContainer
               config={CHART_CONFIG}
               className="aspect-auto h-56 w-full xl:h-64"
-              aria-label={`${rangeLabel} Codex 每日 Token ${mode === "client" ? "总量" : "构成"}趋势`}
+              aria-label={`${rangeLabel} 每日 Token ${mode === "client" ? "总量" : "构成"}趋势`}
             >
               <AreaChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
                 <defs>
@@ -201,7 +232,7 @@ export function TokenTrendChart({
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {description ??
-            "按会话开始日期归属累计用量，不代表当天请求增量。Token 构成分桶互不重叠，缓存写入单独记录、不计入总量。"}
+            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；仅 Claude Code / DSH 的缓存写入计入总量，缺失字段不推算。"}
         </p>
       </CardContent>
     </DashboardCard>

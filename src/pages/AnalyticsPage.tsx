@@ -28,8 +28,9 @@ const MS_PER_DAY = 86_400_000;
 const CLIENT_FILTERS: ReadonlyArray<{ value: string; label: string; client: ClientKey | null }> = [
   { value: "all", label: "全部客户端", client: null },
   { value: "codex", label: "Codex", client: "codex" },
-  { value: "claude_code", label: "Claude Code（等待采集）", client: "claude_code" },
-  { value: "opencode", label: "OpenCode（等待采集）", client: "opencode" },
+  { value: "claude_code", label: "Claude Code", client: "claude_code" },
+  { value: "opencode", label: "OpenCode", client: "opencode" },
+  { value: "dsh", label: "DSH", client: "dsh" },
 ];
 
 export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
@@ -44,6 +45,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
         fromMs: range.fromMs,
         toMs: range.toMs,
         todayFromMs: 0,
+        client,
       }),
     `analytics-overview:${keySuffix}`,
   );
@@ -67,16 +69,21 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
     {
       label: "输入（未命中缓存）",
       value: totals?.inputTokens ?? 0,
-      note: "已扣除客户端记录中命中缓存的输入部分",
+      note: "按各客户端语义分离缓存读取",
       counted: true,
     },
     {
       label: "输出（不含推理）",
       value: totals?.outputTokens ?? 0,
-      note: "已扣除推理 token，避免与 output 重复计算",
+      note: "包含关系已扣除；缺失推理字段不推算",
       counted: true,
     },
-    { label: "推理", value: totals?.reasoningTokens ?? 0, note: "Codex 单独记录", counted: true },
+    {
+      label: "推理",
+      value: totals?.reasoningTokens ?? 0,
+      note: "按客户端记录与包含关系归一化",
+      counted: true,
+    },
     {
       label: "缓存读取",
       value: totals?.cacheReadTokens ?? 0,
@@ -85,9 +92,10 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
     },
     {
       label: "缓存写入",
-      value: totals?.cacheWriteTokens ?? 0,
-      note: "与输入的关系未确认，不计入总量",
-      counted: false,
+      value:
+        client === null ? (totals?.countedCacheWriteTokens ?? 0) : (totals?.cacheWriteTokens ?? 0),
+      note: "Claude Code / DSH 计入总量；其他客户端单独记录",
+      counted: client === null || client === "claude_code" || client === "dsh",
     },
   ];
 
@@ -100,18 +108,14 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
           </SelectTrigger>
           <SelectContent>
             {CLIENT_FILTERS.map((entry) => (
-              <SelectItem
-                key={entry.value}
-                value={entry.value}
-                disabled={entry.value !== "all" && entry.value !== "codex"}
-              >
+              <SelectItem key={entry.value} value={entry.value}>
                 {entry.label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <span className="text-xs text-muted-foreground">
-          当前只统计已接入的 Codex 数据；Claude Code、OpenCode 采集器尚未实现。
+          统计本机 Codex、Claude Code、OpenCode 与 DSH 的已知用量。
         </span>
       </div>
 
@@ -140,7 +144,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
         <CardHeader>
           <CardTitle>Token 分桶构成</CardTitle>
           <CardDescription>
-            分桶互不重叠，可直接相加得到规范总量；缓存写入独立展示，不计入总量。
+            分桶按各客户端口径归一化；仅 Claude Code / DSH 的缓存写入计入规范总量。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -158,7 +162,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
           ) : !overview.data?.range.sessions ? (
             <EmptyBlock
               title="所选区间没有用量数据"
-              description="调整时间范围，或先同步本机 Codex 会话。"
+              description="调整时间范围，或先同步本机客户端会话。"
             />
           ) : (
             <ul className="divide-y divide-border">

@@ -24,8 +24,7 @@ import { formatCompactTokens, formatNumber, formatPercent, formatTokensOrDash } 
 import type { DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
-  "规范总量 = 未命中缓存输入 + 非推理输出 + 推理 + 缓存读取；缓存写入是客户端独立上报值，" +
-  "与输入的关系未确认，因此不计入总量。会话总量取自客户端累计值，子集字段已扣除，不会重复计算。";
+  "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，Claude Code / DSH 按去重后的请求求和。Claude Code / DSH 缓存写入计入总量；缺失值保持未知。";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -105,7 +104,7 @@ export function OverviewPage({
             value={formatCompactTokens(bucket?.totals.totalTokens ?? 0)}
             detail={`${formatNumber(bucket?.totals.totalTokens ?? 0)} Token`}
             unit={`（${range.label}）`}
-            hint={bucket?.totals.totalTokens ? "Codex 占比 100% · 实测" : "Codex · 暂无用量"}
+            hint={bucket?.totals.totalTokens ? "本机客户端 · 已知用量" : "本机客户端 · 暂无用量"}
             tooltip={TOTAL_TOOLTIP}
             icon={Database}
           />
@@ -188,7 +187,7 @@ export function OverviewPage({
       </DashboardCard>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        口径说明：所有数值来自本机 Codex 会话文件的实测字段。 缺失值显示为"—"，不按 0
+        口径说明：所有数值来自本机客户端记录的统计字段。 缺失值显示为"—"，不按 0
         计入合计；费用没有可靠来源，页面不展示任何金额。
         {bucket && bucket.sessionsPartial > 0
           ? ` 当前区间有 ${formatNumber(bucket.sessionsPartial)} 个会话的请求明细不完整（源文件被分页或续接），其总量仍取客户端累计值。`

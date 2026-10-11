@@ -118,7 +118,7 @@ export function AppShell({
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 px-6 py-3">
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="size-1.5 rounded-full bg-client-codex" aria-hidden="true" />
-            Codex / 本地工作空间
+            本地 AI 工作空间
           </span>
           <SyncControl sync={sync} busy={syncBusy} onSync={onSync} compact />
         </header>

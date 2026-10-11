@@ -51,12 +51,9 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
           <SelectContent>
             <SelectItem value="all">全部客户端</SelectItem>
             <SelectItem value="codex">Codex</SelectItem>
-            <SelectItem value="claude_code" disabled>
-              Claude Code（等待采集）
-            </SelectItem>
-            <SelectItem value="opencode" disabled>
-              OpenCode（等待采集）
-            </SelectItem>
+            <SelectItem value="claude_code">Claude Code</SelectItem>
+            <SelectItem value="opencode">OpenCode</SelectItem>
+            <SelectItem value="dsh">DSH</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">
