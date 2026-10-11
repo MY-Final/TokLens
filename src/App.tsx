@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onDesktopError, onDesktopEvent, onTrayNavigate } from "@/lib/api";
 import { CloseWindowDialog } from "@/components/CloseWindowDialog";
+import { UpdateAnnouncement } from "@/components/UpdateAnnouncement";
 
 import { AppShell, type PageKey } from "@/components/AppShell";
 import { useDataSourceStatus } from "@/hooks/use-data-source-status";
@@ -56,7 +57,7 @@ export default function App() {
       selectedRange?.key === "custom"
         ? selectedRange
         : resolveRange(
-            selectedRange?.key ?? settings.settings?.defaultRange ?? "30d",
+            selectedRange?.key ?? settings.settings?.defaultRange ?? "today",
             status?.firstEventMs ?? null,
             new Date(nowMs),
           ),
@@ -69,6 +70,11 @@ export default function App() {
     },
     [syncNow],
   );
+
+  const handleOpenUpdates = useCallback(() => {
+    setPage("settings");
+    setUpdateFocusToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -113,15 +119,19 @@ export default function App() {
     <TooltipProvider delayDuration={200}>
       <AppShell
         page={page}
-        version={settings.appInfo?.version ?? null}
+        sidebarCollapsed={settings.settings?.sidebarCollapsed ?? false}
+        sidebarBusy={settings.busy || !settings.settings}
+        onSidebarCollapsedChange={(sidebarCollapsed) => {
+          void settings.patch({ sidebarCollapsed });
+        }}
         collectionPaused={settings.settings?.collectionPaused ?? false}
         range={range}
         nowMs={nowMs}
         status={status}
         syncBusy={syncBusy}
-        error={error}
+        error={error ?? settings.error}
         onRetry={() => {
-          void reload();
+          void Promise.all([reload(), settings.reload()]);
         }}
         onNavigate={handleNavigate}
         onRangeChange={setSelectedRange}
@@ -159,6 +169,11 @@ export default function App() {
           />
         ) : null}
       </AppShell>
+      <UpdateAnnouncement
+        state={updates.state}
+        currentVersion={settings.appInfo?.version ?? null}
+        onOpenUpdates={handleOpenUpdates}
+      />
       <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
       <CloseWindowDialog />
     </TooltipProvider>

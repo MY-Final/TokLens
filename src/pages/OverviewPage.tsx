@@ -164,6 +164,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
       )}
 
       <TokenTrendChart
+        selectedRange={range}
         rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}
@@ -172,6 +173,9 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
       />
 
       <CalendarHeatmap
+        selectedRange={
+          calendarPeriod === "year" ? { fromMs: calendarStart, toMs: range.toMs } : range
+        }
         rangeLabel={calendarPeriod === "year" ? "最近一年（365 天）" : trendRangeLabel}
         buckets={calendarData.data}
         loading={calendarData.loading}

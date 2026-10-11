@@ -1,16 +1,9 @@
 /** 侧边导航 + 顶部工具栏。 */
 
-import type { ReactNode } from "react";
-import {
-  BarChart3,
-  Database,
-  LayoutDashboard,
-  ListTree,
-  ShieldCheck,
-  Settings,
-} from "lucide-react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { BarChart3, Database, LayoutDashboard, ListTree, PanelLeft, Settings } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -28,8 +21,8 @@ import { SyncControl } from "@/components/SyncControl";
 import { DateRangePicker } from "@/components/DateRangePicker";
 import { ErrorBlock } from "@/components/StateBlocks";
 import type { DataSourceStatus } from "@/lib/usage-types";
-import { formatDateTime, formatNumber } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
+import { cn } from "@/lib/utils";
 
 export type PageKey = "overview" | "analytics" | "sessions" | "sources" | "settings";
 
@@ -50,7 +43,9 @@ const PAGE_TITLES: Record<PageKey, string> = {
 
 export function AppShell({
   page,
-  version,
+  sidebarCollapsed,
+  sidebarBusy,
+  onSidebarCollapsedChange,
   collectionPaused,
   range,
   nowMs,
@@ -64,7 +59,9 @@ export function AppShell({
   onRetry,
 }: {
   page: PageKey;
-  version: string | null;
+  sidebarCollapsed: boolean;
+  sidebarBusy: boolean;
+  onSidebarCollapsedChange: (collapsed: boolean) => void;
   collectionPaused: boolean;
   range: DateRange;
   nowMs: number;
@@ -78,22 +75,38 @@ export function AppShell({
   onRetry: () => void;
 }) {
   const sync = status?.sync;
+  useEffect(() => {
+    const toggle = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "b" || (!event.ctrlKey && !event.metaKey)) return;
+      // Intercept the vendor shortcut so preferences use only the native settings store.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!sidebarBusy) onSidebarCollapsedChange(!sidebarCollapsed);
+    };
+    window.addEventListener("keydown", toggle, true);
+    return () => window.removeEventListener("keydown", toggle, true);
+  }, [sidebarCollapsed, sidebarBusy, onSidebarCollapsedChange]);
   return (
-    <SidebarProvider>
-      <Sidebar
-        collapsible="none"
-        className="sticky top-0 h-svh w-48 shrink-0 border-r border-sidebar-border lg:w-56"
-      >
-        <SidebarHeader className="px-5 py-7">
+    <SidebarProvider
+      open={!sidebarCollapsed}
+      onOpenChange={(open) => {
+        if (!sidebarBusy) onSidebarCollapsedChange(!open);
+      }}
+      style={{ "--sidebar-width": "208px", "--sidebar-width-icon": "56px" } as CSSProperties}
+    >
+      <Sidebar collapsible="icon" className="border-sidebar-border">
+        <SidebarHeader className="h-16 justify-center px-4 group-data-[collapsible=icon]:px-3">
           <div className="flex items-center gap-2.5">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <BarChart3 className="size-5" aria-hidden="true" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-foreground">TokLens</span>
+            <span className="text-lg font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
+              TokLens
+            </span>
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup className="px-3">
+          <SidebarGroup className="px-3 group-data-[collapsible=icon]:px-3">
             <SidebarGroupContent>
               <SidebarMenu>
                 {NAV_ITEMS.map((item) => (
@@ -114,10 +127,13 @@ export function AppShell({
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        <SidebarFooter className="gap-3 px-5 py-5">
+        <SidebarFooter className="px-3 py-4">
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
+                tooltip="设置"
+                aria-current={page === "settings" ? "page" : undefined}
+                className="h-10 gap-3 rounded-lg px-3 text-muted-foreground data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground"
                 isActive={page === "settings"}
                 onClick={() => onNavigate("settings")}
               >
@@ -126,43 +142,27 @@ export function AppShell({
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ShieldCheck className="size-3.5" aria-hidden="true" />
-            本地优先 · 隐私保护
-          </div>
-          <span className="font-mono text-xs text-muted-foreground/80">
-            TokLens {version ? `v${version}` : ""}
-          </span>
         </SidebarFooter>
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 px-6 py-3">
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-client-codex" aria-hidden="true" />
-            本地 AI 工作空间
-          </span>
-          <div className="flex items-center gap-3">
-            {collectionPaused && (
-              <button onClick={() => onNavigate("settings")} aria-label="采集已暂停，打开设置">
-                <Badge variant="outline">采集已暂停</Badge>
-              </button>
-            )}
-            <SyncControl sync={sync} busy={syncBusy} onSync={onSync} compact />
+        <header className="flex h-16 items-center justify-between gap-3 border-b border-border/50 px-5">
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              disabled={sidebarBusy}
+              onClick={() => onSidebarCollapsedChange(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? "展开侧边栏（Ctrl+B）" : "收起侧边栏（Ctrl+B）"}
+              aria-expanded={!sidebarCollapsed}
+            >
+              <PanelLeft className="size-4" aria-hidden="true" />
+            </Button>
+            <h1 className="truncate text-base font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
           </div>
-        </header>
-        <div className="mx-auto w-full max-w-[1600px] space-y-5 p-5 lg:p-7">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
-              <p className="mt-1 text-xs text-muted-foreground">本地 AI 编程助手使用情况统计</p>
-            </div>
+          <div className="flex min-w-0 items-center gap-2">
             {page !== "settings" && (
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="hidden text-xs text-muted-foreground xl:inline">
-                  {sync?.report ? `已扫描 ${formatNumber(sync.report.filesSeen)} 个文件 · ` : ""}
-                  上次同步 {formatDateTime(sync?.finishedAtMs ?? null)}
-                </span>
+              <div className="max-w-80 min-w-0">
                 <DateRangePicker
                   range={range}
                   firstEventMs={status?.firstEventMs ?? null}
@@ -171,7 +171,22 @@ export function AppShell({
                 />
               </div>
             )}
+            <SyncControl
+              sync={sync}
+              busy={syncBusy}
+              onSync={onSync}
+              paused={collectionPaused}
+              onOpenSettings={() => onNavigate("settings")}
+              compact
+            />
           </div>
+        </header>
+        <div
+          className={cn(
+            "w-full",
+            page !== "settings" && "mx-auto max-w-[1600px] space-y-5 p-5 lg:p-7",
+          )}
+        >
           {error && page !== "sources" && page !== "settings" ? (
             <ErrorBlock message={error} onRetry={onRetry} />
           ) : null}

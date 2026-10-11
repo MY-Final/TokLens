@@ -36,6 +36,7 @@ export function RequestActivityView({
       onRetry={activity.reload}
       rangeLabel={rangeLabel}
       client={client}
+      selectedRange={range}
     />
   );
 }

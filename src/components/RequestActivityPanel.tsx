@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
+import { DataExplanation } from "@/components/DataExplanation";
+import { UsageTooltip } from "@/components/UsageTooltip";
+import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
@@ -106,6 +109,7 @@ function ActivityCell({
   maxValue,
   prefix = "",
   className,
+  selectedRange,
 }: {
   ms: number;
   totals: RequestTotals | undefined;
@@ -113,6 +117,7 @@ function ActivityCell({
   maxValue: number;
   prefix?: string;
   className?: string;
+  selectedRange?: DailyRange;
 }) {
   const note = description(totals, metric);
   return (
@@ -123,11 +128,14 @@ function ActivityCell({
       label={`${prefix}${dateLabel(ms)}，${note}`}
       className={className}
     >
-      <p className="font-medium">
-        {prefix}
-        {dateLabel(ms)}
-      </p>
-      <p>{note}</p>
+      <UsageTooltip
+        title={`${prefix}${dateLabel(ms)} · ${dailyScope(ms, selectedRange)}`}
+        total={metricValue(totals, "tokens")}
+        requests={totals?.requests}
+        sessions={totals?.sessions}
+        unknown={totals?.requestsWithoutUsage}
+        basis="requests"
+      />
     </HeatmapCell>
   );
 }
@@ -139,6 +147,7 @@ export function RequestActivityPanel({
   onRetry,
   rangeLabel,
   client,
+  selectedRange,
 }: {
   data: RequestActivity | null;
   loading: boolean;
@@ -146,6 +155,7 @@ export function RequestActivityPanel({
   onRetry: () => void;
   rangeLabel: string;
   client?: ClientKey | null;
+  selectedRange?: DailyRange;
 }) {
   const [metric, setMetric] = useState<Metric>("tokens");
   const days = data?.daily ?? [];
@@ -164,7 +174,7 @@ export function RequestActivityPanel({
       <CardHeader className="gap-3 px-5">
         <CardTitle className="text-sm">请求发生时间统计</CardTitle>
         <CardDescription className="text-xs">
-          {rangeLabel} · 本地时区 · 仅已记录请求，未用会话累计值补齐
+          {rangeLabel} · 本地时区 · 仅已记录请求
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
@@ -193,16 +203,20 @@ export function RequestActivityPanel({
               </p>
             ) : null}
             {coverage ? (
-              <p className="rounded-md border p-3 text-xs leading-relaxed text-muted-foreground tabular-nums">
-                采集覆盖（所有已采集日期，仅按客户端筛选，与当前日期范围独立）：有时间{" "}
-                {formatNumber(coverage.timedRequests)} / 已记录{" "}
-                {formatNumber(coverage.recordedRequests)}{" "}
-                条。此处为已采集记录计数，不能代表实际请求或 Token 的完整覆盖。无时间{" "}
-                {formatNumber(coverage.untimedRequests)} 条、估算{" "}
-                {formatNumber(coverage.estimatedRequests)} 条不计入时间视图；
-                {formatNumber(coverage.sessionsPartial)} 个会话明细不完整，
-                {formatNumber(coverage.sessionsWithoutRequests)} 个会话没有请求明细。
-              </p>
+              <DataExplanation
+                summary={`按请求时间 · 实测 / 直接换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 存在明细不完整" : ""}${coverage.estimatedRequests > 0 ? " · 已排除估算记录" : ""}`}
+              >
+                <p className="tabular-nums">
+                  采集覆盖（所有已采集日期，仅按客户端筛选，与当前日期范围独立）：有时间{" "}
+                  {formatNumber(coverage.timedRequests)} / 已记录{" "}
+                  {formatNumber(coverage.recordedRequests)}{" "}
+                  条。此处为已采集记录计数，不能代表实际请求或 Token 的完整覆盖。无时间{" "}
+                  {formatNumber(coverage.untimedRequests)} 条、估算{" "}
+                  {formatNumber(coverage.estimatedRequests)} 条不计入时间视图；
+                  {formatNumber(coverage.sessionsPartial)} 个会话明细不完整，
+                  {formatNumber(coverage.sessionsWithoutRequests)} 个会话没有请求明细。
+                </p>
+              </DataExplanation>
             ) : null}
             {!hasData ? (
               <EmptyBlock
@@ -239,7 +253,9 @@ export function RequestActivityPanel({
                 <TabsContent value="trend" className="space-y-3">
                   <ChartContainer
                     config={CHART_CONFIG}
-                    className="aspect-auto h-56 w-full"
+                    className={
+                      days.length === 1 ? "aspect-auto h-40 w-full" : "aspect-auto h-56 w-full"
+                    }
                     aria-label={`${rangeLabel} 按请求发生日期的${unit}趋势，精确值见下方日期列表`}
                   >
                     <LineChart
@@ -275,8 +291,14 @@ export function RequestActivityPanel({
                           );
                           return (
                             <div className="max-w-72 space-y-1 rounded-md border bg-popover p-3 text-xs text-popover-foreground shadow-md">
-                              <p className="font-medium">{String(label)} · 本地日期</p>
-                              <p>{description(bucket?.totals, metric)}</p>
+                              <UsageTooltip
+                                title={`${String(label)} · ${bucket ? dailyScope(bucket.dayStartMs, selectedRange) : "本地日期"}`}
+                                total={metricValue(bucket?.totals, "tokens")}
+                                requests={bucket?.totals.requests}
+                                sessions={bucket?.totals.sessions}
+                                unknown={bucket?.totals.requestsWithoutUsage}
+                                basis="requests"
+                              />
                             </div>
                           );
                         }}
@@ -286,17 +308,16 @@ export function RequestActivityPanel({
                         stroke="var(--chart-1)"
                         strokeWidth={2}
                         connectNulls={false}
-                        dot={days.length === 1}
+                        dot={days.length === 1 ? { r: 6 } : false}
                         isAnimationActive={false}
                       />
                     </LineChart>
                   </ChartContainer>
-                  <p className="text-xs text-muted-foreground">
-                    单位：{unit}；缺失用量保留断点。下方日期格可悬停或键盘聚焦查看精确值及来源。
-                  </p>
+                  <p className="text-xs text-muted-foreground">单位：{unit}</p>
                   <div className="flex gap-1 overflow-x-auto py-2">
                     {days.map((day) => (
                       <ActivityCell
+                        selectedRange={selectedRange}
                         key={day.dayStartMs}
                         ms={day.dayStartMs}
                         totals={day.totals}
@@ -331,6 +352,7 @@ export function RequestActivityPanel({
                         {week.map((day) =>
                           day.inRange ? (
                             <ActivityCell
+                              selectedRange={selectedRange}
                               key={day.ms}
                               ms={day.ms}
                               totals={day.bucket?.totals}
@@ -380,6 +402,7 @@ export function RequestActivityPanel({
                             {days.map((day) => (
                               <td key={day.dayStartMs} className="py-1 pr-1">
                                 <ActivityCell
+                                  selectedRange={selectedRange}
                                   ms={day.dayStartMs}
                                   totals={
                                     day.clients.find((entry) => entry.client === key)?.totals ??
@@ -406,11 +429,6 @@ export function RequestActivityPanel({
         ) : (
           <EmptyBlock title="暂无请求统计" description="同步本地客户端数据后重试。" />
         )}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          按已记录请求的发生时间统计实测 /
-          直接换算用量，不含估算与无时间记录。会话可在多个日期重复出现，日会话数不可相加；区间会话数由后端去重。未记录请求不等于没有活动。未知
-          Token 显示 —，已知零值仍显示 0；有缺失用量时标注已知子集。
-        </p>
       </CardContent>
     </DashboardCard>
   );

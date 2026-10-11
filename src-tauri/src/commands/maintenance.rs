@@ -32,23 +32,7 @@ pub async fn clear_statistics(app: AppHandle) -> Result<SettingsSnapshot, Comman
 
 #[tauri::command]
 pub fn reset_settings(app: AppHandle) -> Result<SettingsSnapshot, CommandError> {
-    let defaults = AppSettings::default();
-    crate::desktop::preferences::update(
-        &app,
-        SettingsPatch {
-            close_behavior: Some(defaults.close_behavior),
-            autostart: Some(defaults.autostart),
-            autostart_hidden: Some(defaults.autostart_hidden),
-            remember_window: Some(defaults.remember_window),
-            theme: Some(defaults.theme),
-            default_range: Some(defaults.default_range),
-            sync_on_start: Some(defaults.sync_on_start),
-            sync_interval_minutes: Some(defaults.sync_interval_minutes),
-            collection_paused: Some(defaults.collection_paused),
-            enabled_clients: Some(defaults.enabled_clients),
-            automatic_updates: Some(defaults.automatic_updates),
-        },
-    )
+    crate::desktop::preferences::update(&app, AppSettings::default().into())
 }
 
 #[tauri::command]

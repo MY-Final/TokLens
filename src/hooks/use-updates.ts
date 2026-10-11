@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useState } from "react";
 import {
   checkUpdates,
   downloadUpdate,
@@ -14,18 +13,15 @@ export function useUpdates() {
   const [state, setState] = useState<UpdateState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const notified = useRef<string | null>(null);
   const accept = useCallback((next: UpdateState) => {
     setState(next);
-    if (next.phase === "available" && next.version && notified.current !== next.version) {
-      notified.current = next.version;
-      toast.info(`TokLens ${next.version} 可用，请在设置中查看更新`);
-    }
   }, []);
   useEffect(() => {
     let disposed = false;
+    let receivedEvent = false;
     let stop: (() => void) | undefined;
     onUpdateState((next) => {
+      receivedEvent = true;
       if (!disposed) accept(next);
     })
       .then(async (unlisten) => {
@@ -35,7 +31,7 @@ export function useUpdates() {
         }
         stop = unlisten;
         const next = await getUpdateState();
-        if (!disposed) accept(next);
+        if (!disposed && !receivedEvent) accept(next);
       })
       .catch((cause: unknown) => {
         if (!disposed) setError(toErrorMessage(cause));

@@ -1,14 +1,12 @@
-import { useId, useState, type ComponentProps } from "react";
+import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
+import { DataExplanation } from "@/components/DataExplanation";
+import { UsageTooltip } from "@/components/UsageTooltip";
+import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { DashboardCard } from "@/components/DashboardCard";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { formatCompactTokens, formatDateTime, formatNumber } from "@/lib/format";
@@ -60,34 +58,6 @@ const CHART_CONFIG = {
   reasoning: { label: "推理", color: "var(--chart-4)" },
 } satisfies ChartConfig;
 
-function TokenTooltip(props: ComponentProps<typeof ChartTooltipContent>) {
-  if (!props.active || !props.payload?.length) return null;
-  return (
-    <div className="rounded-lg border border-border/70 bg-popover p-3 text-popover-foreground shadow-lg">
-      <ChartTooltipContent
-        {...props}
-        className="min-w-56 border-0 bg-transparent p-0 shadow-none"
-        labelFormatter={(label) => `${String(label)} · 本地日期`}
-        formatter={(value, name) => (
-          <div className="flex w-full items-center justify-between gap-6 py-0.5">
-            <span className="text-muted-foreground">
-              {CHART_CONFIG[String(name) as keyof typeof CHART_CONFIG]?.label ?? String(name)}
-            </span>
-            <span className="font-mono font-medium tabular-nums">
-              {formatNumber(Number(value))}{" "}
-              <span className="font-sans font-normal text-muted-foreground">Token</span>
-            </span>
-          </div>
-        )}
-      />
-      <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-        <p>客户端记录 · 缓存写入遵循各客户端统计口径</p>
-        <p>费用暂不可用 · 无可靠价格来源</p>
-      </div>
-    </div>
-  );
-}
-
 export function TokenTrendChart({
   buckets,
   loading,
@@ -95,6 +65,7 @@ export function TokenTrendChart({
   onRetry,
   description,
   rangeLabel,
+  selectedRange,
 }: {
   buckets: DailyTokenBucket[] | null;
   loading: boolean;
@@ -102,26 +73,37 @@ export function TokenTrendChart({
   onRetry: () => void;
   description?: string;
   rangeLabel: string;
+  selectedRange?: DailyRange;
 }) {
   const [mode, setMode] = useState("client");
   const gradientId = useId().replace(/:/g, "");
+  const clientValue = (bucket: DailyTokenBucket, key: string) => {
+    const entry = bucket.clients.find((client) => client.client === key);
+    return entry && entry.sessions > 0 && entry.sessions === entry.sessionsWithoutUsage
+      ? null
+      : (entry?.totalTokens ?? 0);
+  };
   const data = (buckets ?? []).map((bucket) => ({
     label: formatDateTime(bucket.dayStartMs).split(" ")[0],
-    total: bucket.totals.totalTokens,
-    codex: bucket.clients.find((client) => client.client === "codex")?.totalTokens ?? 0,
-    claude_code: bucket.clients.find((client) => client.client === "claude_code")?.totalTokens ?? 0,
-    opencode: bucket.clients.find((client) => client.client === "opencode")?.totalTokens ?? 0,
-    dsh: bucket.clients.find((client) => client.client === "dsh")?.totalTokens ?? 0,
-    kimi_code: bucket.clients.find((client) => client.client === "kimi_code")?.totalTokens ?? 0,
-    mimocode: bucket.clients.find((client) => client.client === "mimocode")?.totalTokens ?? 0,
-    pi_desktop: bucket.clients.find((client) => client.client === "pi_desktop")?.totalTokens ?? 0,
+    total:
+      bucket.sessions > 0 && bucket.sessions === bucket.sessionsWithoutUsage
+        ? null
+        : bucket.totals.totalTokens,
+    bucket,
+    codex: clientValue(bucket, "codex"),
+    claude_code: clientValue(bucket, "claude_code"),
+    opencode: clientValue(bucket, "opencode"),
+    dsh: clientValue(bucket, "dsh"),
+    kimi_code: clientValue(bucket, "kimi_code"),
+    mimocode: clientValue(bucket, "mimocode"),
+    pi_desktop: clientValue(bucket, "pi_desktop"),
     cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,
     reasoning: bucket.totals.reasoningTokens,
     cacheRead: bucket.totals.cacheReadTokens,
   }));
-  const hasData = data.some((entry) => entry.total > 0);
+  const hasData = buckets?.some((entry) => entry.sessions > 0) ?? false;
   const visibleClients = TOTAL_SERIES.filter((item) =>
     buckets?.some((bucket) => bucket.clients.some((client) => client.client === item.key)),
   );
@@ -149,7 +131,7 @@ export function TokenTrendChart({
         </Tabs>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
-        <div className="min-h-56">
+        <div className={data.length === 1 ? "min-h-40" : "min-h-56"}>
           {error ? (
             <ErrorBlock message={error} onRetry={onRetry} />
           ) : loading ? (
@@ -162,7 +144,9 @@ export function TokenTrendChart({
           ) : (
             <ChartContainer
               config={CHART_CONFIG}
-              className="aspect-auto h-56 w-full xl:h-64"
+              className={
+                data.length === 1 ? "aspect-auto h-40 w-full" : "aspect-auto h-56 w-full xl:h-64"
+              }
               aria-label={`${rangeLabel} 每日 Token ${mode === "client" ? "总量" : "构成"}趋势`}
             >
               <AreaChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
@@ -203,7 +187,36 @@ export function TokenTrendChart({
                   width={60}
                 />
                 <ChartTooltip
-                  content={<TokenTooltip />}
+                  content={({ active, label }) => {
+                    if (!active) return null;
+                    const entry = data.find((day) => day.label === String(label));
+                    if (!entry) return null;
+                    return (
+                      <div className="rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
+                        <UsageTooltip
+                          title={`${entry.label} · ${dailyScope(entry.bucket.dayStartMs, selectedRange)}`}
+                          total={entry.total}
+                          requests={entry.bucket.messages}
+                          sessions={entry.bucket.sessions}
+                          unknown={entry.bucket.sessionsWithoutUsage}
+                          partial={entry.bucket.sessionsPartial}
+                          basis="sessions"
+                        >
+                          {series.map((item) => (
+                            <div key={item.key} className="flex justify-between gap-6">
+                              <span className="text-muted-foreground">{item.label}</span>
+                              <span className="font-mono tabular-nums">
+                                {entry[item.key] === null
+                                  ? "—"
+                                  : formatNumber(entry[item.key] ?? 0)}{" "}
+                                Token
+                              </span>
+                            </div>
+                          ))}
+                        </UsageTooltip>
+                      </div>
+                    );
+                  }}
                   cursor={{ stroke: "var(--border)", strokeDasharray: "4 4" }}
                 />
                 {series.map((item) => (
@@ -215,7 +228,7 @@ export function TokenTrendChart({
                     stroke={item.color}
                     fill={`url(#${gradientId}-${item.key})`}
                     strokeWidth={2}
-                    dot={data.length === 1}
+                    dot={data.length === 1 ? { r: 6 } : false}
                     activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
                     isAnimationActive={false}
                   />
@@ -239,10 +252,14 @@ export function TokenTrendChart({
             </span>
           ) : null}
         </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {description ??
-            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
-        </p>
+        <DataExplanation
+          summary={`按会话开始日 · 会话累计 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+        >
+          <p>
+            {description ??
+              "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
+          </p>
+        </DataExplanation>
       </CardContent>
     </DashboardCard>
   );

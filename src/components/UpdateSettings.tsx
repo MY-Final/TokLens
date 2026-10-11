@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -14,7 +13,6 @@ import { SettingsRow, SettingsSection, SettingsSwitch } from "@/components/Setti
 import type { SettingsController } from "@/hooks/use-settings";
 import type { UpdatesController } from "@/hooks/use-updates";
 import type { UpdatePhase } from "@/lib/settings-types";
-import { openProjectPage, toErrorMessage } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
 
 const LABELS: Record<UpdatePhase, string> = {
@@ -51,7 +49,7 @@ export function UpdateSettings({
   return (
     <>
       <SettingsSection
-        title="更新与关于"
+        title="更新"
         description="稳定版通过 GitHub Releases 分发，安装前验证更新签名。"
       >
         <SettingsRow title="当前版本">
@@ -136,17 +134,6 @@ export function UpdateSettings({
             </p>
           </div>
         )}
-        <SettingsRow title="TokLens" description="本地优先的 AI 编程助手用量统计工具。">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              void openProjectPage().catch((cause: unknown) => toast.error(toErrorMessage(cause)));
-            }}
-          >
-            GitHub 项目
-          </Button>
-        </SettingsRow>
       </SettingsSection>
       <Dialog open={confirm} onOpenChange={setConfirm}>
         <DialogContent>

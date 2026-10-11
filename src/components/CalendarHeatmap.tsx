@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
+import { DataExplanation } from "@/components/DataExplanation";
+import { UsageTooltip } from "@/components/UsageTooltip";
+import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
@@ -69,6 +72,7 @@ export function CalendarHeatmap({
   onRetry,
   rangeLabel,
   controls,
+  selectedRange,
 }: {
   buckets: DailyTokenBucket[] | null;
   loading: boolean;
@@ -76,6 +80,7 @@ export function CalendarHeatmap({
   onRetry: () => void;
   rangeLabel: string;
   controls?: ReactNode;
+  selectedRange?: DailyRange;
 }) {
   const [metric, setMetric] = useState<Metric>("tokens");
   const titleId = useId();
@@ -216,15 +221,15 @@ export function CalendarHeatmap({
                                   className="size-4"
                                   label={`${dateLabel(day.ms)}，${label}：${exact}。${basis}${coverage}`}
                                 >
-                                  <div className="space-y-1">
-                                    <p className="font-medium">{dateLabel(day.ms)}</p>
-                                    <p className="tabular-nums">
-                                      {label}：{exact}
-                                    </p>
-                                    <p>{basis}</p>
-                                    {coverage ? <p>{coverage}</p> : null}
-                                    {!day.bucket ? <p>该日期没有返回统计记录，数值未知。</p> : null}
-                                  </div>
+                                  <UsageTooltip
+                                    title={`${dateLabel(day.ms)} · ${dailyScope(day.ms, selectedRange)}`}
+                                    total={metricValue(day.bucket, "tokens")}
+                                    requests={day.bucket?.messages}
+                                    sessions={day.bucket?.sessions}
+                                    unknown={unknownSessions}
+                                    partial={partialSessions}
+                                    basis="sessions"
+                                  />
                                 </HeatmapCell>
                               );
                             })}
@@ -240,14 +245,18 @@ export function CalendarHeatmap({
                   </span>
                   <HeatmapLegend maxValue={maxValue} unit={unit} />
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {metric === "tokens"
-                    ? "按会话开始日期归属；Token 为会话累计用量，不代表当天请求增量。无用量记录显示 —，部分未知或明细不完整以标记说明。"
-                    : metric === "sessions"
-                      ? "按会话开始日期归属；会话数量不受 Token 是否已知影响。"
-                      : "请求明细按所属会话开始日期归属，为已采集记录，可能不完整；不代表客户端的全部请求。"}
-                  悬停或键盘聚焦日期查看精确值与口径。
-                </p>
+                <DataExplanation
+                  summary={`按会话开始日 · 会话累计 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+                >
+                  <p>
+                    {metric === "tokens"
+                      ? "按会话开始日期归属；Token 为会话累计用量，不代表当天请求增量。无用量记录显示 —，部分未知或明细不完整以标记说明。"
+                      : metric === "sessions"
+                        ? "按会话开始日期归属；会话数量不受 Token 是否已知影响。"
+                        : "请求明细按所属会话开始日期归属，为已采集记录，可能不完整；不代表客户端的全部请求。"}
+                    悬停或键盘聚焦日期查看精确值与口径。
+                  </p>
+                </DataExplanation>
               </>
             )}
           </TabsContent>

@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { DashboardCard } from "@/components/DashboardCard";
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
@@ -15,13 +13,13 @@ export function SettingsSection({
   children: ReactNode;
 }) {
   return (
-    <DashboardCard>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent className="divide-y divide-border/50">{children}</CardContent>
-    </DashboardCard>
+    <section>
+      <div className="space-y-2 border-b border-border/60 pb-5">
+        <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+      </div>
+      <div className="divide-y divide-border/50">{children}</div>
+    </section>
   );
 }
 
@@ -35,8 +33,8 @@ export function SettingsRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-5">
+      <div className="min-w-[min(100%,10rem)] flex-1">
         <p className="text-sm font-medium">{title}</p>
         {description && (
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>

@@ -8,6 +8,7 @@ export type AppSettings = {
   autostart: boolean;
   autostartHidden: boolean;
   rememberWindow: boolean;
+  sidebarCollapsed: boolean;
   theme: Theme;
   defaultRange: RangeKey;
   syncOnStart: boolean;

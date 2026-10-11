@@ -26,6 +26,7 @@ pub struct AppSettings {
     pub autostart: bool,
     pub autostart_hidden: bool,
     pub remember_window: bool,
+    pub sidebar_collapsed: bool,
     pub theme: Theme,
     pub default_range: String,
     pub sync_on_start: bool,
@@ -42,8 +43,9 @@ impl Default for AppSettings {
             autostart: false,
             autostart_hidden: true,
             remember_window: true,
+            sidebar_collapsed: false,
             theme: Theme::System,
-            default_range: "30d".into(),
+            default_range: "today".into(),
             sync_on_start: true,
             sync_interval_minutes: 5,
             collection_paused: false,
@@ -60,6 +62,7 @@ pub struct SettingsPatch {
     pub autostart: Option<bool>,
     pub autostart_hidden: Option<bool>,
     pub remember_window: Option<bool>,
+    pub sidebar_collapsed: Option<bool>,
     pub theme: Option<Theme>,
     pub default_range: Option<String>,
     pub sync_on_start: Option<bool>,
@@ -67,6 +70,25 @@ pub struct SettingsPatch {
     pub collection_paused: Option<bool>,
     pub enabled_clients: Option<Vec<String>>,
     pub automatic_updates: Option<bool>,
+}
+
+impl From<AppSettings> for SettingsPatch {
+    fn from(settings: AppSettings) -> Self {
+        Self {
+            close_behavior: Some(settings.close_behavior),
+            autostart: Some(settings.autostart),
+            autostart_hidden: Some(settings.autostart_hidden),
+            remember_window: Some(settings.remember_window),
+            sidebar_collapsed: Some(settings.sidebar_collapsed),
+            theme: Some(settings.theme),
+            default_range: Some(settings.default_range),
+            sync_on_start: Some(settings.sync_on_start),
+            sync_interval_minutes: Some(settings.sync_interval_minutes),
+            collection_paused: Some(settings.collection_paused),
+            enabled_clients: Some(settings.enabled_clients),
+            automatic_updates: Some(settings.automatic_updates),
+        }
+    }
 }
 
 impl AppSettings {
@@ -80,6 +102,7 @@ impl AppSettings {
             autostart,
             autostart_hidden,
             remember_window,
+            sidebar_collapsed,
             theme,
             default_range,
             sync_on_start,

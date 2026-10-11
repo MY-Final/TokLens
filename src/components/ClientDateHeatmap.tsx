@@ -1,3 +1,6 @@
+import { DataExplanation } from "@/components/DataExplanation";
+import { UsageTooltip } from "@/components/UsageTooltip";
+import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
@@ -24,6 +27,7 @@ export function ClientDateHeatmap({
   onRetry,
   rangeLabel,
   client,
+  selectedRange,
 }: {
   buckets: DailyTokenBucket[] | null;
   loading: boolean;
@@ -31,6 +35,7 @@ export function ClientDateHeatmap({
   onRetry: () => void;
   rangeLabel: string;
   client?: ClientKey | null;
+  selectedRange?: DailyRange;
 }) {
   const days = buckets ?? [];
   const clients = client ? [client] : CLIENTS;
@@ -122,31 +127,14 @@ export function ClientDateHeatmap({
                             className="size-7"
                             label={`${clientLabel(row.client)} · ${date} · ${tokenLabel}${isPartial ? " · 数据不完整" : ""}`}
                           >
-                            <div className="space-y-1 text-xs">
-                              <p className="font-medium">
-                                {clientLabel(row.client)} · {date}
-                              </p>
-                              <p className="tabular-nums">{tokenLabel}</p>
-                              <p>{formatNumber(cell.sessions)} 个会话</p>
-                              {cell.value === null ? (
-                                <p>所有会话均缺少用量记录，未知不等于 0。</p>
-                              ) : cell.missing > 0 ? (
-                                <p>
-                                  仅含已知总量；{formatNumber(cell.missing)}{" "}
-                                  个会话用量未知，未计入。
-                                </p>
-                              ) : (
-                                <p>客户端记录的已知总量 · 无估算</p>
-                              )}
-                              {cell.partial > 0 ? (
-                                <p>
-                                  {formatNumber(cell.partial)}{" "}
-                                  个会话请求明细不完整；已知累计总量仍按客户端记录展示。
-                                </p>
-                              ) : null}
-                              {cell.sessions === 0 ? <p>当天没有该客户端的会话。</p> : null}
-                              <p>本地会话开始日期归属累计用量，不代表当天请求增量。</p>
-                            </div>
+                            <UsageTooltip
+                              title={`${clientLabel(row.client)} · ${date} · ${dailyScope(cell.dayStartMs, selectedRange)}`}
+                              total={cell.value}
+                              sessions={cell.sessions}
+                              unknown={cell.missing}
+                              partial={cell.partial}
+                              basis="sessions"
+                            />
                           </HeatmapCell>
                         </td>
                       );
@@ -164,10 +152,14 @@ export function ClientDateHeatmap({
             {formatDateTime(lastDay.dayStartMs).split(" ")[0]}
           </p>
         ) : null}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          按本地会话开始日期归属累计用量，不代表当天请求增量。色阶比较各客户端已知 Token
-          总量，缓存按各客户端口径计入，缺失值不推算。
-        </p>
+        <DataExplanation
+          summary={`按会话开始日 · 会话累计 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+        >
+          <p>
+            按本地会话开始日期归属累计用量，不代表当天请求增量。色阶比较各客户端已知 Token
+            总量，缓存按各客户端口径计入，缺失值不推算。
+          </p>
+        </DataExplanation>
       </CardContent>
     </DashboardCard>
   );

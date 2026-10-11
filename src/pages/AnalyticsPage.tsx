@@ -231,6 +231,7 @@ function SessionAnalytics({
       </DashboardCard>
 
       <TokenTrendChart
+        selectedRange={range}
         rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}
@@ -240,6 +241,7 @@ function SessionAnalytics({
       />
 
       <ClientDateHeatmap
+        selectedRange={range}
         rangeLabel={trendRangeLabel}
         buckets={trend.data}
         loading={trend.loading}

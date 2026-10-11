@@ -20,11 +20,6 @@ export function UsageBasisSelect({
           <TabsTrigger value="sessions">会话累计</TabsTrigger>
         </TabsList>
       </Tabs>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {value === "requests"
-          ? "按每条已记录请求的发生时间筛选，跨天会话的请求分别归入对应日期。"
-          : "按会话开始时间筛选，统计整个会话累计用量；与按请求时间统计的范围和覆盖不同。"}
-      </p>
     </div>
   );
 }

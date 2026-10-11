@@ -71,7 +71,13 @@ export function SourcesPage({
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SyncControl sync={sync} busy={syncBusy} onSync={onSync} size="default" />
+            <SyncControl
+              sync={sync}
+              busy={syncBusy}
+              onSync={onSync}
+              paused={settingsController.settings?.collectionPaused ?? false}
+              size="default"
+            />
             {report ? (
               <div className="mt-4 space-y-2">
                 <Separator />

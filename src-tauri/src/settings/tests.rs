@@ -34,8 +34,62 @@ fn defaults_preserve_local_first_and_upgrade_missing_fields() {
     assert_eq!(snapshot.settings.theme, model::Theme::Dark);
     assert!(!snapshot.settings.automatic_updates);
     assert!(!snapshot.settings.autostart);
+    assert!(!snapshot.settings.sidebar_collapsed);
+    assert_eq!(snapshot.settings.default_range, "today");
     assert_eq!(snapshot.settings.sync_interval_minutes, 5);
     assert_eq!(snapshot.settings.clients().len(), 7);
+}
+
+#[test]
+fn existing_ranges_survive_missing_sidebar_preference() {
+    for range in ["7d", "30d"] {
+        let directory = Directory::new();
+        std::fs::write(
+            directory.0.join("settings.json"),
+            format!(r#"{{"schemaVersion":1,"settings":{{"defaultRange":"{range}"}}}}"#),
+        )
+        .expect("synthetic old settings");
+        let snapshot = SettingsStore::load(&directory.0)
+            .snapshot()
+            .expect("settings");
+        assert_eq!(snapshot.settings.default_range, range);
+        assert!(!snapshot.settings.sidebar_collapsed);
+        assert!(snapshot.warning.is_none());
+    }
+}
+
+#[test]
+fn sidebar_persists_and_reset_matches_new_install_defaults() {
+    let directory = Directory::new();
+    let store = SettingsStore::load(&directory.0);
+    assert_eq!(
+        store.snapshot().expect("new settings").settings,
+        AppSettings::default()
+    );
+    store.record_update_check(123).expect("timestamp");
+    store
+        .update(SettingsPatch {
+            sidebar_collapsed: Some(true),
+            default_range: Some("7d".into()),
+            ..Default::default()
+        })
+        .expect("save preferences");
+    let reloaded = SettingsStore::load(&directory.0);
+    let settings = reloaded.snapshot().expect("persisted settings").settings;
+    assert!(settings.sidebar_collapsed);
+    assert_eq!(settings.default_range, "7d");
+    reloaded
+        .update(AppSettings::default().into())
+        .expect("reset defaults");
+    let reset = SettingsStore::load(&directory.0);
+    assert_eq!(
+        reset.snapshot().expect("reset settings").settings,
+        AppSettings::default()
+    );
+    assert_eq!(
+        reset.last_update_check().expect("timestamp preserved"),
+        Some(123)
+    );
 }
 
 #[test]
