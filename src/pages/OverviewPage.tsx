@@ -24,7 +24,7 @@ import { formatCompactTokens, formatNumber, formatPercent, formatTokensOrDash } 
 import type { DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
-  "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，Claude Code / DSH / Kimi Code 按去重后的请求求和。Claude Code / DSH / Kimi Code 缓存写入计入总量；缺失值保持未知。";
+  "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
 
 const MS_PER_DAY = 86_400_000;
 

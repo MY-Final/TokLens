@@ -1,20 +1,25 @@
 # TokLens
 
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
-**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, and **Kimi Code** on this machine (sessions, requests, tokens, models, cost).
+**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, and **Pi Desktop** on this machine (sessions, requests, tokens, models, cost).
 
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
 - a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
-- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, and Kimi Code state/wire collectors (`src-tauri/src/collectors/`),
+- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, and Pi Desktop JSONL collectors (`src-tauri/src/collectors/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
 Kimi Code reads `~/.kimi-code/sessions` (or `$KIMI_CODE_HOME/sessions`), counts incremental
 `usage.record` events from agent wire logs, and keeps sessions without usage visible as unknown.
 
-All five clients participate in startup/manual sync, filters, trends, and rankings. OpenCode's old JSON
+MiMoCode reads `~/.local/share/mimocode/mimocode.db` (`MIMOCODE_DB` / `XDG_DATA_HOME` supported),
+including live WAL updates. Imported Claude/external messages are excluded to avoid duplicate accounting; native continuation requests remain counted.
+Pi Desktop reads `~/.pi-desktop/sessions` (`PI_DESKTOP_SESSIONS_DIR` supported) and deduplicates physical
+request operations; client-estimated cost is not imported as measured cost.
+
+All seven clients participate in startup/manual sync, filters, trends, and rankings. OpenCode's old JSON
 storage and unverified DSH persistence formats are not supported. No unified cost figures are shown;
 client-reported costs are preserved as metadata without treating them as a shared pricing source.
 
@@ -117,7 +122,7 @@ TokLens/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
       ├─ commands/          # State, errors, DTOs, queries & background sync
-      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code collectors
+      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop collectors
       └─ usage/
          ├─ client.rs        # Stable client identity
          ├─ model.rs         # Unified records and deduplication identifiers

@@ -50,6 +50,8 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
             <SelectItem value="opencode">OpenCode</SelectItem>
             <SelectItem value="dsh">DSH</SelectItem>
             <SelectItem value="kimi_code">Kimi Code</SelectItem>
+            <SelectItem value="mimocode">MiMoCode</SelectItem>
+            <SelectItem value="pi_desktop">Pi Desktop</SelectItem>
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">

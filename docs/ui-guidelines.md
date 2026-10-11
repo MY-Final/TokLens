@@ -118,7 +118,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 ### Codex 总览重构（2026-10-11）
 
-顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持五客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持七客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
@@ -133,7 +133,9 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 多客户端接入后，客户端筛选均可用；空数据表达为「暂无数据」，目录缺失表达为「未发现数据源」，采集支持状态与连接状态分开。
 同步结果逐客户端显示，单源失败保留历史并明确提示；刷新触发 `sync_usage`。
 客户端 Progress 占比使用后端 `shareBps`；趋势使用逐日客户端总量，禁止把合并数据标成 Codex。
-Token 构成仅堆叠计入总量的缓存写入（当前为 Claude Code / DSH / Kimi Code），不堆叠其他客户端的原始 cache_write。
+Token 构成仅堆叠计入总量的缓存写入（当前为 Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop），不堆叠其他客户端的原始 cache_write。
 DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标签始终明确为 DSH。
 
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。
+
+MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。七客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。

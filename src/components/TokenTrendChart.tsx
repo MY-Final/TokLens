@@ -42,6 +42,8 @@ const TOTAL_SERIES = [
   },
   { key: "dsh", label: "DSH", color: "var(--client-dsh)", dotClass: "bg-client-dsh" },
   { key: "kimi_code", label: "Kimi Code", color: "var(--client-kimi)", dotClass: "bg-client-kimi" },
+  { key: "mimocode", label: "MiMoCode", color: "var(--client-mimo)", dotClass: "bg-client-mimo" },
+  { key: "pi_desktop", label: "Pi Desktop", color: "var(--client-pi)", dotClass: "bg-client-pi" },
 ] as const;
 const CHART_CONFIG = {
   codex: { label: "Codex", color: "var(--client-codex)" },
@@ -49,6 +51,8 @@ const CHART_CONFIG = {
   opencode: { label: "OpenCode", color: "var(--client-opencode)" },
   dsh: { label: "DSH", color: "var(--client-dsh)" },
   kimi_code: { label: "Kimi Code", color: "var(--client-kimi)" },
+  mimocode: { label: "MiMoCode", color: "var(--client-mimo)" },
+  pi_desktop: { label: "Pi Desktop", color: "var(--client-pi)" },
   cacheWrite: { label: "缓存写入（计入总量）", color: "var(--chart-5)" },
   cacheRead: { label: "缓存读取", color: "var(--chart-1)" },
   input: { label: "输入（未命中缓存）", color: "var(--chart-2)" },
@@ -77,7 +81,7 @@ function TokenTooltip(props: ComponentProps<typeof ChartTooltipContent>) {
         )}
       />
       <div className="mt-2 space-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
-        <p>客户端记录 · Claude Code / DSH / Kimi Code 缓存写入计入总量</p>
+        <p>客户端记录 · 缓存写入遵循各客户端统计口径</p>
         <p>费用暂不可用 · 无可靠价格来源</p>
       </div>
     </div>
@@ -109,6 +113,8 @@ export function TokenTrendChart({
     opencode: bucket.clients.find((client) => client.client === "opencode")?.totalTokens ?? 0,
     dsh: bucket.clients.find((client) => client.client === "dsh")?.totalTokens ?? 0,
     kimi_code: bucket.clients.find((client) => client.client === "kimi_code")?.totalTokens ?? 0,
+    mimocode: bucket.clients.find((client) => client.client === "mimocode")?.totalTokens ?? 0,
+    pi_desktop: bucket.clients.find((client) => client.client === "pi_desktop")?.totalTokens ?? 0,
     cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,
@@ -235,7 +241,7 @@ export function TokenTrendChart({
         </div>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {description ??
-            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；仅 Claude Code / DSH / Kimi Code 的缓存写入计入总量，缺失字段不推算。"}
+            "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
         </p>
       </CardContent>
     </DashboardCard>
