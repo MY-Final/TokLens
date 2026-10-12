@@ -1,0 +1,7 @@
+{"sessionId":"synthetic-session","projectHash":"synthetic-hash","startTime":"2026-10-12T10:00:00.000Z","lastUpdated":"2026-10-12T10:00:00.000Z","kind":"main","futureHeader":true}
+{"id":"user-1","type":"user","timestamp":"2026-10-12T10:00:00.000Z","content":"PRIVATE_SENTINEL"}
+{"id":"response-1","type":"gemini","timestamp":"2026-10-12T10:00:01.000Z","model":"synthetic-model","content":"PRIVATE_SENTINEL","thoughts":[{"text":"PRIVATE_SENTINEL"}],"tokens":null}
+{"$set":{"lastUpdated":"2026-10-12T10:00:02.000Z"}}
+{"id":"response-1","type":"gemini","timestamp":"2026-10-12T10:00:01.000Z","model":"synthetic-model","content":"PRIVATE_SENTINEL","tokens":{"input":100,"output":3,"cached":40,"thoughts":20,"tool":0,"total":123},"futureResponse":"PRIVATE_SENTINEL"}
+{"id":"info-1","type":"info","content":"PRIVATE_SENTINEL"}
+{"id":"error-1","type":"error","content":"PRIVATE_SENTINEL"}
