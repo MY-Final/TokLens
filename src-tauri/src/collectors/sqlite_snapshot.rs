@@ -14,7 +14,10 @@ fn word(bytes: &[u8], offset: usize) -> u32 {
     )
 }
 fn checksum(bytes: &[u8], little: bool, mut sum: (u32, u32)) -> (u32, u32) {
-    for pair in bytes.chunks_exact(8) {
+    for pair in bytes.chunks(8) {
+        if pair.len() != 8 {
+            break;
+        }
         let read = |offset| {
             let b = pair[offset..offset + 4].try_into().expect("checksum pair");
             if little {
