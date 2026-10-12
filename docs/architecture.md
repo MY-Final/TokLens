@@ -150,6 +150,7 @@ usage/tokens ────────→ usage/client
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
 处理原生关闭流程。`clear_statistics` 在后台维护边界中暂停并清除统计；`reset_settings` 仅重置偏好；
 `open_app_data_dir` 只打开固定 TokLens 目录。`settings-changed` 通知前端重读；统计清除复用 `usage-sync` 刷新事件。
+后台定时同步发出的 `usage-sync` 只更新同步状态，不改变页面查询版本；用户手动刷新或重新扫描完成后才重新请求当前页面数据，避免定时采集打断滚动和图表交互。
 
 更新命令：`get_update_state`（无网络）、`check_updates`（显式或已开启自动检查）、`download_update`
 （只下载已检查版本并验证签名）、`install_update`（只接受内存中已验证的制品）。
@@ -227,7 +228,7 @@ usage/tokens ────────→ usage/client
 菜单只通过现有 `desktop/preferences` 更新设置，与设置页共用持久化与 `settings-changed` 广播；暂停不打断已开始的采集写入。
 今日摘要由 `commands/tray_usage.rs` 调用已有请求时间查询，读取 TokLens 用量库，不读取客户端文件或会话正文。
 `hooks/use-tray-usage.ts` 使用根级本地时钟提供当天零点和排他终点，仅计算日历边界；命令在后台查询并更新原生托盘 tooltip。
-摘要随分钟、同步完成和清除事件刷新；并发查询仅允许最新请求发布，避免旧结果覆盖新日期或清除后的摘要。
+摘要随分钟、同步完成和清除事件刷新；页面数据与托盘摘要分离，后台同步不会强制页面重新加载。并发查询仅允许最新请求发布，避免旧结果覆盖新日期或清除后的摘要。
 页面与更新快捷操作通过 `lib/api.ts` 的类型校验事件进入 React，更新复用官方签名 updater，只在用户点击后检查，不自动下载或安装。
 不新增依赖、权限、网络端点、存储表或统计公式，继续沿用请求时间口径 2.3。
 
@@ -352,7 +353,7 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 ### 多客户端 DTO 与查询（2026-10-11）
 
-`sync_usage` 为前端统一刷新入口，`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
+`sync_usage` 为前端统一同步入口；手动触发完成后刷新当前页面数据，定时调度完成只更新同步状态。`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
 `get_overview_stats` 增加可选 `client`，与趋势 / 排行筛选一致。
 `DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop）。
 `ClientUsage.shareBps` 由领域查询按已知规范总量计算，10000 表示 100%，前端只格式化，不重新聚合。

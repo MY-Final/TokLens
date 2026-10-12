@@ -1,6 +1,6 @@
-/** 数据源状态与同步控制：启动时读取一次，同步结束事件到达后通知页面刷新。 */
+/** 数据源状态与同步控制：后台同步只更新状态，手动同步完成后再刷新页面数据。 */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
 import { getDataSourceStatus, onSyncEvent, syncUsage, toErrorMessage } from "@/lib/api";
@@ -12,7 +12,7 @@ export type SyncController = {
   status: DataSourceStatus | null;
   error: string | null;
   loading: boolean;
-  /** 每次同步结束后自增，页面把它拼进查询 key 即可自动重新拉取。 */
+  /** 手动同步结束后自增；后台定时采集不会打断当前页面。 */
   refreshToken: number;
   syncBusy: boolean;
   syncNow: (force?: boolean) => Promise<void>;
@@ -24,13 +24,21 @@ export function useDataSourceStatus(): SyncController {
   const [error, setError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [syncBusy, setSyncBusy] = useState(false);
+  const manualRefreshRequested = useRef(false);
   // 首次加载：还没有任何结果（派生值，避免在 effect 中同步 setState）。
   const loading = status === null && error === null;
 
   const applySync = useCallback((sync: SyncState) => {
     setStatus((previous) => (previous ? { ...previous, sync } : previous));
     setSyncBusy(sync.running);
-    if (!sync.running) {
+    const isClearCompleted =
+      !sync.running &&
+      sync.startedAtMs === null &&
+      sync.finishedAtMs === null &&
+      sync.report === null &&
+      sync.error === null;
+    if (!sync.running && (manualRefreshRequested.current || isClearCompleted)) {
+      manualRefreshRequested.current = false;
       setRefreshToken((token) => token + 1);
     }
   }, []);
@@ -99,11 +107,16 @@ export function useDataSourceStatus(): SyncController {
 
   const syncNow = useCallback(
     async (force = false) => {
+      // Only a user-triggered sync should cause visible data queries to reload.
+      // The scheduler also emits `usage-sync`; keeping this flag here prevents
+      // its completion event from blanking the page every few minutes.
+      manualRefreshRequested.current = true;
       setSyncBusy(true);
       try {
         const state = await syncUsage(force);
         applySync(state);
       } catch (cause: unknown) {
+        manualRefreshRequested.current = false;
         setError(toErrorMessage(cause));
         setSyncBusy(false);
       }
