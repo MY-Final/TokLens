@@ -151,7 +151,7 @@ usage/tokens ────────→ usage/client
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
 处理原生关闭流程。`clear_statistics` 在后台维护边界中暂停并清除统计；`reset_settings` 仅重置偏好；
 `open_app_data_dir` 只打开固定 TokLens 目录。`settings-changed` 通知前端重读；统计清除复用 `usage-sync` 刷新事件。
-后台定时同步发出的 `usage-sync` 只更新同步状态，不改变页面查询版本；用户手动刷新或重新扫描完成后才重新请求当前页面数据，避免定时采集打断滚动和图表交互。
+手动与后台同步结束均重新读取完整数据源状态并更新页面查询版本；同一筛选刷新保留已成功数据，切换日期 / 客户端 / 页码时隐藏旧范围数据。订阅先于初始读取，进行中每两秒、空闲每三十秒与窗口聚焦时本地轮询兜底；请求代次丢弃过期响应。
 
 更新命令：`get_update_state`（无网络）、`check_updates`（显式或已开启自动检查）、`download_update`
 （只下载已检查版本并验证签名）、`install_update`（只接受内存中已验证的制品）。
@@ -361,7 +361,7 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 ### 多客户端 DTO 与查询（2026-10-11）
 
-`sync_usage` 为前端统一同步入口；手动触发完成后刷新当前页面数据，定时调度完成只更新同步状态。`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
+`sync_usage` 为前端统一同步入口；手动与定时采集完成均刷新当前页面数据，同一筛选原位更新并保留页码。`SyncReport.clients` 返回每客户端结果，避免把某个缺失目录当成全部同步失败。
 `get_overview_stats` 增加可选 `client`，与趋势 / 排行筛选一致。
 `DailyTokenBucket.clients` 返回客户端逐日总量；`TokenTotals.countedCacheWriteTokens` 由领域查询计算，仅包含计入总量的缓存写入（Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop）。
 `ClientUsage.shareBps` 由领域查询按已知规范总量计算，10000 表示 100%，前端只格式化，不重新聚合。
@@ -384,3 +384,9 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 全客户端比较不受下钻客户端影响；分项与排行使用选中客户端。模型按会话主模型归属，不能称为逐请求模型。
 所有聚合与比例在 Rust 领域层提供，查询共用读取事务快照；前端只排序、格式化、绘制相对条形。
 新增业务展示组件 `RequestAnalysisPanel`、`RequestAnalysisDetails`，复用现有 Card / Table / Progress / Tabs，不新增目录、依赖、权限或联网能力。
+
+### 采集可靠性与查询一致性（2026-10-12）
+
+Codex 根目录优先使用非空 CODEX_HOME，其次 USERPROFILE / HOME 下的 .codex；仅扫描 sessions。路径发现仍位于 collectors，command 为 ClientSourceStatus DTO 附加 sourcePath；不在 usage 领域读取环境或源文件。
+解析 I/O 失败或未完成的无换行 JSON 尾行返回失败，整文件放弃提交；读后与汇总提交前复核大小 / 修改时间，失败保留已有统计与成功水位。完整损坏行仍计数并忽略，合法无换行末行可导入。
+StatsBucket 增加 cacheHitBps / cacheEligibleSessions；ClientUsage 和 RankingEntry 增加 sessionsWithoutUsage；SyncReport 透传 directoriesFailed。数据库 schema、权限、依赖不变。会话列表复用 offset，50 条一页并多取一条判断下一页；排序补客户端作为同时间同 ID 的稳定次序。

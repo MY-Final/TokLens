@@ -67,15 +67,15 @@
 
 ## 3. 去重标识
 
-| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                   | 说明                                                                                                  |
-| ----------- | --------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id`；旧格式无该字段时 `token_count:<ordinal>` | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节 |
-| Claude Code | `sessionId`                                         | `message.id`                                            | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                     |
-| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                            | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
-| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                      | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                          |
-| Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                   | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
-| MiMoCode    | session.id                                          | message.id                                              | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
-| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                            | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
+| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                         | 说明                                                                                                  |
+| ----------- | --------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id` → `token_count:<ordinal>` → 累计快照 → 文件行号 | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节 |
+| Claude Code | `sessionId`                                         | `message.id`                                                  | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                     |
+| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                                  | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
+| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                            | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                          |
+| Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                         | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
+| MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
+| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
@@ -168,6 +168,13 @@
 | 明细完整度                                          | 该线程只要有任一文件从 `ordinal 0` 开始即为 `complete`，否则 `partial`                                                       |
 
 ### 8.2 增量同步与恢复
+
+两种用量记录均支持缺失 `ordinal`（2026-10-12，口径 2.5）。请求键优先非空 `response_id`、其次真实 `ordinal`，已有键不变。
+无两者时，累计 `total_tokens` 已知则使用 `token_count:cumulative:<input>:<output>:<cache_read>:<cache_write>:<reasoning>:<total>`，未知字段编码为 `?`；
+否则使用 `token_count:file:<绝对路径>:line:<从 1 开始的物理行号>`。相同累计通知只保留一次，同文件保留首次时间；跨文件由现有 store 去重。
+新旧镜像配对前先排除无序号旧格式中的重复通知，配对规则本身不变。文件行号回退仅保证同文件幂等，不能识别跨文件复制。
+累计快照回退无法识别计数器重置或相同快照的零用量请求，完整度仍按真实 ordinal 判断；无序号时 `seq` 为 NULL，来源引用记录累计字段或文件行号。
+`info` / `last_token_usage` 为 null 的旧格式状态通知不生成请求。parser_version 为 2；升级同步自动重读旧文件，规则与影响见 `data-metrics.md` 2.5。
 
 - 决策依据：`(size_bytes, mtime_ms, parser_version)`。未变化 → 跳过；变化 → 整文件重新解析。
 - 写入是"覆盖式"的：先删除该源文件此前的明细，再写入本次结果，单事务提交（`replace_file_import`）。
@@ -371,3 +378,8 @@ sidechain 和 unknown relations；不包含正文，详情查询不回读源文�
 均量仅用已知总量请求作为分母；缓存命中率只统计 input / cache_read 成对已知的请求，分母为零保持 NULL。
 提供 `knownTokenFields` 区分没有已知字段与实测零；分项不补总量。客户端及 Top 8 来源占比以完整区间已知总量作为分母。
 模型使用会话主模型，项目使用会话目录，不回填逐请求模型。无表结构、迁移、去重或原始计数变化；公式与边界见 `data-metrics.md` 2.4。
+
+### 查询与采集契约补充（口径 2.6，2026-10-12，待发布）
+
+SQLite schema 不变。RangeTotals / StatsBucket 增加成对已知缓存样本会话数与可空缓存命中率基点；ClientUsage / GroupUsage 与对应 DTO 增加 sessionsWithoutUsage，不能仅凭求和结果 0 判断真实零。排行 messages 为组内所有会话明细合计。
+Codex 失败读取不提交 SourceFile 水位；合法无换行末行允许导入，未完成 JSON 尾行下次重试。CODEX_HOME 或用户 home 只在采集发现层解析，来源 DTO 的 sourcePath 是本地展示元数据，不默认对外复制或上传。
