@@ -55,9 +55,9 @@
 
 新增客户端规范分桶：Gemini input=input−cached、output=output、reasoning=thoughts、cache_read=cached、cache_write=NULL；tool 没有已验证对应桶，不冒充缓存写入。Grok input=inputTokens−cachedReadTokens、output=outputTokens−reasoningTokens；两者缺少拆分字段或扣除矛盾时为 NULL；缓存写入只保留自报值且不计入总量。MCode input/两缓存保持独立；reasoning 明确为 0 时保留 output，否则 output=NULL，不能把未知输出关系画成可相加的桶。三者均保留缺失与实测零的区别。
 
-1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy、Gemini CLI、Grok CLI、MCode）直接采用客户端值（`total_basis = client_reported`）；Gemini CLI 的 `total` 与 Grok 的 `session.totalTokens` 为会话总量，MCode 仅在推理关系明确时按客户端记录重建总量，
+1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy、Gemini CLI、Grok CLI）直接采用客户端值（`total_basis = client_reported`），
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
-2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
+2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code / MCode）由完整必需分桶求和得出（`total_basis = derived_from_buckets`）；MCode 仅在 reasoning 明确为 0 时可换算总量。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
 4. `cache_write` 是否计入总量由口径决定：Codex/OpenCode 的客户端总量本身不含它，故不计入且标注未知；
    Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 的 cache_write 与 input 独立，故计入。Copilot CLI 原生缓存已含于输入，拆分后计入；DSH 缓存字段省略时按协议默认 0，详见第 10 节。
