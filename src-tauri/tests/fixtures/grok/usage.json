@@ -1,0 +1,59 @@
+{
+  "sessionId": "synthetic-grok-session",
+  "updatedAt": "2026-10-12T10:01:00.123456789Z",
+  "session": {
+    "inputTokens": 300,
+    "outputTokens": 60,
+    "cachedReadTokens": 180,
+    "cacheCreationTokens": 0,
+    "reasoningTokens": 15,
+    "totalTokens": 360,
+    "modelCalls": 9,
+    "turnCount": 3,
+    "primaryModelId": "synthetic-model",
+    "costUsdTicks": 100000,
+    "futureStatistic": 17
+  },
+  "turns": [
+    {
+      "turnNumber": 1,
+      "endedAt": "2026-10-11T23:59:00.123456789+00:00",
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "cachedReadTokens": 60,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 5,
+      "totalTokens": 120,
+      "modelCalls": 4,
+      "turnCount": 1,
+      "primaryModelId": "synthetic-model"
+    },
+    {
+      "turnNumber": 2,
+      "endedAt": "2026-10-12T00:01:00Z",
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "cachedReadTokens": 60,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 5,
+      "totalTokens": 120,
+      "modelCalls": 3,
+      "turnCount": 1,
+      "primaryModelId": "synthetic-model"
+    },
+    {
+      "turnNumber": 3,
+      "endedAt": "2026-10-12T10:00:00Z",
+      "inputTokens": 100,
+      "outputTokens": 20,
+      "cachedReadTokens": 60,
+      "cacheCreationTokens": 0,
+      "reasoningTokens": 5,
+      "totalTokens": 120,
+      "modelCalls": 2,
+      "turnCount": 1,
+      "primaryModelId": "synthetic-model"
+    }
+  ],
+  "futureField": "PRIVATE_SENTINEL"
+}
