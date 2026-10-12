@@ -15,6 +15,7 @@ __pycache__/
 *.pyc
 release-artifacts/
 release-assets/
+.playwright-mcp/
 *.key
 *.key.pub
 
