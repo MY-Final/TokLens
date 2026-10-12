@@ -73,9 +73,7 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
       <DashboardCard>
         <CardHeader className="gap-1.5 px-5">
           <CardTitle className="text-sm">Token 花在哪里</CardTitle>
-          <CardDescription className="text-xs">
-            {scope} · 已记录请求的已知分项 · 条形相对最大分项
-          </CardDescription>
+          <CardDescription className="text-xs">{scope} · 已知分项（Token）</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 px-5">
           {totals.requests === 0 ? (
@@ -97,10 +95,7 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
                 {buckets.map((bucket) => (
                   <li key={bucket.label}>
                     <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-                      <span>
-                        {bucket.label}
-                        <span className="ml-2 text-muted-foreground">{bucket.note}</span>
-                      </span>
+                      <span title={bucket.note}>{bucket.label}</span>
                       <span
                         className="shrink-0 font-mono tabular-nums"
                         title={`${bucket.value === null ? "未知" : formatNumber(bucket.value)} Token`}
@@ -116,12 +111,9 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
                   </li>
                 ))}
               </ul>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                各分项仅累加已知字段，缺失部分不推算；总量独立取请求记录，不能用分项补造。缓存写入按客户端口径计入。
-              </p>
               {totals.requestsWithoutUsage > 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  {formatNumber(totals.requestsWithoutUsage)} 条请求总量未知，仍保留已知分项。
+                  {formatNumber(totals.requestsWithoutUsage)} 条请求总量未知
                 </p>
               ) : null}
             </>
@@ -133,8 +125,7 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
           <div className="space-y-1.5">
             <CardTitle className="text-sm">主要用量来源</CardTitle>
             <CardDescription className="text-xs">
-              {scope} · Top 8 ·{" "}
-              {dimension === "models" ? "按会话主模型归属，非逐请求模型" : "按会话项目目录归属"}
+              {scope} · Top 8 · {dimension === "models" ? "会话主模型" : "项目目录"}
             </CardDescription>
           </div>
           <Tabs value={dimension} onValueChange={setDimension} aria-label="用量来源维度">
@@ -208,11 +199,6 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
               </TableBody>
             </Table>
           )}
-          {rankings.length > 0 ? (
-            <p className="mt-3 text-xs text-muted-foreground">
-              占比基于当前客户端范围的全部已知 Token，Top 8 之外的用量仍在分母中。
-            </p>
-          ) : null}
         </CardContent>
       </DashboardCard>
     </div>

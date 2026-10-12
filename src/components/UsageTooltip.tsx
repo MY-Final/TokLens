@@ -93,13 +93,11 @@ export function UsageTooltip({
       {unknown > 0 ? (
         <p className="text-muted-foreground">
           {formatNumber(unknown)} {basis === "requests" ? "条请求" : "个会话"}
-          总量未知，未知不等于零。
+          总量未知
         </p>
       ) : null}
       {partial > 0 ? (
-        <p className="text-muted-foreground">
-          {formatNumber(partial)} 个会话明细不完整，已知总量仍保留。
-        </p>
+        <p className="text-muted-foreground">{formatNumber(partial)} 个会话明细不完整</p>
       ) : null}
       <p className="text-muted-foreground">
         {basis === "requests"

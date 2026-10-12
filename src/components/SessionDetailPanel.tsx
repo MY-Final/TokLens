@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTokenFormat } from "@/hooks/use-token-format";
+import { DataExplanation } from "@/components/DataExplanation";
 import type { AsyncData } from "@/hooks/use-async-data";
 import {
   formatDateTime,
@@ -124,9 +125,7 @@ export function SessionDetailPanel({
               关闭
             </Button>
           </div>
-          <DialogDescription>
-            展示整个会话，不受页面日期范围限制。仅展示本地统计元数据；不展示提示词、会话正文或工具输出。时间为本地时区。
-          </DialogDescription>
+          <DialogDescription>完整会话（不受日期筛选限制） · 本地时间</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -157,12 +156,13 @@ export function SessionDetailPanel({
               </div>
             ))}
           </dl>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            输入、输出、推理与缓存读取已按客户端口径归一化，重叠子集已扣除。 缓存写入仅在 Claude
-            Code、DSH、Kimi Code、MiMoCode、Pi Desktop 口径中计入总量；
-            其他客户端的缓存写入作为原始字段单独展示，不应再次加到总量。
-            “—”表示缺失或未知，不是零；会话总量独立于请求明细覆盖情况。
-          </p>
+          <DataExplanation summary="— 为未知">
+            <p>
+              输入、输出已扣除重叠子集。缓存写入仅在 Claude Code、DSH、Kimi Code、MiMoCode、Pi
+              Desktop 中计入总量，其他客户端不重复相加。— 为未知，非零；会话总量独立于明细覆盖。
+            </p>
+            <p>实测来自客户端记录，换算来自真实字段，估算单独标记。</p>
+          </DataExplanation>
           {session.unknownRelations.length > 0 ? (
             <p className="rounded-md border p-3 text-xs break-all">
               未知字段关系：{session.unknownRelations.join("、")}
@@ -188,7 +188,7 @@ export function SessionDetailPanel({
                 {detail.data.requests.length === 0 ? (
                   <EmptyBlock
                     title="没有可用请求明细"
-                    description="客户端可能仅记录会话累计用量；同步新记录后可重试。会话累计值仍独立展示。"
+                    description="客户端可能仅记录累计用量，刷新后重试。"
                   />
                 ) : (
                   <div className="rounded-md border [&>[data-slot=table-container]]:max-h-[60dvh] [&>[data-slot=table-container]]:overflow-auto">
@@ -238,9 +238,6 @@ export function SessionDetailPanel({
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  请求按后端时间顺序展示。实测为客户端记录，换算来自真实字段，估算单独标注。
-                </p>
               </>
             ) : null}
           </section>

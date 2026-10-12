@@ -3,6 +3,7 @@ import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { DataExplanation } from "@/components/DataExplanation";
+import { ChartTooltipOverlay } from "@/components/ChartTooltipOverlay";
 import { UsageTooltip } from "@/components/UsageTooltip";
 import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { DashboardCard } from "@/components/DashboardCard";
@@ -85,6 +86,7 @@ export function TokenTrendChart({
 }) {
   const { formatTokens } = useTokenFormat();
   const [mode, setMode] = useState("client");
+  const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const gradientId = useId().replace(/:/g, "");
   const clientValue = (bucket: DailyTokenBucket, key: string) => {
     const entry = bucket.clients.find((client) => client.client === key);
@@ -115,7 +117,9 @@ export function TokenTrendChart({
   }));
   const hasData = buckets?.some((entry) => entry.sessions > 0) ?? false;
   const visibleClients = TOTAL_SERIES.filter((item) =>
-    buckets?.some((bucket) => bucket.clients.some((client) => client.client === item.key)),
+    buckets?.some((bucket) =>
+      bucket.clients.some((client) => client.client === item.key && client.sessions > 0),
+    ),
   );
   const series = mode === "client" ? visibleClients : SERIES;
   const firstDate = data[0]?.label;
@@ -153,6 +157,7 @@ export function TokenTrendChart({
             />
           ) : (
             <ChartContainer
+              ref={setChartElement}
               config={CHART_CONFIG}
               className={
                 data.length === 1 ? "aspect-auto h-40 w-full" : "aspect-auto h-56 w-full xl:h-64"
@@ -197,12 +202,20 @@ export function TokenTrendChart({
                   width="auto"
                 />
                 <ChartTooltip
-                  content={({ active, label }) => {
+                  portal={chartElement?.ownerDocument.body}
+                  wrapperStyle={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    zIndex: 40,
+                    pointerEvents: "none",
+                  }}
+                  content={({ active, label, coordinate }) => {
                     if (!active) return null;
                     const entry = data.find((day) => day.label === String(label));
                     if (!entry) return null;
                     return (
-                      <div className="rounded-md border bg-popover p-3 text-popover-foreground shadow-md">
+                      <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
                         <UsageTooltip
                           title={`${entry.label} · ${dailyScope(entry.bucket.dayStartMs, selectedRange)}`}
                           total={entry.total}
@@ -211,22 +224,32 @@ export function TokenTrendChart({
                           unknown={entry.bucket.sessionsWithoutUsage}
                           partial={entry.bucket.sessionsPartial}
                           basis="sessions"
-                          breakdown={series.map((item) => {
-                            const client =
-                              mode === "client"
-                                ? entry.bucket.clients.find((client) => client.client === item.key)
-                                : undefined;
-                            return {
-                              key: item.key,
-                              label: item.label,
-                              value: entry[item.key],
-                              note: client?.sessionsWithoutUsage
-                                ? `${client.sessionsWithoutUsage} 个会话用量未知`
-                                : undefined,
-                            };
-                          })}
+                          breakdown={series
+                            .filter(
+                              (item) =>
+                                mode !== "client" ||
+                                entry.bucket.clients.some(
+                                  (client) => client.client === item.key && client.sessions > 0,
+                                ),
+                            )
+                            .map((item) => {
+                              const client =
+                                mode === "client"
+                                  ? entry.bucket.clients.find(
+                                      (client) => client.client === item.key,
+                                    )
+                                  : undefined;
+                              return {
+                                key: item.key,
+                                label: item.label,
+                                value: entry[item.key],
+                                note: client?.sessionsWithoutUsage
+                                  ? `${client.sessionsWithoutUsage} 个会话用量未知`
+                                  : undefined,
+                              };
+                            })}
                         />
-                      </div>
+                      </ChartTooltipOverlay>
                     );
                   }}
                   cursor={{ stroke: "var(--border)", strokeDasharray: "4 4" }}

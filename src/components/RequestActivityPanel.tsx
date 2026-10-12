@@ -3,6 +3,7 @@ import { useState } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { DataExplanation } from "@/components/DataExplanation";
+import { ChartTooltipOverlay } from "@/components/ChartTooltipOverlay";
 import { UsageTooltip } from "@/components/UsageTooltip";
 import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { ClientIdentity } from "@/components/ClientIdentity";
@@ -160,8 +161,13 @@ export function RequestActivityPanel({
 }) {
   const { formatTokens, formatTokensOrDash } = useTokenFormat();
   const [metric, setMetric] = useState<Metric>("tokens");
+  const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const days = data?.daily ?? [];
-  const clients = client ? [client] : CLIENTS;
+  const clients = (client ? [client] : CLIENTS).filter((key) =>
+    days.some((day) =>
+      day.clients.some((entry) => entry.client === key && entry.totals.requests > 0),
+    ),
+  );
   const maxValue = Math.max(0, ...days.map((day) => metricValue(day.totals, metric) ?? 0));
   const clientMax = Math.max(
     0,
@@ -174,10 +180,8 @@ export function RequestActivityPanel({
   return (
     <DashboardCard className="min-w-0">
       <CardHeader className="gap-3 px-5">
-        <CardTitle className="text-sm">请求发生时间统计</CardTitle>
-        <CardDescription className="text-xs">
-          {rangeLabel} · 本地时区 · 仅已记录请求
-        </CardDescription>
+        <CardTitle className="text-sm">请求用量</CardTitle>
+        <CardDescription className="text-xs">{rangeLabel} · 本地时间</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
         {error ? (
@@ -209,13 +213,13 @@ export function RequestActivityPanel({
             </dl>
             {(range?.requestsWithoutUsage ?? 0) > 0 ? (
               <p className="text-xs text-muted-foreground">
-                {range?.requestsWithUsage ? "Token 仅含已知子集；" : "Token 用量未知；"}
-                {formatNumber(range?.requestsWithoutUsage ?? 0)} 条请求无用量数据，未知不等于零。
+                {range?.requestsWithUsage ? "已知子集 · " : ""}
+                {formatNumber(range?.requestsWithoutUsage ?? 0)} 条请求用量未知
               </p>
             ) : null}
             {coverage ? (
               <DataExplanation
-                summary={`按请求时间 · 实测 / 直接换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 存在明细不完整" : ""}${coverage.estimatedRequests > 0 ? " · 已排除估算记录" : ""}`}
+                summary={`实测 / 换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 明细不完整" : ""}`}
               >
                 <p className="tabular-nums">
                   采集覆盖（所有已采集日期，仅按客户端筛选，与当前日期范围独立）：有时间{" "}
@@ -230,10 +234,7 @@ export function RequestActivityPanel({
               </DataExplanation>
             ) : null}
             {!hasData ? (
-              <EmptyBlock
-                title="此区间未记录可定位的请求"
-                description="调整日期或客户端，或同步本地数据。无时间与估算请求已排除；这不代表客户端没有活动。"
-              />
+              <EmptyBlock title="暂无请求记录" description="调整日期或点击刷新。" />
             ) : (
               <Tabs defaultValue="trend" className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -263,6 +264,7 @@ export function RequestActivityPanel({
                 </div>
                 <TabsContent value="trend" className="space-y-3">
                   <ChartContainer
+                    ref={setChartElement}
                     config={CHART_CONFIG}
                     className={
                       days.length === 1 ? "aspect-auto h-40 w-full" : "aspect-auto h-56 w-full"
@@ -297,13 +299,21 @@ export function RequestActivityPanel({
                         width="auto"
                       />
                       <Tooltip
-                        content={({ active, label }) => {
+                        portal={chartElement?.ownerDocument.body}
+                        wrapperStyle={{
+                          position: "fixed",
+                          top: 0,
+                          left: 0,
+                          zIndex: 40,
+                          pointerEvents: "none",
+                        }}
+                        content={({ active, label, coordinate }) => {
                           if (!active) return null;
                           const bucket = days.find(
                             (day) => dateLabel(day.dayStartMs) === String(label),
                           );
                           return (
-                            <div className="max-w-72 space-y-1 rounded-md border bg-popover p-3 text-xs text-popover-foreground shadow-md">
+                            <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
                               <UsageTooltip
                                 title={`${String(label)} · ${bucket ? dailyScope(bucket.dayStartMs, selectedRange) : "本地日期"}`}
                                 total={metricValue(bucket?.totals, "tokens")}
@@ -312,17 +322,19 @@ export function RequestActivityPanel({
                                 unknown={bucket?.totals.requestsWithoutUsage}
                                 basis="requests"
                                 breakdownUnit={unit}
-                                breakdown={(bucket?.clients ?? []).map((entry) => ({
-                                  key: entry.client,
-                                  label: clientLabel(entry.client),
-                                  value: metricValue(entry.totals, metric),
-                                  note:
-                                    metric === "tokens" && entry.totals.requestsWithoutUsage > 0
-                                      ? `${formatNumber(entry.totals.requestsWithoutUsage)} 条请求用量未知`
-                                      : undefined,
-                                }))}
+                                breakdown={(bucket?.clients ?? [])
+                                  .filter((entry) => entry.totals.requests > 0)
+                                  .map((entry) => ({
+                                    key: entry.client,
+                                    label: clientLabel(entry.client),
+                                    value: metricValue(entry.totals, metric),
+                                    note:
+                                      metric === "tokens" && entry.totals.requestsWithoutUsage > 0
+                                        ? `${formatNumber(entry.totals.requestsWithoutUsage)} 条请求用量未知`
+                                        : undefined,
+                                  }))}
                               />
-                            </div>
+                            </ChartTooltipOverlay>
                           );
                         }}
                       />

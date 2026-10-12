@@ -39,9 +39,10 @@ pub struct RequestCoverage {
     pub sessions_without_requests: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RequestActivity {
     pub range: RequestTotals,
+    pub clients: Vec<RequestAnalysisGroup>,
     pub daily: Vec<RequestDailyBucket>,
     pub coverage: RequestCoverage,
 }
@@ -260,6 +261,7 @@ impl UsageStore {
                 "request range and daily boundaries must be increasing; at most 400 days".into(),
             ));
         }
+        let transaction = self.conn.unchecked_transaction()?;
         let client = filter.client.map(Client::as_str);
         let params = rusqlite::params![filter.from_ms, filter.to_ms, client, filter.project_path];
         let range = self.conn.query_row(
@@ -268,6 +270,8 @@ impl UsageStore {
             |row| read_totals(row, 0),
         )?;
         let coverage = self.request_coverage(filter)?;
+        let clients =
+            self.request_analysis_groups("s.client", filter, range.sums.total_tokens, None)?;
         let mut daily: Vec<_> = day_boundaries
             .windows(2)
             .map(|pair| RequestDailyBucket {
@@ -318,8 +322,10 @@ impl UsageStore {
                 }
             }
         }
+        transaction.commit()?;
         Ok(RequestActivity {
             range,
+            clients,
             daily,
             coverage,
         })

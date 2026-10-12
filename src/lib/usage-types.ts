@@ -189,6 +189,7 @@ export type RequestCoverage = {
 };
 export type RequestActivity = {
   range: RequestTotals;
+  clients: RequestAnalysisGroup[];
   daily: RequestDailyBucket[];
   coverage: RequestCoverage;
 };

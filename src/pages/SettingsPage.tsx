@@ -126,10 +126,7 @@ export function SettingsPage({
             </p>
           )}
           {category === "general" && (
-            <SettingsSection
-              title="通用"
-              description="窗口、启动与关闭行为。更改会自动保存到本机。"
-            >
+            <SettingsSection title="通用">
               <SettingsSelect
                 title="关闭主窗口时"
                 value={settings.closeBehavior}
@@ -149,7 +146,6 @@ export function SettingsPage({
               />
               <SettingsSwitch
                 title="开机启动时隐藏到托盘"
-                description="仅对开机自启生效，手动打开应用始终显示窗口。"
                 checked={settings.autostartHidden}
                 disabled={busy || !settings.autostart}
                 onChange={(autostartHidden) => {
@@ -167,10 +163,7 @@ export function SettingsPage({
             </SettingsSection>
           )}
           {category === "appearance" && (
-            <SettingsSection
-              title="外观与统计"
-              description="采用系统主题，或选择适合你的工作环境的配色。"
-            >
+            <SettingsSection title="外观与统计">
               <SettingsSelect
                 title="主题"
                 value={settings.theme}
@@ -194,7 +187,6 @@ export function SettingsPage({
               />
               <SettingsSelect
                 title="Token 显示单位"
-                description="统一用于统计数值、图表与列表；浮框保留精确值。仅改变显示，不影响统计。"
                 value={settings.tokenDisplay}
                 options={TOKEN_DISPLAY_OPTIONS}
                 disabled={busy}

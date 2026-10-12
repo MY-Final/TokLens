@@ -3,12 +3,11 @@ import { useTokenFormat } from "@/hooks/use-token-format";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { ClientIdentity } from "@/components/ClientIdentity";
-import { Badge } from "@/components/ui/badge";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import type { ClientKey, ClientUsage } from "@/lib/usage-types";
-import { clientLabel } from "@/lib/client-labels";
+import type { ClientKey, ClientUsage, RequestAnalysisGroup } from "@/lib/usage-types";
+import { clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
 
 const BAR_CLASSES: Record<ClientKey, string> = {
@@ -22,23 +21,53 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   workbuddy: "[&_[data-slot=progress-indicator]]:bg-client-workbuddy",
 };
 
-export function ClientUsageCard({
-  usage,
-  loading,
-  error,
-  onRetry,
-}: {
-  usage: ClientUsage[] | null;
+type ClientUsageCardProps = {
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-}) {
+} & (
+  | { basis?: "sessions"; usage: ClientUsage[] | null }
+  | { basis: "requests"; usage: RequestAnalysisGroup[] | null }
+);
+
+export function ClientUsageCard(props: ClientUsageCardProps) {
+  const { loading, error, onRetry } = props;
   const { formatTokens } = useTokenFormat();
+  const rows =
+    props.basis === "requests"
+      ? (props.usage ?? []).flatMap(({ key, metrics }) =>
+          isClientKey(key) && metrics.totals.requests > 0
+            ? [
+                {
+                  client: key,
+                  sessions: metrics.totals.sessions,
+                  count: metrics.totals.requests,
+                  messages: metrics.totals.requests,
+                  unknown: metrics.totals.requestsWithoutUsage,
+                  total: metrics.totals.totals.totalTokens,
+                  shareBps: metrics.shareBps,
+                },
+              ]
+            : [],
+        )
+      : (props.usage ?? [])
+          .filter((row) => row.sessions > 0)
+          .map((row) => ({
+            client: row.client,
+            sessions: row.sessions,
+            count: row.sessions,
+            messages: row.messages,
+            unknown: row.sessionsWithoutUsage,
+            total: row.totals.totalTokens,
+            shareBps: row.sessionsWithoutUsage === row.sessions ? null : row.shareBps,
+          }));
   return (
     <DashboardCard className="h-full">
       <CardHeader className="gap-1.5 px-5">
         <CardTitle className="text-sm">客户端用量分布</CardTitle>
-        <CardDescription className="text-xs">所选区间 · 本机采集的已知 Token 总量</CardDescription>
+        <CardDescription className="text-xs">
+          {props.basis === "requests" ? "按请求时间" : "按会话开始日"} · 已知 Token 占比
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
         {error ? (
@@ -47,62 +76,49 @@ export function ClientUsageCard({
           <LoadingRows rows={4} />
         ) : (
           <>
-            {!usage?.some((row) => row.sessions > 0) ? (
+            {rows.length === 0 ? (
               <EmptyBlock
                 title="暂无客户端用量"
                 description="调整时间范围，或点击刷新导入本机会话。"
               />
             ) : null}
-            {usage?.map((row) => (
+            {rows.map((row) => (
               <div key={row.client} className="space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
                   <ClientIdentity client={row.client} compact />
-                  {row.supported && row.sessions > 0 ? (
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {row.sessionsWithoutUsage === row.sessions
-                        ? "—"
-                        : `${(row.shareBps / 100).toFixed(1)}%（已知用量）`}
-                    </span>
-                  ) : (
-                    <Badge variant="secondary" className="font-normal">
-                      {row.supported ? "暂无数据" : "等待采集"}
-                    </Badge>
-                  )}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {row.shareBps === null ? "—" : `${(row.shareBps / 100).toFixed(1)}%`}
+                  </span>
                 </div>
-                {row.supported && row.sessions > 0 ? (
-                  <>
-                    {row.sessionsWithoutUsage < row.sessions ? (
-                      <Progress
-                        value={row.shareBps / 100}
-                        aria-label={`${clientLabel(row.client)} Token 用量占比`}
-                        className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
-                      />
-                    ) : null}
-                    <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted-foreground">
-                      <span>
-                        {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)} 条明细
-                      </span>
-                      <span
-                        title={
-                          row.sessionsWithoutUsage === row.sessions
-                            ? "总量未知"
-                            : `${formatNumber(row.totals.totalTokens)} Token`
-                        }
-                      >
-                        {row.sessionsWithoutUsage === row.sessions
-                          ? "—"
-                          : formatTokens(row.totals.totalTokens)}{" "}
-                        Token
-                      </span>
-                    </div>
-                    {row.sessionsWithoutUsage > 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {row.sessionsWithoutUsage < row.sessions ? "已知子集 · " : ""}
-                        {formatNumber(row.sessionsWithoutUsage)} 个会话总量未知
-                      </p>
-                    ) : null}
-                  </>
-                ) : null}
+                <>
+                  {row.shareBps !== null ? (
+                    <Progress
+                      value={row.shareBps / 100}
+                      aria-label={`${clientLabel(row.client)} Token 用量占比`}
+                      className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
+                    />
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted-foreground">
+                    <span>
+                      {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)}{" "}
+                      {props.basis === "requests" ? "条请求" : "条明细"}
+                    </span>
+                    <span
+                      title={
+                        row.unknown === row.count ? "总量未知" : `${formatNumber(row.total)} Token`
+                      }
+                    >
+                      {row.unknown === row.count ? "—" : formatTokens(row.total)} Token
+                    </span>
+                  </div>
+                  {row.unknown > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {row.unknown < row.count ? "已知子集 · " : ""}
+                      {formatNumber(row.unknown)} {props.basis === "requests" ? "条请求" : "个会话"}
+                      总量未知
+                    </p>
+                  ) : null}
+                </>
               </div>
             ))}
           </>

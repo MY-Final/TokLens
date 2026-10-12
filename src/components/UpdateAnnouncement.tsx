@@ -1,84 +1,62 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { releaseNotesSummary, releaseNotesText } from "@/lib/release-notes";
-import type { UpdateState } from "@/lib/settings-types";
+import { UpdatePanel } from "@/components/UpdatePanel";
+import { releaseNotesSummary } from "@/lib/release-notes";
+import type { UpdatesController } from "@/hooks/use-updates";
 
-// Module lifetime matches an application run, including StrictMode effect replay.
 const announcedVersions = new Set<string>();
 
 export function UpdateAnnouncement({
-  state,
+  updates,
   currentVersion,
-  onOpenUpdates,
+  open,
+  onOpenChange,
 }: {
-  state: UpdateState | null;
+  updates: UpdatesController;
   currentVersion: string | null | undefined;
-  onOpenUpdates: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [details, setDetails] = useState<{ version: string; notes: string | null } | null>(null);
-
+  const state = updates.state;
+  const lastManualCheck = useRef(0);
   useEffect(() => {
-    if (state?.phase !== "available" || !state.version || announcedVersions.has(state.version)) {
+    const manualCheck = lastManualCheck.current !== updates.checkSequence;
+    lastManualCheck.current = updates.checkSequence;
+    if (
+      state?.phase !== "available" ||
+      !state.version ||
+      (!manualCheck && announcedVersions.has(state.version))
+    )
       return;
-    }
     const version = state.version;
-    const notes = state.notes;
     announcedVersions.add(version);
-    const summary = releaseNotesSummary(notes);
-    toast.info(`TokLens ${version} 可用`, {
+    if (open) return;
+    const summary = releaseNotesSummary(state.notes);
+    toast.info(`TokLens v${version} 可用`, {
       id: `update-available-${version}`,
-      description: summary.length ? (
-        <div className="space-y-1">
-          {summary.map((line, index) => (
-            <p key={index} className="line-clamp-1 break-all">
-              {line}
-            </p>
-          ))}
-        </div>
-      ) : (
-        "此版本未提供更新说明。"
-      ),
+      description: summary.length ? summary.slice(0, 2).join("；") : undefined,
       closeButton: true,
       duration: 12_000,
-      action: { label: "查看详情", onClick: () => setDetails({ version, notes }) },
+      action: { label: "查看更新", onClick: () => onOpenChange(true) },
     });
-  }, [state]);
-
+  }, [state, onOpenChange, open, updates.checkSequence]);
   return (
-    <Dialog open={details !== null} onOpenChange={(open) => !open && setDetails(null)}>
-      <DialogContent className="max-h-[85vh]">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>发现新版本</DialogTitle>
-          <DialogDescription>
-            当前版本：{currentVersion ? `v${currentVersion}` : "—"} · 新版本：
-            {details ? `v${details.version}` : "—"}
+          <DialogTitle>应用更新</DialogTitle>
+          <DialogDescription className="sr-only">
+            查看更新内容、下载进度并安装更新。
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-[50vh] overflow-y-auto rounded-md border p-4 text-sm break-words whitespace-pre-wrap">
-          {releaseNotesText(details?.notes ?? null) || "此版本未提供更新说明。"}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setDetails(null)}>
-            关闭
-          </Button>
-          <Button
-            onClick={() => {
-              setDetails(null);
-              onOpenUpdates();
-            }}
-          >
-            前往更新
-          </Button>
-        </DialogFooter>
+        <UpdatePanel updates={updates} currentVersion={currentVersion} />
       </DialogContent>
     </Dialog>
   );

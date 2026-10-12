@@ -2,7 +2,8 @@ import { useTokenFormat } from "@/hooks/use-token-format";
 /** 总览：统计卡片 + 趋势 + 分布 + 排行 + 最近会话（全部来自真实采集数据）。 */
 
 import { DashboardCard } from "@/components/DashboardCard";
-import { CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DataExplanation } from "@/components/DataExplanation";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { CalendarDays, Database, ListTree, MessageSquare } from "lucide-react";
 import { addDays, startOfDay } from "date-fns";
@@ -124,7 +125,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
     value?.sessionsWithoutUsage
       ? `已知子集 · ${formatNumber(value.sessionsWithoutUsage)} 个会话总量未知`
       : value?.sessions
-        ? "本机客户端 · 已知用量"
+        ? "已知用量"
         : "所选区间暂无会话";
 
   return (
@@ -173,7 +174,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
               bucket && bucket.sessionsWithoutUsage > 0
                 ? `其中 ${formatNumber(bucket.sessionsWithoutUsage)} 个无用量数据`
                 : bucket?.sessions
-                  ? "全部会话都有用量数据"
+                  ? undefined
                   : "所选区间暂无会话"
             }
             tooltip="按客户端会话/线程去重后的数量；没有 Token 记录的会话也计入会话数，但不贡献 Token 合计。"
@@ -229,7 +230,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         />
         <RankingCard
           title="模型排行"
-          description="按会话主模型聚合 · Top 5（并非逐请求模型）"
+          description="会话主模型 · Top 5"
           entries={rankings.data?.models ?? null}
           loading={rankings.loading}
           error={rankings.error}
@@ -241,7 +242,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
 
       <RankingCard
         title="项目排行"
-        description="按会话工作目录聚合 · Top 5"
+        description="项目目录 · Top 5"
         entries={rankings.data?.projects ?? null}
         loading={rankings.loading}
         error={rankings.error}
@@ -254,7 +255,6 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
       <DashboardCard>
         <CardHeader className="gap-1.5 px-5">
           <CardTitle className="text-sm">最近会话</CardTitle>
-          <CardDescription className="text-xs">仅展示统计元数据与用量</CardDescription>
         </CardHeader>
         <CardContent className="px-5">
           <SessionTable
@@ -267,19 +267,13 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         </CardContent>
       </DashboardCard>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        口径说明：所有数值来自本机客户端记录的统计字段。 缺失值显示为"—"，不按 0
-        计入合计；费用没有可靠来源，页面不展示任何金额。
-        {bucket && bucket.sessionsPartial > 0
-          ? ` 当前区间有 ${formatNumber(bucket.sessionsPartial)} 个会话的请求明细不完整（源文件被分页或续接），其总量仍取客户端累计值。`
-          : ""}
-        {bucket && bucket.sessionsTotalMismatch > 0
-          ? ` 另有 ${formatNumber(bucket.sessionsTotalMismatch)} 个会话的客户端总量与其分项之和不一致，已按客户端值计入并标记。`
-          : ""}
-        {today
-          ? ` 今日合计（本地日历）${formatTokensOrDash(knownTotal(today))} Token。${totalHint(today)}。`
-          : ""}
-      </p>
+      <DataExplanation
+        summary={`会话累计 · 不含估算${bucket?.sessionsPartial ? ` · ${formatNumber(bucket.sessionsPartial)} 个明细不完整` : ""}${bucket?.sessionsTotalMismatch ? ` · ${formatNumber(bucket.sessionsTotalMismatch)} 个总量异常` : ""}`}
+      >
+        <p>按会话开始日归属累计用量。— 表示未知，不计入合计。</p>
+        <p>模型按会话主模型归属，非逐请求模型；项目按会话目录归属。</p>
+        <p>明细不完整时仍展示会话累计值；分项与客户端总量不一致时保留客户端值。</p>
+      </DataExplanation>
     </div>
   );
 }

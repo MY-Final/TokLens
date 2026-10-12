@@ -9,14 +9,16 @@ export function SettingsSection({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <section>
       <div className="space-y-2 border-b border-border/60 pb-5">
         <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        {description && (
+          <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        )}
       </div>
       <div className="divide-y divide-border/50">{children}</div>
     </section>

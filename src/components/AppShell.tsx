@@ -57,6 +57,7 @@ export function AppShell({
   onSync,
   error,
   onRetry,
+  updateControl,
 }: {
   page: PageKey;
   sidebarCollapsed: boolean;
@@ -73,6 +74,7 @@ export function AppShell({
   onSync: (force?: boolean) => void;
   error: string | null;
   onRetry: () => void;
+  updateControl?: ReactNode;
 }) {
   const sync = status?.sync;
   useEffect(() => {
@@ -128,6 +130,7 @@ export function AppShell({
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="px-3 py-4">
+          {updateControl}
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton

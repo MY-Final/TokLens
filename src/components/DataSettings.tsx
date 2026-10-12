@@ -34,11 +34,8 @@ export function DataSettings({ controller }: { controller: SettingsController })
   };
   return (
     <>
-      <SettingsSection
-        title="数据与隐私"
-        description="统计与设置保存在本机，不上传会话正文或凭据。更新检查仅访问公开发布信息。"
-      >
-        <SettingsRow title="应用数据目录" description="仅打开 TokLens 自有目录。">
+      <SettingsSection title="数据与隐私" description="只读采集，本地存储，不保存会话正文。">
+        <SettingsRow title="应用数据目录">
           <Button
             size="sm"
             variant="outline"
@@ -49,10 +46,7 @@ export function DataSettings({ controller }: { controller: SettingsController })
             打开目录
           </Button>
         </SettingsRow>
-        <SettingsRow
-          title="清除统计缓存"
-          description="清除统计和导入水位，并暂停采集；客户端原始记录与设置均保留。"
-        >
+        <SettingsRow title="清除统计缓存" description="清除后暂停采集，保留原始记录和设置。">
           <Button
             size="sm"
             variant="outline"
@@ -65,10 +59,7 @@ export function DataSettings({ controller }: { controller: SettingsController })
             清除统计
           </Button>
         </SettingsRow>
-        <SettingsRow
-          title="恢复默认设置"
-          description="关闭开机自启和自动检查，恢复默认采集；保留统计数据。"
-        >
+        <SettingsRow title="恢复默认设置" description="保留统计，恢复采集。">
           <Button
             size="sm"
             variant="outline"

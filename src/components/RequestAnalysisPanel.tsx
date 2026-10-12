@@ -43,21 +43,20 @@ export function RequestAnalysisPanel({
   const scope = selectedClient ? clientLabel(selectedClient) : "全部客户端";
   return (
     <div className="space-y-4">
-      <DataExplanation summary="按请求时间 · 实测 / 直接换算 · 不含估算">
-        <p>客户端比较覆盖完整所选区间。点击客户端后，下方构成、均量与排行仅分析该客户端。</p>
+      <DataExplanation summary="请求时间 · 实测 / 换算 · 不含估算">
         <p>
-          请求均量＝已知总 Token ÷ 有总量记录的请求数；不把未知请求按零计入。缓存命中率＝缓存读取
-          ÷（未命中输入＋缓存读取），仅使用两个字段都已知的请求。这两项为直接换算。
+          均量＝已知 Token ÷ 有总量的请求数。缓存命中率＝缓存读取
+          ÷（输入＋缓存读取），仅使用成对已知字段。两项均为换算值。
         </p>
         <p>
-          模型按会话主模型归属请求用量，并非逐请求模型；项目按会话目录归属。不以 Token
-          推算费用或生产力。
+          模型按会话主模型归属，非逐请求模型；项目按目录归属。分项仅累加已知值，条形相对最大分项；来源占比包含
+          Top 8 之外的已知用量。
         </p>
         {data ? (
           <p>
-            全历史采集覆盖（与所选日期独立）：缺少时间 {formatNumber(data.coverage.untimedRequests)}{" "}
-            条、估算 {formatNumber(data.coverage.estimatedRequests)} 条已排除；
-            {formatNumber(data.coverage.sessionsPartial)} 个会话明细不完整。分析只代表已记录请求。
+            全历史覆盖（不受日期筛选）：排除无时间 {formatNumber(data.coverage.untimedRequests)}{" "}
+            条、估算 {formatNumber(data.coverage.estimatedRequests)} 条；
+            {formatNumber(data.coverage.sessionsPartial)} 个会话明细不完整，仅代表已记录请求。
           </p>
         ) : null}
       </DataExplanation>
@@ -79,9 +78,9 @@ export function RequestAnalysisPanel({
                     exact: "按已知 Token 比较全部客户端",
                   },
                   {
-                    label: "单次请求平均用量",
+                    label: "平均 Token / 请求",
                     value: formatTokensOrDash(summary?.averageTokens ?? null),
-                    note: `${scope} · 仅已知用量请求`,
+                    note: scope,
                     exact:
                       summary?.averageTokens === null
                         ? "没有已知总量，均量未知"
@@ -90,7 +89,7 @@ export function RequestAnalysisPanel({
                   {
                     label: "输入缓存命中率",
                     value: formatBasisPoints(summary?.cacheHitBps ?? null),
-                    note: `${scope} · ${formatNumber(summary?.cacheKnownRequests ?? 0)} 条字段已知`,
+                    note: `${formatNumber(summary?.cacheKnownRequests ?? 0)} 条有效样本`,
                     exact: "缓存读取 ÷（未命中输入＋缓存读取），仅使用两个字段都已知的请求",
                   },
                 ].map((metric) => (
@@ -112,9 +111,7 @@ export function RequestAnalysisPanel({
             <CardHeader className="flex flex-wrap items-start justify-between gap-3 px-5">
               <div className="space-y-1.5">
                 <CardTitle className="text-sm">客户端用量对比</CardTitle>
-                <CardDescription className="text-xs">
-                  {rangeLabel} · 按已知 Token 降序 · 点击客户端查看构成与排行
-                </CardDescription>
+                <CardDescription className="text-xs">{rangeLabel}</CardDescription>
               </div>
               <Button
                 size="sm"
@@ -127,10 +124,7 @@ export function RequestAnalysisPanel({
             </CardHeader>
             <CardContent className="px-5">
               {data.clients.length === 0 ? (
-                <EmptyBlock
-                  title="此区间未记录可定位的请求"
-                  description="调整日期，或刷新同步本地客户端数据；缺少时间和估算请求不进入分析。"
-                />
+                <EmptyBlock title="暂无请求记录" description="调整日期或点击刷新。" />
               ) : (
                 <Table className="text-xs">
                   <TableHeader>

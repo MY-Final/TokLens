@@ -182,6 +182,8 @@ fn four_hundred_display_days_do_not_truncate_range_and_invalid_boundaries_are_re
     assert_eq!(result.daily.len(), 400);
     assert_eq!(result.range.requests, 2);
     assert_eq!(result.range.sums.total_tokens, 30);
+    assert_eq!(result.clients[0].metrics.totals.requests, 2);
+    assert_eq!(result.clients[0].metrics.totals.sums.total_tokens, 30);
     assert_eq!(
         result
             .daily
@@ -200,6 +202,65 @@ fn four_hundred_display_days_do_not_truncate_range_and_invalid_boundaries_are_re
     for invalid in [vec![0], vec![0, 0], vec![1, 0], (0..402).collect()] {
         assert!(store.request_activity(&filter, &invalid).is_err());
     }
+}
+
+#[test]
+fn overview_clients_match_analysis_for_continued_sessions_zero_and_unknown_usage() {
+    let store = UsageStore::open_in_memory().expect("store");
+    session(&store, "continued", Client::WorkBuddy, "alpha", 0, false);
+    session(&store, "zero", Client::Codex, "alpha", 0, false);
+    session(&store, "unknown", Client::ClaudeCode, "alpha", 0, false);
+    session(&store, "inactive", Client::OpenCode, "alpha", 0, false);
+    request(&store, "before", "continued", Some(99), Some(7), "measured");
+    request(&store, "today", "continued", Some(100), Some(12), "derived");
+    request(&store, "zero", "zero", Some(150), Some(0), "measured");
+    request(&store, "unknown", "unknown", Some(150), None, "measured");
+    request(&store, "old", "inactive", Some(99), Some(99), "measured");
+    let filter = AnalyticsFilter {
+        from_ms: Some(100),
+        to_ms: Some(200),
+        ..Default::default()
+    };
+    let activity = store
+        .request_activity(&filter, &[100, 200])
+        .expect("activity");
+    let analysis = store.request_analysis(&filter).expect("analysis");
+    assert_eq!(activity.clients, analysis.clients);
+    assert_eq!(activity.clients.len(), 3);
+    assert_eq!(activity.clients[0].key.as_deref(), Some("workbuddy"));
+    assert_eq!(activity.clients[0].metrics.totals.sums.total_tokens, 12);
+    assert_eq!(activity.clients[0].metrics.share_bps, Some(10_000));
+    assert_eq!(activity.clients[1].key.as_deref(), Some("codex"));
+    assert_eq!(activity.clients[1].metrics.totals.requests_with_usage, 1);
+    assert_eq!(activity.clients[1].metrics.share_bps, Some(0));
+    assert_eq!(activity.clients[2].key.as_deref(), Some("claude_code"));
+    assert_eq!(activity.clients[2].metrics.totals.requests_without_usage, 1);
+    assert_eq!(activity.clients[2].metrics.share_bps, None);
+    assert_eq!(
+        store.range_totals(&filter).expect("session start").sessions,
+        0
+    );
+    let empty_filter = AnalyticsFilter {
+        from_ms: Some(200),
+        to_ms: Some(300),
+        ..filter
+    };
+    assert!(
+        store
+            .request_activity(&empty_filter, &[200, 300])
+            .expect("empty")
+            .clients
+            .is_empty()
+    );
+    let client_filter = AnalyticsFilter {
+        client: Some(Client::WorkBuddy),
+        ..filter
+    };
+    let filtered = store
+        .request_activity(&client_filter, &[100, 200])
+        .expect("client");
+    assert_eq!(filtered.clients.len(), 1);
+    assert_eq!(filtered.clients[0].metrics.totals, filtered.range);
 }
 
 #[test]

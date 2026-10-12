@@ -3,6 +3,8 @@ import { toast } from "sonner";
 import { onDesktopError, onDesktopEvent, onTrayNavigate } from "@/lib/api";
 import { CloseWindowDialog } from "@/components/CloseWindowDialog";
 import { UpdateAnnouncement } from "@/components/UpdateAnnouncement";
+import { ArrowUpCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 import { AppShell, type PageKey } from "@/components/AppShell";
 import { useDataSourceStatus } from "@/hooks/use-data-source-status";
@@ -23,12 +25,12 @@ import { resolveRange, type DateRange } from "@/lib/ranges";
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
   const [updateFocusToken, setUpdateFocusToken] = useState(0);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<DateRange | null>(null);
   const nowMs = useLocalClock();
   const settings = useSettings();
   const updates = useUpdates();
   const latestUpdates = useRef(updates);
-  const trayCheckPending = useRef(false);
   const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
   useTrayUsage(nowMs, refreshToken);
 
@@ -40,18 +42,6 @@ export default function App() {
   useEffect(() => {
     latestUpdates.current = updates;
   });
-
-  useEffect(() => {
-    if (!trayCheckPending.current || updates.busy) return;
-    trayCheckPending.current = false;
-    const message = updates.error ?? updates.state?.error;
-    if (message) toast.error(`检查更新失败：${message}`);
-    else if (updates.state?.phase === "up_to_date") toast.success("当前已是最新版本");
-    else if (updates.state?.phase === "disabled")
-      toast.info("开发模式不提供应用更新，请使用正式安装版本检查更新");
-    else if (updates.state?.phase === "unavailable")
-      toast.info("当前环境无法检查更新，请在设置中查看更新状态");
-  }, [updates.busy, updates.error, updates.state]);
 
   const range = useMemo(
     () =>
@@ -72,11 +62,6 @@ export default function App() {
     [syncNow],
   );
 
-  const handleOpenUpdates = useCallback(() => {
-    setPage("settings");
-    setUpdateFocusToken((token) => token + 1);
-  }, []);
-
   useEffect(() => {
     let disposed = false;
     const stops: (() => void)[] = [];
@@ -95,14 +80,13 @@ export default function App() {
       setUpdateFocusToken((token) => token + 1);
       const current = latestUpdates.current;
       if (
-        trayCheckPending.current ||
         current.busy ||
         current.state?.phase === "checking" ||
         current.state?.phase === "downloading" ||
         current.state?.phase === "installing"
       )
         return;
-      trayCheckPending.current = true;
+      if (current.state?.phase === "downloaded") return;
       void current.act("check");
     })
       .then(attach)
@@ -115,6 +99,24 @@ export default function App() {
       stops.forEach((stop) => stop());
     };
   }, [handleNavigate]);
+
+  const knownUpdate =
+    !!updates.state?.version &&
+    ["available", "downloading", "downloaded", "installing", "failed"].includes(
+      updates.state.phase,
+    );
+  const updateLabel =
+    updates.operation === "check" || updates.state?.phase === "checking"
+      ? "正在检查更新"
+      : updates.state?.phase === "downloaded"
+        ? "更新已就绪"
+        : updates.state?.phase === "downloading"
+          ? "正在下载更新"
+          : updates.state?.phase === "installing"
+            ? "正在安装更新"
+            : knownUpdate
+              ? `更新 v${updates.state?.version}`
+              : "检查更新";
 
   return (
     <TokenDisplayContext value={settings.settings?.tokenDisplay ?? "auto"}>
@@ -137,6 +139,28 @@ export default function App() {
           }}
           onNavigate={handleNavigate}
           onRangeChange={setSelectedRange}
+          updateControl={
+            <Button
+              variant="ghost"
+              className="h-10 w-full justify-start gap-3 px-3 text-primary group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+              aria-label={updateLabel}
+              title={updateLabel}
+              onClick={() => {
+                setUpdateDialogOpen(true);
+                if (
+                  updates.state &&
+                  !knownUpdate &&
+                  !updates.busy &&
+                  updates.state?.phase !== "disabled" &&
+                  updates.state?.phase !== "checking"
+                )
+                  void updates.act("check");
+              }}
+            >
+              <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate group-data-[collapsible=icon]:hidden">{updateLabel}</span>
+            </Button>
+          }
           onSync={handleSync}
         >
           {page === "overview" ? (
@@ -158,7 +182,6 @@ export default function App() {
               loading={loading}
               error={error}
               syncBusy={syncBusy}
-              refreshToken={refreshToken}
               onRetry={() => {
                 void reload();
               }}
@@ -174,9 +197,10 @@ export default function App() {
           ) : null}
         </AppShell>
         <UpdateAnnouncement
-          state={updates.state}
+          updates={updates}
           currentVersion={settings.appInfo?.version ?? null}
-          onOpenUpdates={handleOpenUpdates}
+          open={updateDialogOpen}
+          onOpenChange={setUpdateDialogOpen}
         />
         <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
         <CloseWindowDialog />

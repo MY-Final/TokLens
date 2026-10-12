@@ -1,12 +1,13 @@
 /** 数据源管理：客户端接入状态、本地库路径、同步操作与上次同步明细。 */
 
 import { DashboardCard } from "@/components/DashboardCard";
+import { DataExplanation } from "@/components/DataExplanation";
 
 import { Database, FolderSearch, ShieldCheck } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import type { SettingsController } from "@/hooks/use-settings";
@@ -17,18 +18,14 @@ import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 
 const CLIENT_HINTS: Record<string, string> = {
-  codex:
-    "只读 CODEX_HOME 下的 sessions；未设置时使用用户目录下的 .codex/sessions。VS Code 与 TokLens 需使用相同用户和环境。",
-  claude_code: "只读 ~/.claude/projects 下的会话与子代理转录；支持 CLAUDE_CONFIG_DIR。",
-  dsh: "只读 ~/.dsh/sessions 下的 v0–v4 JSONL / Zstandard 会话日志；支持 DSH_SESSIONS_DIR。",
-  mimocode:
-    "只读 ~/.local/share/mimocode/mimocode.db（含 WAL）；支持 XDG_DATA_HOME / MIMOCODE_DB，排除外部导入消息，保留本地续聊。",
-  pi_desktop:
-    "只读 ~/.pi-desktop/sessions 下的 JSONL；按物理请求去重，支持 PI_DESKTOP_SESSIONS_DIR。",
-  workbuddy:
-    "只读 ~/.workbuddy/projects 下的 JSONL；支持 WORKBUDDY_CONFIG_DIR，按会话及原生输出事件去重，只统计携带用量的模型调用。",
-  kimi_code: "只读 ~/.kimi-code/sessions 下的会话元数据与 agent wire.jsonl；支持 KIMI_CODE_HOME。",
-  opencode: "只读 ~/.local/share/opencode/opencode.db，包含 WAL 更新；支持 XDG_DATA_HOME。",
+  codex: "Codex：CODEX_HOME（VS Code 与 TokLens 需使用相同用户和环境）",
+  claude_code: "Claude Code：CLAUDE_CONFIG_DIR",
+  dsh: "DSH：DSH_SESSIONS_DIR",
+  mimocode: "MiMoCode：MIMOCODE_DB / XDG_DATA_HOME",
+  pi_desktop: "Pi Desktop：PI_DESKTOP_SESSIONS_DIR",
+  workbuddy: "WorkBuddy：WORKBUDDY_CONFIG_DIR",
+  kimi_code: "Kimi Code：KIMI_CODE_HOME",
+  opencode: "OpenCode：XDG_DATA_HOME",
 };
 
 export function SourcesPage({
@@ -36,7 +33,6 @@ export function SourcesPage({
   loading,
   error,
   syncBusy,
-  refreshToken,
   onRetry,
   onSync,
   settingsController,
@@ -45,7 +41,6 @@ export function SourcesPage({
   loading: boolean;
   error: string | null;
   syncBusy: boolean;
-  refreshToken: number;
   onRetry: () => void;
   onSync: (force?: boolean) => void;
   settingsController: SettingsController;
@@ -69,9 +64,6 @@ export function SourcesPage({
         <DashboardCard>
           <CardHeader>
             <CardTitle>同步</CardTitle>
-            <CardDescription>
-              按设置采集已启用的客户端；暂停或关闭客户端后保留已有统计。
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <SyncControl
@@ -122,9 +114,6 @@ export function SourcesPage({
         <DashboardCard>
           <CardHeader>
             <CardTitle>本地数据库</CardTitle>
-            <CardDescription>
-              只写入 TokLens 专属应用数据目录；客户端原始数据始终只读。
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {loading && !status ? (
@@ -146,14 +135,10 @@ export function SourcesPage({
                   <dd className="text-right tabular-nums">
                     {formatDateTime(status?.lastEventMs ?? null)}
                   </dd>
-                  <dt className="text-muted-foreground">费用金额</dt>
-                  <dd className="text-right text-muted-foreground">不展示（无可靠来源）</dd>
                 </dl>
                 <p className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
                   <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                  仅保存统计元数据（时间、模型、项目路径、Token
-                  计数），不保存会话正文、提示词或凭据。
-                  {refreshToken > 0 ? " 数据已随最近一次同步刷新。" : ""}
+                  仅存统计，不存正文
                 </p>
               </>
             )}
@@ -210,7 +195,6 @@ export function SourcesPage({
                     </Badge>
                   )}
                 </CardTitle>
-                <CardDescription>{CLIENT_HINTS[client.client]}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-xs text-muted-foreground">实际读取位置</p>
@@ -235,9 +219,7 @@ export function SourcesPage({
                   </p>
                 ) : null}
                 {(scan?.filesFailed ?? 0) + (scan?.directoriesFailed ?? 0) > 0 ? (
-                  <p className="text-xs text-destructive">
-                    部分文件或目录暂时无法读取，可能尚未写完或没有权限。已有统计保留，下次同步重试。
-                  </p>
+                  <p className="text-xs text-destructive">读取失败，保留历史，下次同步重试。</p>
                 ) : null}
                 {client.supported ? (
                   <>
@@ -262,7 +244,7 @@ export function SourcesPage({
                     {client.sessions === 0 && !loading ? (
                       <p className="flex items-center gap-2 text-xs text-muted-foreground">
                         <FolderSearch className="size-3.5" aria-hidden="true" />
-                        还没有导入数据，先执行一次同步。
+                        暂无数据，点击刷新导入。
                       </p>
                     ) : null}
                   </>
@@ -287,10 +269,13 @@ export function SourcesPage({
         ) : null}
       </div>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        口径未知项：Codex / OpenCode / WorkBuddy
-        的“缓存写入”与输入的关系无法从本机数据判定，因此不计入总量，仅在会话与分桶中单独展示。
-      </p>
+      <DataExplanation summary="只读采集">
+        <p>暂停或停用客户端保留已有统计。自定义目录配置：</p>
+        {Object.entries(CLIENT_HINTS).map(([client, hint]) => (
+          <p key={client}>{hint}</p>
+        ))}
+        <p>Codex / OpenCode / WorkBuddy 的缓存写入关系未知，不计入总量。</p>
+      </DataExplanation>
     </div>
   );
 }

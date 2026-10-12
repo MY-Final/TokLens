@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 export function DataExplanation({ summary, children }: { summary: string; children: ReactNode }) {
   return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
       <span>{summary}</span>
       <Popover>
         <PopoverTrigger asChild>

@@ -1,4 +1,5 @@
 import { RequestActivityPanel } from "@/components/RequestActivityPanel";
+import { ClientUsageCard } from "@/components/ClientUsageCard";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getRequestActivity } from "@/lib/api";
 import { localDayBoundaries } from "@/lib/ranges";
@@ -30,14 +31,23 @@ export function RequestActivityView({
       ? `${range.label} · 图表仅展示最近 400 天，合计包含完整区间`
       : range.label;
   return (
-    <RequestActivityPanel
-      data={activity.data}
-      loading={activity.loading}
-      error={activity.error}
-      onRetry={activity.reload}
-      rangeLabel={rangeLabel}
-      client={client}
-      selectedRange={range}
-    />
+    <div className="space-y-4">
+      <RequestActivityPanel
+        data={activity.data}
+        loading={activity.loading}
+        error={activity.error}
+        onRetry={activity.reload}
+        rangeLabel={rangeLabel}
+        client={client}
+        selectedRange={range}
+      />
+      <ClientUsageCard
+        basis="requests"
+        usage={activity.data?.clients ?? null}
+        loading={activity.loading}
+        error={activity.error}
+        onRetry={activity.reload}
+      />
+    </div>
   );
 }

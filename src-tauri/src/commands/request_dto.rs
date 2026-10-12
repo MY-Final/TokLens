@@ -148,6 +148,7 @@ impl From<RequestCoverage> for RequestCoverageDto {
 #[serde(rename_all = "camelCase")]
 pub struct RequestActivityDto {
     pub range: RequestTotalsDto,
+    pub clients: Vec<RequestAnalysisGroupDto>,
     pub daily: Vec<RequestDailyBucketDto>,
     pub coverage: RequestCoverageDto,
 }
@@ -155,6 +156,7 @@ impl From<RequestActivity> for RequestActivityDto {
     fn from(value: RequestActivity) -> Self {
         Self {
             range: value.range.into(),
+            clients: value.clients.into_iter().map(Into::into).collect(),
             daily: value.daily.into_iter().map(Into::into).collect(),
             coverage: value.coverage.into(),
         }

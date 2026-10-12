@@ -39,7 +39,9 @@ export function ClientDateHeatmap({
   selectedRange?: DailyRange;
 }) {
   const days = buckets ?? [];
-  const clients = client ? [client] : CLIENTS;
+  const clients = (client ? [client] : CLIENTS).filter((key) =>
+    days.some((day) => day.clients.some((entry) => entry.client === key && entry.sessions > 0)),
+  );
   const rows = clients.map((key) => ({
     client: key,
     cells: days.map((day) => {

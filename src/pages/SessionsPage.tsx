@@ -1,6 +1,7 @@
 /** 会话明细：按区间与客户端筛选，展示元数据与用量（无正文）。 */
 
 import { DashboardCard } from "@/components/DashboardCard";
+import { DataExplanation } from "@/components/DataExplanation";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -169,10 +170,10 @@ function SessionBrowser({
         </Button>
       </nav>
 
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        列表按会话开始时间倒序；Token 为会话累计值（父子集字段已扣除），"—"
-        表示尚未导入可用的总量，可在数据源管理检查路径与采集状态。日期筛选按会话开始时间生效。会话正文不保存。
-      </p>
+      <DataExplanation summary="按会话开始时间 · 会话累计">
+        <p>按开始时间筛选并倒序排列。Token 为会话累计，重叠子集已扣除。</p>
+        <p>— 表示尚未导入可用总量，可在数据源管理检查读取路径和采集状态。</p>
+      </DataExplanation>
       {selectedSession ? (
         <SelectedSessionDetail
           key={`${selectedSession.client}:${selectedSession.clientSessionId}`}

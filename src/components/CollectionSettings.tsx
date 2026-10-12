@@ -12,8 +12,8 @@ export function CollectionSettings({ controller }: { controller: SettingsControl
   const { settings, busy, patch } = controller;
   if (!settings) return null;
   return (
-    <SettingsSection title="采集" description="只读本地客户端元数据。隐藏窗口后仍按此设置运行。">
-      <SettingsRow title="采集状态" description="暂停会保留历史数据；恢复时会立即同步一次。">
+    <SettingsSection title="采集">
+      <SettingsRow title="采集状态" description="暂停保留历史，恢复后立即同步。">
         <div className="flex items-center gap-3">
           <Badge variant="outline">{settings.collectionPaused ? "已暂停" : "运行中"}</Badge>
           <Button
@@ -38,7 +38,6 @@ export function CollectionSettings({ controller }: { controller: SettingsControl
       />
       <SettingsSelect
         title="后台采集频率"
-        description="暂停期间不采集；在数据源管理中可启停单个客户端。"
         value={String(settings.syncIntervalMinutes)}
         disabled={busy}
         options={[

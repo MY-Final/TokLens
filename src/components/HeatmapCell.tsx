@@ -57,7 +57,7 @@ export function HeatmapCell({
           ) : null}
         </button>
       </TooltipTrigger>
-      <TooltipContent className="max-w-72 space-y-1 text-xs leading-relaxed">
+      <TooltipContent className="max-w-72 space-y-1 border bg-popover text-xs leading-relaxed text-popover-foreground [&>svg]:bg-popover [&>svg]:fill-popover">
         {children ?? label}
       </TooltipContent>
     </Tooltip>
