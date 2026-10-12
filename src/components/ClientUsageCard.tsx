@@ -58,7 +58,9 @@ export function ClientUsageCard({
                   <ClientIdentity client={row.client} compact />
                   {row.supported && row.sessions > 0 ? (
                     <span className="font-mono text-xs text-muted-foreground">
-                      {(row.shareBps / 100).toFixed(1)}%
+                      {row.sessionsWithoutUsage === row.sessions
+                        ? "—"
+                        : `${(row.shareBps / 100).toFixed(1)}%（已知用量）`}
                     </span>
                   ) : (
                     <Badge variant="secondary" className="font-normal">
@@ -68,19 +70,36 @@ export function ClientUsageCard({
                 </div>
                 {row.supported && row.sessions > 0 ? (
                   <>
-                    <Progress
-                      value={row.shareBps / 100}
-                      aria-label={`${clientLabel(row.client)} Token 用量占比`}
-                      className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
-                    />
+                    {row.sessionsWithoutUsage < row.sessions ? (
+                      <Progress
+                        value={row.shareBps / 100}
+                        aria-label={`${clientLabel(row.client)} Token 用量占比`}
+                        className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
+                      />
+                    ) : null}
                     <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted-foreground">
                       <span>
                         {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)} 条明细
                       </span>
-                      <span title={`${formatNumber(row.totals.totalTokens)} Token`}>
-                        {formatTokens(row.totals.totalTokens)} Token
+                      <span
+                        title={
+                          row.sessionsWithoutUsage === row.sessions
+                            ? "总量未知"
+                            : `${formatNumber(row.totals.totalTokens)} Token`
+                        }
+                      >
+                        {row.sessionsWithoutUsage === row.sessions
+                          ? "—"
+                          : formatTokens(row.totals.totalTokens)}{" "}
+                        Token
                       </span>
                     </div>
+                    {row.sessionsWithoutUsage > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {row.sessionsWithoutUsage < row.sessions ? "已知子集 · " : ""}
+                        {formatNumber(row.sessionsWithoutUsage)} 个会话总量未知
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
               </div>

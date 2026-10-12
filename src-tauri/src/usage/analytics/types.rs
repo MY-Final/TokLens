@@ -27,6 +27,8 @@ pub struct TokenSums {
 /// 一段区间内的统计快照。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RangeTotals {
+    pub cache_hit_bps: Option<i64>,
+    pub cache_eligible_sessions: i64,
     pub sessions: i64,
     pub messages: i64,
     pub sums: TokenSums,
@@ -54,6 +56,7 @@ pub struct DailyBucket {
 /// 按客户端聚合。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientUsage {
+    pub sessions_without_usage: i64,
     pub share_bps: i64,
     pub client: Client,
     pub sessions: i64,
@@ -64,6 +67,7 @@ pub struct ClientUsage {
 /// 分组排行（模型 / 项目）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupUsage {
+    pub sessions_without_usage: i64,
     /// 分组键；`None` 表示客户端未记录该字段（UI 需显示为"未知"）。
     pub key: Option<String>,
     pub sessions: i64,

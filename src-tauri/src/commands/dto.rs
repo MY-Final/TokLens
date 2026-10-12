@@ -115,6 +115,8 @@ impl From<TokenSums> for TokenTotalsDto {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsBucketDto {
+    pub cache_hit_bps: Option<i64>,
+    pub cache_eligible_sessions: i64,
     pub sessions: i64,
     pub messages: i64,
     /// 完全没有用量数据的会话数（总量的"未知"部分，不参与求和）。
@@ -129,6 +131,8 @@ pub struct StatsBucketDto {
 impl From<RangeTotals> for StatsBucketDto {
     fn from(totals: RangeTotals) -> Self {
         Self {
+            cache_hit_bps: totals.cache_hit_bps,
+            cache_eligible_sessions: totals.cache_eligible_sessions,
             sessions: totals.sessions,
             messages: totals.messages,
             sessions_without_usage: totals.sessions_without_usage,
@@ -180,6 +184,7 @@ impl From<DailyBucket> for DailyTokenBucketDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientUsageDto {
+    pub sessions_without_usage: i64,
     pub share_bps: i64,
     pub client: String,
     pub supported: bool,
@@ -195,6 +200,7 @@ pub fn client_usage_dto(usage: &[ClientUsage]) -> Vec<ClientUsageDto> {
         .map(|client| {
             let entry = usage.iter().find(|entry| entry.client == client);
             ClientUsageDto {
+                sessions_without_usage: entry.map_or(0, |entry| entry.sessions_without_usage),
                 share_bps: entry.map_or(0, |entry| entry.share_bps),
                 client: client.as_str().to_string(),
                 supported: is_supported(client),
@@ -210,6 +216,7 @@ pub fn client_usage_dto(usage: &[ClientUsage]) -> Vec<ClientUsageDto> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RankingEntryDto {
+    pub sessions_without_usage: i64,
     pub key: Option<String>,
     pub sessions: i64,
     pub messages: i64,
@@ -219,6 +226,7 @@ pub struct RankingEntryDto {
 impl From<GroupUsage> for RankingEntryDto {
     fn from(group: GroupUsage) -> Self {
         Self {
+            sessions_without_usage: group.sessions_without_usage,
             key: group.key,
             sessions: group.sessions,
             messages: group.messages,
@@ -284,6 +292,7 @@ impl From<SessionSummary> for SessionSummaryDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClientSourceStatusDto {
+    pub source_path: Option<String>,
     pub client: String,
     pub supported: bool,
     pub sessions: i64,
@@ -296,6 +305,7 @@ pub struct ClientSourceStatusDto {
 impl From<ClientSourceStatus> for ClientSourceStatusDto {
     fn from(status: ClientSourceStatus) -> Self {
         Self {
+            source_path: None,
             client: status.client.as_str().to_string(),
             supported: is_supported(status.client),
             sessions: status.sessions,
@@ -318,6 +328,7 @@ pub struct SyncReportDto {
     pub files_skipped_unchanged: i64,
     pub files_without_identity: i64,
     pub files_failed: i64,
+    pub directories_failed: i64,
     pub unparsed_lines: i64,
     pub sessions_imported: i64,
     pub sessions_skipped_stale: i64,
@@ -336,6 +347,7 @@ impl From<SyncReport> for SyncReportDto {
             files_skipped_unchanged: report.files_skipped_unchanged as i64,
             files_without_identity: report.files_without_identity as i64,
             files_failed: report.files_failed as i64,
+            directories_failed: report.directories_failed as i64,
             unparsed_lines: report.unparsed_lines as i64,
             sessions_imported: report.sessions_imported as i64,
             sessions_skipped_stale: report.sessions_skipped_stale as i64,
@@ -386,6 +398,7 @@ mod tests {
     fn client_usage_dto_keeps_fixed_order_and_marks_supported() {
         let rows = vec![
             ClientUsage {
+                sessions_without_usage: 0,
                 share_bps: 0,
                 client: Client::Codex,
                 sessions: 3,
@@ -401,6 +414,7 @@ mod tests {
                 },
             },
             ClientUsage {
+                sessions_without_usage: 0,
                 share_bps: 0,
                 client: Client::OpenCode,
                 sessions: 1,
@@ -470,6 +484,7 @@ impl From<SyncBatch> for SyncReportDto {
                 summary.files_skipped_unchanged += report.files_skipped_unchanged as i64;
                 summary.files_without_identity += report.files_without_identity as i64;
                 summary.files_failed += report.files_failed as i64;
+                summary.directories_failed += report.directories_failed as i64;
                 summary.unparsed_lines += report.unparsed_lines as i64;
                 summary.sessions_imported += report.sessions_imported as i64;
                 summary.sessions_skipped_stale += report.sessions_skipped_stale as i64;

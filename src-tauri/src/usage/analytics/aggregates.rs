@@ -32,10 +32,23 @@ impl UsageStore {
                     sessions_total_mismatch: row.get(3)?,
                     sums: read_sums(row, 4)?,
                     messages: 0,
+                    cache_hit_bps: None,
+                    cache_eligible_sessions: 0,
                 })
             },
         )?;
         totals.messages = self.count_messages(filter)?;
+        let (eligible, input, cache): (i64, f64, f64) = self.conn.query_row(
+            "SELECT COUNT(*), COALESCE(TOTAL(input_tokens), 0), COALESCE(TOTAL(cache_read_tokens), 0)
+             FROM sessions WHERE input_tokens IS NOT NULL AND cache_read_tokens IS NOT NULL
+               AND (?1 IS NULL OR started_at_ms >= ?1) AND (?2 IS NULL OR started_at_ms < ?2)
+               AND (?3 IS NULL OR client = ?3) AND (?4 IS NULL OR project_path = ?4)",
+            rusqlite::params![filter.from_ms, filter.to_ms, client, filter.project_path],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        totals.cache_eligible_sessions = eligible;
+        totals.cache_hit_bps =
+            (input + cache > 0.0).then(|| (cache * 10_000.0 / (input + cache)) as i64);
         Ok(totals)
     }
 
@@ -161,7 +174,7 @@ impl UsageStore {
         filter: &AnalyticsFilter<'_>,
     ) -> Result<Vec<ClientUsage>, UsageError> {
         let sql = format!(
-            "SELECT client, COUNT(*), {SUM_COLUMNS}
+            "SELECT client, COUNT(*), SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END), {SUM_COLUMNS}
              FROM sessions
              WHERE (?1 IS NULL OR started_at_ms >= ?1)
                AND (?2 IS NULL OR started_at_ms < ?2)
@@ -171,15 +184,21 @@ impl UsageStore {
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(rusqlite::params![filter.from_ms, filter.to_ms], |row| {
             let client: String = row.get(0)?;
-            Ok((client, row.get::<_, i64>(1)?, read_sums(row, 2)?))
+            Ok((
+                client,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                read_sums(row, 3)?,
+            ))
         })?;
         let mut usage = Vec::new();
         for row in rows {
-            let (client, sessions, sums) = row?;
+            let (client, sessions, sessions_without_usage, sums) = row?;
             let Some(parsed) = Client::parse(&client) else {
                 continue;
             };
             usage.push(ClientUsage {
+                sessions_without_usage,
                 share_bps: 0,
                 client: parsed,
                 sessions,

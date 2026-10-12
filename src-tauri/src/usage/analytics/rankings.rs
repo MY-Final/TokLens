@@ -32,15 +32,16 @@ impl UsageStore {
         let client = filter.client.map(Client::as_str);
         let sql = format!(
             "SELECT {column}, COUNT(*),
-                    (SELECT COUNT(*) FROM messages AS m WHERE m.session_id = s.id),
-                    COALESCE(SUM(s.total_tokens), 0)
+                    SUM((SELECT COUNT(*) FROM messages AS m WHERE m.session_id = s.id)),
+                    COALESCE(SUM(s.total_tokens), 0),
+                    SUM(CASE WHEN s.total_tokens IS NULL THEN 1 ELSE 0 END)
              FROM sessions AS s
              WHERE (?1 IS NULL OR s.started_at_ms >= ?1)
                AND (?2 IS NULL OR s.started_at_ms < ?2)
                AND (?3 IS NULL OR s.client = ?3)
                AND (?4 IS NULL OR s.project_path = ?4)
              GROUP BY {column}
-             ORDER BY COALESCE(SUM(s.total_tokens), 0) DESC, COUNT(*) DESC
+             ORDER BY COUNT(s.total_tokens) = 0, COALESCE(SUM(s.total_tokens), 0) DESC, COUNT(*) DESC
              LIMIT ?5"
         );
         let mut statement = self.conn.prepare(&sql)?;
@@ -58,6 +59,7 @@ impl UsageStore {
                     sessions: row.get(1)?,
                     messages: row.get(2)?,
                     total_tokens: row.get(3)?,
+                    sessions_without_usage: row.get(4)?,
                 })
             },
         )?;

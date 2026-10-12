@@ -30,6 +30,14 @@ export const RANGE_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> =
   ...RANGE_OPTIONS.slice(1),
 ];
 const MS_PER_MINUTE = 60_000;
+/** User selection identity, excluding clock ticks within rolling presets. */
+export function rangeScope(range: DateRange): string {
+  return range.key === "custom"
+    ? `custom:${range.fromMs}:${range.toMs}`
+    : range.key === "all"
+      ? "all"
+      : `${range.key}:${range.fromMs}`;
+}
 
 /** Consecutive local calendar midnights; Rust assigns request timestamps to these buckets. */
 export function localDayBoundaries(range: DateRange): number[] {

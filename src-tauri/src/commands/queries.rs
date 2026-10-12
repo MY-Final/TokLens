@@ -164,6 +164,9 @@ pub fn get_sessions(
 pub fn get_data_source_status(
     state: State<'_, AppState>,
 ) -> Result<DataSourceStatusDto, CommandError> {
+    let roots = crate::collectors::CollectorRoots::from_environment();
+    // Read sync first: completed status must never describe counts read before completion.
+    let sync = state.sync_state();
     let status = {
         let store = state.store()?;
         store.client_source_status()?
@@ -175,9 +178,17 @@ pub fn get_data_source_status(
     Ok(DataSourceStatusDto {
         clients: status
             .into_iter()
-            .map(ClientSourceStatusDto::from)
+            .map(|status| {
+                let source_path = roots
+                    .path(status.client)
+                    .map(|path| path.to_string_lossy().into_owned());
+                ClientSourceStatusDto {
+                    source_path,
+                    ..status.into()
+                }
+            })
             .collect(),
-        sync: state.sync_state(),
+        sync,
         database_path: state.database_path().to_string_lossy().to_string(),
         first_event_ms,
         last_event_ms,

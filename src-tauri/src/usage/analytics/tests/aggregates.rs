@@ -370,3 +370,93 @@ fn daily_completeness_distinguishes_unknown_zero_mixed_and_partial() {
             .is_empty()
     );
 }
+
+#[test]
+fn cache_ratio_uses_only_sessions_with_both_fields_known() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for (id, input, cache) in [
+        ("paired", Some(100), Some(40)),
+        ("missing-cache", Some(900), None),
+        ("missing-input", None, Some(200)),
+        ("zero", Some(0), Some(0)),
+    ] {
+        let session = codex_record(
+            id,
+            D0,
+            D0,
+            None,
+            None,
+            counts(input, Some(0), cache, None, None, None),
+        );
+        store.upsert_session(&session).expect("session");
+    }
+    let totals = store
+        .range_totals(&AnalyticsFilter::default())
+        .expect("totals");
+    assert_eq!(totals.cache_eligible_sessions, 2);
+    assert_eq!(totals.cache_hit_bps, Some(4000));
+    let empty = store
+        .range_totals(&AnalyticsFilter {
+            from_ms: Some(ms(D1)),
+            ..Default::default()
+        })
+        .expect("empty");
+    assert_eq!(empty.cache_hit_bps, None);
+    assert_eq!(empty.cache_eligible_sessions, 0);
+}
+
+#[test]
+fn client_and_rankings_distinguish_unknown_zero_and_mixed_totals() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for (id, model, known) in [
+        ("unknown", "unknown", false),
+        ("zero", "zero", true),
+        ("mixed-unknown", "mixed", false),
+        ("mixed-zero", "mixed", true),
+    ] {
+        let raw = if known {
+            counts(Some(0), Some(0), Some(0), None, None, Some(0))
+        } else {
+            RawTokenCounts::default()
+        };
+        let session = codex_record(id, D0, D0, Some(model), Some(PROJECT_ALPHA), raw);
+        store
+            .import_session(
+                &source(Client::Codex, id),
+                &session,
+                &[message(id, id, 1, D0)],
+            )
+            .expect("import");
+    }
+    let clients = store
+        .client_usage(&AnalyticsFilter::default())
+        .expect("clients");
+    assert_eq!(clients[0].sessions_without_usage, 2);
+    let groups = store
+        .model_ranking(&AnalyticsFilter::default(), 10)
+        .expect("models");
+    let mixed = groups
+        .iter()
+        .find(|g| g.key.as_deref() == Some("mixed"))
+        .expect("mixed");
+    assert_eq!(
+        (
+            mixed.sessions,
+            mixed.sessions_without_usage,
+            mixed.messages,
+            mixed.total_tokens
+        ),
+        (2, 1, 2, 0)
+    );
+    assert_eq!(
+        groups.last().expect("unknown last").key.as_deref(),
+        Some("unknown")
+    );
+    let project = store
+        .project_ranking(&AnalyticsFilter::default(), 10)
+        .expect("projects");
+    assert_eq!(
+        (project[0].messages, project[0].sessions_without_usage),
+        (4, 2)
+    );
+}

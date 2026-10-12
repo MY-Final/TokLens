@@ -17,7 +17,8 @@ import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 
 const CLIENT_HINTS: Record<string, string> = {
-  codex: "读取 %USERPROFILE%\\.codex\\sessions 下的 rollout-*.jsonl（只读）。",
+  codex:
+    "只读 CODEX_HOME 下的 sessions；未设置时使用用户目录下的 .codex/sessions。VS Code 与 TokLens 需使用相同用户和环境。",
   claude_code: "只读 ~/.claude/projects 下的会话与子代理转录；支持 CLAUDE_CONFIG_DIR。",
   dsh: "只读 ~/.dsh/sessions 下的 v0–v4 JSONL / Zstandard 会话日志；支持 DSH_SESSIONS_DIR。",
   mimocode:
@@ -105,9 +106,10 @@ export function SourcesPage({
                     未发现客户端数据源。请确认客户端已产生本地会话记录。
                   </p>
                 ) : null}
-                {report.filesFailed > 0 ? (
+                {report.filesFailed + report.directoriesFailed > 0 ? (
                   <p className="text-xs text-destructive">
-                    {formatNumber(report.filesFailed)} 个文件读取失败，将在下次同步重试。
+                    {formatNumber(report.filesFailed)} 个文件、
+                    {formatNumber(report.directoriesFailed)} 个目录读取失败，将在下次同步重试。
                   </p>
                 ) : null}
               </div>
@@ -194,11 +196,11 @@ export function SourcesPage({
                           ? "同步异常"
                           : scan?.rootMissing
                             ? "未发现数据源"
-                            : (scan?.filesFailed ?? 0) > 0
+                            : (scan?.filesFailed ?? 0) + (scan?.directoriesFailed ?? 0) > 0
                               ? "部分采集失败"
-                              : client.sessions > 0
-                                ? "已连接"
-                                : "暂无数据"}
+                              : scan
+                                ? "已检查"
+                                : "等待检查"}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="font-normal text-muted-foreground">
@@ -209,6 +211,15 @@ export function SourcesPage({
                 <CardDescription>{CLIENT_HINTS[client.client]}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">实际读取位置</p>
+                <code className="block text-xs break-all select-text">
+                  {client.sourcePath ?? "无法确定用户目录"}
+                </code>
+                {scan ? (
+                  <p className="text-xs text-muted-foreground">
+                    最近检查：{formatDateTime(sync?.finishedAtMs ?? null)}
+                  </p>
+                ) : null}
                 {result?.error ? <p className="text-xs text-destructive">{result?.error}</p> : null}
                 {scan ? (
                   <p className="text-xs text-muted-foreground">
@@ -216,11 +227,14 @@ export function SourcesPage({
                     {formatNumber(scan.filesParsed)} · 未变化{" "}
                     {formatNumber(scan.filesSkippedUnchanged)} · 失败{" "}
                     {formatNumber(scan.filesFailed)}
+                    {scan.directoriesFailed > 0
+                      ? ` · 目录失败 ${formatNumber(scan.directoriesFailed)}`
+                      : ""}
                   </p>
                 ) : null}
-                {(scan?.filesFailed ?? 0) > 0 ? (
+                {(scan?.filesFailed ?? 0) + (scan?.directoriesFailed ?? 0) > 0 ? (
                   <p className="text-xs text-destructive">
-                    部分文件损坏、未写完或版本不支持。正常会话已导入，失败文件的已有统计保留，下次同步重试。
+                    部分文件或目录暂时无法读取，可能尚未写完或没有权限。已有统计保留，下次同步重试。
                   </p>
                 ) : null}
                 {client.supported ? (
@@ -238,7 +252,7 @@ export function SourcesPage({
                       <dd className="text-right tabular-nums">
                         {formatNumber(client.unparsedRecords)}
                       </dd>
-                      <dt className="text-muted-foreground">最近扫描</dt>
+                      <dt className="text-muted-foreground">最近导入</dt>
                       <dd className="text-right tabular-nums">
                         {formatRelative(client.lastScanMs)}
                       </dd>

@@ -27,7 +27,7 @@ function CoverageBadge({ session }: { session: SessionSummary }) {
           </Badge>
         </TooltipTrigger>
         <TooltipContent className="max-w-64 text-xs leading-relaxed">
-          该会话在客户端记录里没有 Token 计数，总量显示为"—"（未知），不计入任何合计。
+          尚未导入可用的会话总量，显示为“—”（未知）。可在数据源管理检查实际路径与采集状态；未知总量不参与合计。
         </TooltipContent>
       </Tooltip>
     );
@@ -41,7 +41,7 @@ function CoverageBadge({ session }: { session: SessionSummary }) {
           </Badge>
         </TooltipTrigger>
         <TooltipContent className="max-w-64 text-xs leading-relaxed">
-          源文件是被分页/续接的片段，请求明细只覆盖一部分；会话总量仍取客户端记录的累计值。
+          目前无法确认请求明细完整，例如日志续接、缺少原生序号或字段。已知的会话总量仍按客户端口径展示。
         </TooltipContent>
       </Tooltip>
     );

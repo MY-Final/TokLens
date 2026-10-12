@@ -29,8 +29,9 @@ import {
   getRankings,
   getSessions,
 } from "@/lib/api";
-import { formatNumber, formatPercent } from "@/lib/format";
-import type { DateRange } from "@/lib/ranges";
+import { formatNumber } from "@/lib/format";
+import type { StatsBucket } from "@/lib/usage-types";
+import { rangeScope, type DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
   "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
@@ -57,7 +58,7 @@ export function OverviewPage(props: OverviewPageProps) {
 }
 
 function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPageProps) {
-  const { formatTokens, formatTokensOrDash } = useTokenFormat();
+  const { formatTokensOrDash } = useTokenFormat();
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const todayStart = startOfDay(nowMs).getTime();
@@ -70,6 +71,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         todayFromMs: todayStart,
       }),
     `overview:${todayStart}:${keySuffix}`,
+    rangeScope(range),
   );
   const trend = useAsyncData(
     () =>
@@ -80,11 +82,13 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         dayCount: range.dayCount,
       }),
     `trend:${keySuffix}`,
+    rangeScope(range),
   );
   const calendarStart = addDays(startOfDay(new Date(range.toMs - 1)), -364).getTime();
   const calendar = useAsyncData(
     () => getDailyTokenTrend({ fromMs: calendarStart, toMs: range.toMs, dayCount: 365 }),
     `calendar:${calendarStart}:${range.toMs}:${refreshToken}`,
+    `calendar:${calendarStart}`,
   );
   const calendarData = calendarPeriod === "year" ? calendar : trend;
   const trendRangeLabel =
@@ -94,22 +98,34 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
   const clients = useAsyncData(
     () => getClientUsage({ fromMs: range.fromMs, toMs: range.toMs }),
     `clients:${keySuffix}`,
+    rangeScope(range),
   );
   const rankings = useAsyncData(
     () => getRankings({ fromMs: range.fromMs, toMs: range.toMs, limit: 5 }),
     `rankings:${keySuffix}`,
+    rangeScope(range),
   );
   const sessions = useAsyncData(
     () => getSessions({ fromMs: range.fromMs, toMs: range.toMs, limit: 8 }),
     `sessions:${keySuffix}`,
+    rangeScope(range),
   );
 
   const stats = overview.data;
   const bucket = stats?.range;
   const today = stats?.today;
-  const cacheRead = bucket?.totals.cacheReadTokens ?? 0;
-  const input = bucket?.totals.inputTokens ?? 0;
-  const cacheHitRate = input + cacheRead > 0 ? formatPercent(cacheRead, input + cacheRead) : "—";
+  const cacheHitRate =
+    bucket?.cacheHitBps == null ? "—" : `${(bucket.cacheHitBps / 100).toFixed(1)}%`;
+  const knownTotal = (value: StatsBucket | undefined) =>
+    !value || (value.sessions > 0 && value.sessionsWithoutUsage === value.sessions)
+      ? null
+      : value.totals.totalTokens;
+  const totalHint = (value: StatsBucket | undefined) =>
+    value?.sessionsWithoutUsage
+      ? `已知子集 · ${formatNumber(value.sessionsWithoutUsage)} 个会话总量未知`
+      : value?.sessions
+        ? "本机客户端 · 已知用量"
+        : "所选区间暂无会话";
 
   return (
     <div className="space-y-4">
@@ -127,18 +143,26 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         <div className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4">
           <StatCard
             label="今日 Token"
-            value={formatTokens(today?.totals.totalTokens ?? 0)}
-            detail={`${formatNumber(today?.totals.totalTokens ?? 0)} Token`}
-            hint={`${formatNumber(today?.sessions ?? 0)} 个会话 · ${formatNumber(today?.messages ?? 0)} 条明细`}
+            value={formatTokensOrDash(knownTotal(today))}
+            detail={
+              knownTotal(today) === null
+                ? "总量未知"
+                : `${formatNumber(knownTotal(today) ?? 0)} Token`
+            }
+            hint={totalHint(today)}
             tooltip={TOTAL_TOOLTIP}
             icon={CalendarDays}
           />
           <StatCard
             label="区间 Token"
-            value={formatTokens(bucket?.totals.totalTokens ?? 0)}
-            detail={`${formatNumber(bucket?.totals.totalTokens ?? 0)} Token`}
+            value={formatTokensOrDash(knownTotal(bucket))}
+            detail={
+              knownTotal(bucket) === null
+                ? "总量未知"
+                : `${formatNumber(knownTotal(bucket) ?? 0)} Token`
+            }
             unit={`（${range.label}）`}
-            hint={bucket?.totals.totalTokens ? "本机客户端 · 已知用量" : "本机客户端 · 暂无用量"}
+            hint={totalHint(bucket)}
             tooltip={TOTAL_TOOLTIP}
             icon={Database}
           />
@@ -159,7 +183,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
             label="请求明细"
             value={formatNumber(bucket?.messages ?? 0)}
             hint={`缓存命中率 ${cacheHitRate}`}
-            tooltip="请求级记录数（按客户端去重键去重）。缓存命中率只统计缓存读取与未命中输入，不含输出。"
+            tooltip={`请求级记录按客户端去重。缓存命中率只使用输入与缓存读取同时已知的 ${formatNumber(bucket?.cacheEligibleSessions ?? 0)} 个会话，不含输出；字段缺失的会话不进入分母。`}
             icon={MessageSquare}
           />
         </div>
@@ -253,7 +277,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
           ? ` 另有 ${formatNumber(bucket.sessionsTotalMismatch)} 个会话的客户端总量与其分项之和不一致，已按客户端值计入并标记。`
           : ""}
         {today
-          ? ` 今日合计（本地日历）${formatTokensOrDash(today.totals.totalTokens)} Token。`
+          ? ` 今日合计（本地日历）${formatTokensOrDash(knownTotal(today))} Token。${totalHint(today)}。`
           : ""}
       </p>
     </div>

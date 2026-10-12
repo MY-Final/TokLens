@@ -16,6 +16,8 @@ export type TokenTotals = {
 };
 
 export type StatsBucket = {
+  cacheHitBps: number | null;
+  cacheEligibleSessions: number;
   sessions: number;
   messages: number;
   /** 完全没有用量数据的会话数（总量未知，未计入求和）。 */
@@ -53,6 +55,7 @@ export type DailyTokenBucket = {
 };
 
 export type ClientUsage = {
+  sessionsWithoutUsage: number;
   /** 后端计算的 Token 占比，10000 表示 100%。 */
   shareBps: number;
   client: ClientKey;
@@ -64,6 +67,7 @@ export type ClientUsage = {
 };
 
 export type RankingEntry = {
+  sessionsWithoutUsage: number;
   /** null 表示客户端未记录该字段（例如未标注模型）。 */
   key: string | null;
   sessions: number;
@@ -101,6 +105,7 @@ export type SessionSummary = {
 };
 
 export type ClientSourceStatus = {
+  sourcePath: string | null;
   client: ClientKey;
   supported: boolean;
   sessions: number;
@@ -118,6 +123,7 @@ export type SyncReport = {
   filesSkippedUnchanged: number;
   filesWithoutIdentity: number;
   filesFailed: number;
+  directoriesFailed: number;
   unparsedLines: number;
   sessionsImported: number;
   sessionsSkippedStale: number;

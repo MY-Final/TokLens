@@ -74,6 +74,7 @@ export function RankingCard({
                 const label =
                   entry.key === null ? "未知" : shortenKeys ? shortenPath(entry.key) : entry.key;
                 const percent = max > 0 ? (entry.totalTokens / max) * 100 : 0;
+                const unknown = entry.sessionsWithoutUsage === entry.sessions;
                 return (
                   <TableRow
                     key={`${entry.key ?? "unknown"}-${index}`}
@@ -95,33 +96,42 @@ export function RankingCard({
                           {label}
                         </span>
                       </div>
-                      <Progress
-                        value={percent}
-                        aria-valuenow={percent}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={`${label}，相对榜首用量`}
-                        className="mt-2 h-1 bg-muted xl:hidden"
-                      />
+                      {!unknown ? (
+                        <Progress
+                          value={percent}
+                          aria-valuenow={percent}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${label}，相对榜首用量`}
+                          className="mt-2 h-1 bg-muted xl:hidden"
+                        />
+                      ) : null}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      <Progress
-                        value={percent}
-                        aria-valuenow={percent}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={`${label}，相对榜首用量`}
-                        className="h-1.5 bg-muted"
-                      />
+                      {!unknown ? (
+                        <Progress
+                          value={percent}
+                          aria-valuenow={percent}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`${label}，相对榜首用量`}
+                          className="h-1.5 bg-muted"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">总量未知</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-muted-foreground">
                       {formatNumber(entry.sessions)}
                     </TableCell>
                     <TableCell
                       className="pr-0 text-right font-mono text-xs"
-                      title={`${formatNumber(entry.totalTokens)} Token`}
+                      title={unknown ? "总量未知" : `${formatNumber(entry.totalTokens)} Token`}
                     >
-                      {formatTokens(entry.totalTokens)}
+                      {unknown ? "—" : formatTokens(entry.totalTokens)}
+                      {entry.sessionsWithoutUsage > 0 ? (
+                        <div className="text-muted-foreground">{unknown ? "未知" : "已知子集"}</div>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
