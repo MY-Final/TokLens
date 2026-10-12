@@ -1,18 +1,13 @@
-/** 数据源状态与同步控制：后台同步只更新状态，手动同步完成后再刷新页面数据。 */
-
+/** 同步结束后刷新来源状态与统计；事件丢失时通过轮询恢复。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-
 import { getDataSourceStatus, onSyncEvent, syncUsage, toErrorMessage } from "@/lib/api";
 import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
-
-const RUNNING_POLL_MS = 2_000;
 
 export type SyncController = {
   status: DataSourceStatus | null;
   error: string | null;
   loading: boolean;
-  /** 手动同步结束后自增；后台定时采集不会打断当前页面。 */
   refreshToken: number;
   syncBusy: boolean;
   syncNow: (force?: boolean) => Promise<void>;
@@ -24,105 +19,105 @@ export function useDataSourceStatus(): SyncController {
   const [error, setError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
   const [syncBusy, setSyncBusy] = useState(false);
-  const manualRefreshRequested = useRef(false);
-  // 首次加载：还没有任何结果（派生值，避免在 effect 中同步 setState）。
-  const loading = status === null && error === null;
+  const generation = useRef(0);
+  const mounted = useRef(false);
+  const completion = useRef<string | null>(null);
 
-  const applySync = useCallback((sync: SyncState) => {
-    setStatus((previous) => (previous ? { ...previous, sync } : previous));
+  const applySync = useCallback((sync: SyncState, cleared = false) => {
     setSyncBusy(sync.running);
-    const isClearCompleted =
-      !sync.running &&
-      sync.startedAtMs === null &&
-      sync.finishedAtMs === null &&
-      sync.report === null &&
-      sync.error === null;
-    if (!sync.running && (manualRefreshRequested.current || isClearCompleted)) {
-      manualRefreshRequested.current = false;
-      setRefreshToken((token) => token + 1);
+    setStatus((previous) => (previous ? { ...previous, sync } : previous));
+    if (!sync.running) {
+      const key = `${sync.startedAtMs}:${sync.finishedAtMs}`;
+      if (cleared || completion.current !== key) {
+        completion.current = key;
+        setRefreshToken((value) => value + 1);
+      }
     }
   }, []);
 
   const reload = useCallback(async () => {
+    const request = ++generation.current;
     try {
       const next = await getDataSourceStatus();
+      if (!mounted.current || request !== generation.current) return;
       setStatus(next);
-      setSyncBusy(next.sync.running);
+      applySync(next.sync);
       setError(null);
     } catch (cause: unknown) {
-      setError(toErrorMessage(cause));
+      if (mounted.current && request === generation.current) setError(toErrorMessage(cause));
     }
-  }, []);
+  }, [applySync]);
 
   useEffect(() => {
-    // 首次加载直接走 promise 回调（不在 effect 体内同步 setState）。
-    let active = true;
-    getDataSourceStatus()
-      .then((next) => {
-        if (active) {
-          setStatus(next);
-          setSyncBusy(next.sync.running);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active) {
-          setError(toErrorMessage(cause));
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
+    mounted.current = true;
     let disposed = false;
-    onSyncEvent(applySync)
+    let unlisten: UnlistenFn | undefined;
+    // Subscribe before the initial read so fast startup syncs cannot fall into a gap.
+    void onSyncEvent((sync) => {
+      if (disposed) return;
+      generation.current += 1;
+      applySync(sync, !sync.running && sync.startedAtMs === null && sync.finishedAtMs === null);
+      void reload();
+    })
       .then((stop) => {
-        if (disposed) {
-          stop();
-        } else {
+        if (disposed) stop();
+        else {
           unlisten = stop;
+          void reload();
         }
       })
       .catch(() => {
-        // 事件订阅不可用时忽略：状态仍可通过 reload 获取。
+        if (!disposed) void reload();
       });
     return () => {
       disposed = true;
+      mounted.current = false;
+      generation.current += 1;
       unlisten?.();
     };
-  }, [applySync]);
+  }, [applySync, reload]);
 
-  // 同步进行中：轻量轮询状态，让"已导入会话数"等计数在首次导入时逐步增长。
   useEffect(() => {
-    if (!syncBusy) {
-      return;
-    }
-    const timer = window.setInterval(() => {
+    const timer = window.setInterval(
+      () => {
+        void reload();
+      },
+      syncBusy ? 2_000 : 30_000,
+    );
+    const onFocus = () => {
       void reload();
-    }, RUNNING_POLL_MS);
-    return () => window.clearInterval(timer);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [syncBusy, reload]);
 
   const syncNow = useCallback(
     async (force = false) => {
-      // Only a user-triggered sync should cause visible data queries to reload.
-      // The scheduler also emits `usage-sync`; keeping this flag here prevents
-      // its completion event from blanking the page every few minutes.
-      manualRefreshRequested.current = true;
       setSyncBusy(true);
       try {
-        const state = await syncUsage(force);
-        applySync(state);
+        await syncUsage(force);
+        // The command reply can be older than a fast completion event.
+        await reload();
       } catch (cause: unknown) {
-        manualRefreshRequested.current = false;
-        setError(toErrorMessage(cause));
-        setSyncBusy(false);
+        if (mounted.current) {
+          setError(toErrorMessage(cause));
+          setSyncBusy(false);
+        }
       }
     },
-    [applySync],
+    [reload],
   );
 
-  return { status, error, loading, refreshToken, syncBusy, syncNow, reload };
+  return {
+    status,
+    error,
+    loading: status === null && error === null,
+    refreshToken,
+    syncBusy,
+    syncNow,
+    reload,
+  };
 }

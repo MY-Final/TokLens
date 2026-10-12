@@ -11,9 +11,9 @@ export type AsyncData<T> = {
   reload: () => void;
 };
 
-type Snapshot<T> = { key: string; data: T | null; error: string | null };
+type Snapshot<T> = { key: string; scope: string; data: T | null; error: string | null };
 
-export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncData<T> {
+export function useAsyncData<T>(loader: () => Promise<T>, key: string, scope = key): AsyncData<T> {
   const [snapshot, setSnapshot] = useState<Snapshot<T> | null>(null);
   const [nonce, setNonce] = useState(0);
   const loaderRef = useRef(loader);
@@ -30,7 +30,7 @@ export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncDat
       .current()
       .then((data) => {
         if (active) {
-          setSnapshot({ key: requestKey, data, error: null });
+          setSnapshot({ key: requestKey, scope, data, error: null });
         }
       })
       .catch((cause: unknown) => {
@@ -39,7 +39,8 @@ export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncDat
           // request error; a transient refresh must not blank the page.
           setSnapshot((previous) => ({
             key: requestKey,
-            data: previous?.data ?? null,
+            scope,
+            data: previous?.scope === scope ? previous.data : null,
             error: toErrorMessage(cause),
           }));
         }
@@ -47,19 +48,20 @@ export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncDat
     return () => {
       active = false;
     };
-  }, [requestKey]);
+  }, [requestKey, scope]);
 
   const reload = useCallback(() => setNonce((value) => value + 1), []);
-  const fresh = snapshot?.key === requestKey ? snapshot : null;
+  const fresh = snapshot?.key === requestKey && snapshot.scope === scope ? snapshot : null;
+  const visible = snapshot?.scope === scope ? snapshot : null;
 
   return {
     // Keep stale data during a key change so rolling ranges and background
     // collection update in place instead of replacing the page with skeletons.
-    data: snapshot?.data ?? null,
+    data: visible?.data ?? null,
     error: fresh?.error ?? null,
     // Only the first load (or a refresh after an empty/error result) is a
     // blocking load. Existing data remains visible while the new request runs.
-    loading: snapshot === null || (fresh !== null && fresh.data === null),
+    loading: visible?.data == null && fresh === null,
     reload,
   };
 }

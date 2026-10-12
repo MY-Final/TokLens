@@ -3,7 +3,7 @@ import { useState } from "react";
 import { RequestAnalysisPanel } from "@/components/RequestAnalysisPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getRequestAnalysis } from "@/lib/api";
-import type { DateRange } from "@/lib/ranges";
+import { rangeScope, type DateRange } from "@/lib/ranges";
 import type { ClientKey } from "@/lib/usage-types";
 
 export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
@@ -15,11 +15,12 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
       rangeLabel: range.label,
     }),
     `request-analysis:${range.fromMs ?? "all"}:${range.toMs}:${client ?? "all"}:${refreshToken}`,
+    `${rangeScope(range)}:${client ?? "all"}`,
   );
   return (
     <RequestAnalysisPanel
       data={analysis.data?.result ?? null}
-      selectedClient={analysis.data?.client ?? null}
+      selectedClient={client}
       rangeLabel={analysis.data?.rangeLabel ?? range.label}
       loading={analysis.loading}
       error={analysis.error}

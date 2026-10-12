@@ -2,7 +2,7 @@ import { RequestActivityPanel } from "@/components/RequestActivityPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getRequestActivity } from "@/lib/api";
 import { localDayBoundaries } from "@/lib/ranges";
-import type { DateRange } from "@/lib/ranges";
+import { rangeScope, type DateRange } from "@/lib/ranges";
 import type { ClientKey } from "@/lib/usage-types";
 
 export function RequestActivityView({
@@ -23,6 +23,7 @@ export function RequestActivityView({
         client,
       }),
     `requests:${client ?? "all"}:${range.fromMs ?? "all"}:${range.toMs}:${range.dayStartMs}:${range.dayCount}:${refreshToken}`,
+    `${rangeScope(range)}:${client ?? "all"}`,
   );
   const rangeLabel =
     range.fromMs !== null && range.fromMs < range.dayStartMs
