@@ -23,6 +23,11 @@ export function AboutSettings({ controller }: { controller: SettingsController }
           GitHub 项目
         </Button>
       </SettingsRow>
+      <SettingsRow title="沟通群聊" description="反馈问题、交流使用体验与建议。">
+        <span className="text-sm select-text">
+          QQ 群：<span className="font-mono tabular-nums">668526188</span>
+        </span>
+      </SettingsRow>
       <SettingsRow
         title="本地优先 · 隐私保护"
         description="默认不联网、不上传、不做遥测；只读取统计所需元数据，不保存会话正文。"
