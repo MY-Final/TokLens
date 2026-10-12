@@ -53,3 +53,51 @@ fn source_status_and_bounds_reflect_imported_files() {
     assert_eq!(first, Some(ms(D0)));
     assert_eq!(last, Some(ms(D2)));
 }
+
+#[test]
+fn session_pagination_reaches_beyond_two_hundred_with_stable_ties() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for index in 0..205 {
+        let session = codex_record(
+            &format!("session-{index:03}"),
+            D0,
+            D0,
+            None,
+            None,
+            RawTokenCounts::default(),
+        );
+        store.upsert_session(&session).expect("fixture");
+    }
+    let mut claude = claude_record(D0, PROJECT_ALPHA, "fixture");
+    claude.client_session_id = "session-100".into();
+    store.upsert_session(&claude).expect("cross-client tie");
+    let filter = AnalyticsFilter::default();
+    let mut ids = std::collections::BTreeSet::new();
+    for page in 0..5 {
+        let rows = store
+            .session_summaries(&filter, 50, page * 50)
+            .expect("page");
+        assert_eq!(rows.len(), if page == 4 { 6 } else { 50 });
+        for row in rows {
+            assert!(ids.insert((row.client.as_str(), row.client_session_id)));
+        }
+    }
+    assert_eq!(ids.len(), 206);
+    let filtered = store
+        .session_summaries(
+            &AnalyticsFilter {
+                client: Some(Client::Codex),
+                ..filter
+            },
+            51,
+            200,
+        )
+        .expect("last codex page");
+    assert_eq!(filtered.len(), 5);
+    assert!(
+        store
+            .session_summaries(&filter, 51, 206)
+            .expect("end")
+            .is_empty()
+    );
+}

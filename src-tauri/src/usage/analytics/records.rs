@@ -24,7 +24,7 @@ impl UsageStore {
                AND (?2 IS NULL OR s.started_at_ms < ?2)
                AND (?3 IS NULL OR s.client = ?3)
                AND (?4 IS NULL OR s.project_path = ?4)
-             ORDER BY COALESCE(s.started_at_ms, 0) DESC, s.client_session_id DESC
+             ORDER BY COALESCE(s.started_at_ms, 0) DESC, s.client_session_id DESC, s.client DESC
              LIMIT ?5 OFFSET ?6",
         )?;
         let rows = statement.query_map(
