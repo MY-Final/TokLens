@@ -1,5 +1,6 @@
 /** 会话详情仅呈现本地统计元数据，不读取或展示正文。 */
 import { ClientIdentity } from "@/components/ClientIdentity";
+import { ModelIdentity } from "@/components/ModelIdentity";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,7 @@ function RequestRow({ request }: { request: RequestDetail }) {
         <div className="text-muted-foreground">结束 {formatDateTime(request.completedAtMs)}</div>
       </TableCell>
       <TableCell className="font-mono break-all whitespace-normal">
-        <div>{request.model ?? "—"}</div>
+        <ModelIdentity model={request.model} compact unknownLabel="—" labelClassName="text-xs" />
         <div className="text-muted-foreground">{request.agent ?? "—"}</div>
       </TableCell>
       {TOKEN_FIELDS.map(([field]) => (
@@ -155,7 +156,16 @@ export function SessionDetailPanel({
               <div key={label} className="min-w-0 space-y-1">
                 <dt className="text-muted-foreground">{label}</dt>
                 <dd className="font-mono break-all tabular-nums" title={exact}>
-                  {value}
+                  {label === "模型" ? (
+                    <ModelIdentity
+                      model={session.model}
+                      compact
+                      unknownLabel="—"
+                      labelClassName="text-xs"
+                    />
+                  ) : (
+                    value
+                  )}
                 </dd>
               </div>
             ))}

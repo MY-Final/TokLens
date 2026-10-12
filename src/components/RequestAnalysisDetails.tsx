@@ -1,5 +1,6 @@
 import { Fragment, useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { ModelIdentity } from "@/components/ModelIdentity";
 import { EmptyBlock } from "@/components/StateBlocks";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -154,7 +155,12 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
                           aria-hidden="true"
                         />
                       )}
-                      <span className="min-w-0 font-mono break-all whitespace-normal">{label}</span>
+                      <ModelIdentity
+                        model={entry.key}
+                        compact
+                        unknownLabel="未记录模型"
+                        labelClassName="font-mono text-xs"
+                      />
                     </button>
                     {metrics.totals.requestsWithoutUsage > 0 ? (
                       <p className="mt-1 pl-5.5 text-muted-foreground">

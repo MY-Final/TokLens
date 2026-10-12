@@ -184,6 +184,11 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 图标是装饰信息，外层设 `aria-hidden`，避免与可见文字重复朗读；未接入状态仍由 badge 和置灰表达。
 仅使用本地 React 图标，不使用 CDN 工具或远程图片，不在组件中加入图标库的 Avatar / Combine UI。
 
+模型名称使用 `ModelIdentity` 呈现模型家族品牌图标：从原始模型 / provider 字符串匹配 `OpenAI`、`Claude`、`Gemini`、
+`DeepSeek`、`Qwen`、`Mistral`、`Kimi`、`Grok`、`GLM`、`Llama`、`MiMo`、`MiniMax` 与 `Moonshot` 等家族，
+不为每个版本维护独立记录；无法识别时使用中性的 `Cpu` 图标。该映射只改变展示，不改写模型字段，不新增后端 DTO、数据库字段或远程资源。
+图标是装饰信息，保留可见的原始模型名称；未知模型仍显示“未知”，不得用图标推断不存在的 provider。
+
 多客户端接入后，客户端筛选均可用；空数据表达为「暂无数据」，目录缺失表达为「未发现数据源」，采集支持状态与连接状态分开。
 同步结果逐客户端显示，单源失败保留历史并明确提示；刷新触发 `sync_usage`。
 客户端 Progress 占比使用后端 `shareBps`；趋势使用逐日客户端总量，禁止把合并数据标成 Codex。

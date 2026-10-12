@@ -1,9 +1,10 @@
 import { useTokenFormat } from "@/hooks/use-token-format";
 /** 条形仅表示相对榜首大小；排行与数值均来自 Rust 查询。 */
 
-import { Cpu, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
+import { ModelIdentity } from "@/components/ModelIdentity";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -42,7 +43,6 @@ export function RankingCard({
   const { formatTokens } = useTokenFormat();
   const rows = entries ?? [];
   const max = rows[0]?.totalTokens ?? 0;
-  const Icon = shortenKeys ? Folder : Cpu;
   return (
     <DashboardCard className="h-full">
       <CardHeader className="gap-1.5 px-5">
@@ -84,18 +84,27 @@ export function RankingCard({
                       {index + 1}
                     </TableCell>
                     <TableCell className="py-3">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Icon
-                          className="size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
+                      {shortenKeys ? (
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Folder
+                            className="size-3.5 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <span
+                            className="truncate font-mono text-xs"
+                            title={entry.key ?? "客户端未记录"}
+                          >
+                            {label}
+                          </span>
+                        </div>
+                      ) : (
+                        <ModelIdentity
+                          model={entry.key}
+                          compact
+                          truncate
+                          labelClassName="font-mono text-xs font-normal"
                         />
-                        <span
-                          className="truncate font-mono text-xs"
-                          title={entry.key ?? "客户端未记录"}
-                        >
-                          {label}
-                        </span>
-                      </div>
+                      )}
                       {!unknown ? (
                         <Progress
                           value={percent}

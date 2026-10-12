@@ -14,6 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { ClientIdentity } from "@/components/ClientIdentity";
+import { ModelIdentity } from "@/components/ModelIdentity";
 import type { SessionSummary } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, shortenPath } from "@/lib/format";
 
@@ -104,8 +105,12 @@ export function SessionTable({
                   <TableCell className="font-mono text-xs">
                     <ClientIdentity client={session.client} compact />
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
-                    {session.model ?? <span className="text-muted-foreground">未知</span>}
+                  <TableCell className="text-xs">
+                    <ModelIdentity
+                      model={session.model}
+                      compact
+                      labelClassName="font-mono text-xs"
+                    />
                   </TableCell>
                   <TableCell
                     className="max-w-48 truncate font-mono text-xs text-muted-foreground"
