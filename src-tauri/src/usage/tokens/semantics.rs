@@ -122,6 +122,17 @@ pub const PI_DESKTOP_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "Pi Desktop request accounting contract and local total == input + output + cacheRead + cacheWrite",
 };
 
+/// WorkBuddy's normalized provider usage keeps cache in input and reasoning in output.
+pub const WORKBUDDY_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "workbuddy.item_usage.v1",
+    cache_read: FieldRelation::IncludedIn,
+    reasoning: FieldRelation::IncludedIn,
+    cache_write_in_input: FieldRelation::Unknown,
+    cache_write_counts_in_total: false,
+    client_reports_total: true,
+    basis: "WorkBuddy 5.2.6 last response item contract; 781 local usage records total == input + output; cached_tokens is an input detail",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
@@ -131,6 +142,7 @@ pub fn semantics_for(client: Client) -> &'static TokenSemantics {
         Client::KimiCode => &KIMI_CODE_SEMANTICS,
         Client::MimoCode => &MIMOCODE_SEMANTICS,
         Client::PiDesktop => &PI_DESKTOP_SEMANTICS,
+        Client::WorkBuddy => &WORKBUDDY_SEMANTICS,
     }
 }
 

@@ -178,6 +178,9 @@ pub fn dedup_key_note(client: Client) -> &'static str {
     match client {
         Client::Codex => "response_id | token_count:<ordinal>",
         Client::ClaudeCode => "message.id",
+        Client::WorkBuddy => {
+            "sessionId + item.id; providerData.usage and message.usage are mirrors"
+        }
         Client::OpenCode => "message.id",
         Client::MimoCode => "native session id + message id; exclude imported session copies",
         Client::PiDesktop => {

@@ -120,6 +120,7 @@ function SessionBrowser({
             <SelectItem value="kimi_code">Kimi Code</SelectItem>
             <SelectItem value="mimocode">MiMoCode</SelectItem>
             <SelectItem value="pi_desktop">Pi Desktop</SelectItem>
+            <SelectItem value="workbuddy">WorkBuddy</SelectItem>
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">

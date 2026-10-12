@@ -1,5 +1,6 @@
 //! Dispatch independent client scans; one failure never stops the remaining clients.
 
+use super::workbuddy::WorkBuddyCollector;
 use super::{
     SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
     dsh::DshCollector, kimi_code::KimiCodeCollector, opencode::OpenCodeCollector,
@@ -18,6 +19,7 @@ pub struct CollectorRoots {
     pub kimi_code: Option<PathBuf>,
     pub mimocode: Option<PathBuf>,
     pub pi_desktop: Option<PathBuf>,
+    pub workbuddy: Option<PathBuf>,
 }
 
 impl CollectorRoots {
@@ -30,6 +32,7 @@ impl CollectorRoots {
             Client::KimiCode => &self.kimi_code,
             Client::MimoCode => &self.mimocode,
             Client::PiDesktop => &self.pi_desktop,
+            Client::WorkBuddy => &self.workbuddy,
         }
         .as_deref()
     }
@@ -43,6 +46,7 @@ impl CollectorRoots {
             kimi_code: KimiCodeCollector::default_root(),
             mimocode: MiMoCodeCollector::default_database(),
             pi_desktop: PiDesktopCollector::default_root(),
+            workbuddy: WorkBuddyCollector::default_root(),
         }
     }
 }
@@ -108,6 +112,10 @@ pub fn sync_clients(
                 .dsh
                 .as_ref()
                 .map(|root| DshCollector::new(root).sync(store, options)),
+            Client::WorkBuddy => roots
+                .workbuddy
+                .as_ref()
+                .map(|root| WorkBuddyCollector::new(root).sync(store, options)),
         }
         .unwrap_or_else(|| {
             Ok(SyncReport {

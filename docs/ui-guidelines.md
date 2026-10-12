@@ -161,7 +161,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 ### Codex 总览重构（2026-10-11）
 
-顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持七客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持八客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。费用暂不可用时明确提示无可靠来源。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
@@ -181,7 +181,7 @@ DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标�
 
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。
 
-MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。七客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
+MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。八客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
 
 ### 采集的部分失败状态
 
@@ -233,5 +233,10 @@ Token 构成显示已知分项值与相对最大分项的条形；无已知字�
 来源页展示实际读取路径，并区分最近检查（同步完成时间）与最近导入（文件成功水位时间）；有历史数据不能单独据此标记已连接。目录失败和文件失败都可见；路径仅本机展示，不默认对外分享。
 会话累计总览、客户端分布及排行统一区分全未知 —、已知零和已知子集；未知不绘制零占比条。缓存率只用后端成对已知样本，说明可查看样本会话数。无用量提示使用“尚未导入可用总量”，partial 说明无法确认完整，不断言一定分页。
 同一筛选后台刷新保留原数据；切换范围、客户端或页码显示新范围加载状态，旧结果不配新标题。会话列表每页 50 条，首页 / 上一页 / 下一页键盘可达；切换时间或客户端回首页，同一范围刷新保留页码；注明按会话开始时间筛选。
+
+### WorkBuddy 展示（2026-10-12）
+
+WorkBuddy 使用现有 lucide Bot 与 client-workbuddy 青色语义 token；标签明确显示 WorkBuddy，不使用其他客户端的品牌图标。客户端分布、趋势、分析、会话筛选与来源开关统一支持 workbuddy。
+新安装默认开启八个来源；已有设置保留原客户端启停选择，新增 WorkBuddy 可在数据源管理手动开启。请求计数仅指日志中携带 usage 的模型调用，不将用户消息、推理片段或工具结果计为额外请求。缓存写入关系未知，不堆叠到总量；缺失与异常提示沿用现有规则。
 
 详情布局验收（2026-10-12）：桌面开发版启动与实际会话详情打开正常；同一业务组件使用合成长模型 / 代理名、385 字符来源引用、长未知关系及 100 行请求，验证 800 / 1000 / 1440px、自动单位 / 完整数字六种组合。单元格与页面均无水平越界，表内可滚动、表头固定，空 / 加载 / 错误状态正常；合成页面仅用于验收，不进入产品或构建。

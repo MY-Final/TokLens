@@ -25,6 +25,8 @@ const CLIENT_HINTS: Record<string, string> = {
     "只读 ~/.local/share/mimocode/mimocode.db（含 WAL）；支持 XDG_DATA_HOME / MIMOCODE_DB，排除外部导入消息，保留本地续聊。",
   pi_desktop:
     "只读 ~/.pi-desktop/sessions 下的 JSONL；按物理请求去重，支持 PI_DESKTOP_SESSIONS_DIR。",
+  workbuddy:
+    "只读 ~/.workbuddy/projects 下的 JSONL；支持 WORKBUDDY_CONFIG_DIR，按会话及原生输出事件去重，只统计携带用量的模型调用。",
   kimi_code: "只读 ~/.kimi-code/sessions 下的会话元数据与 agent wire.jsonl；支持 KIMI_CODE_HOME。",
   opencode: "只读 ~/.local/share/opencode/opencode.db，包含 WAL 更新；支持 XDG_DATA_HOME。",
 };
@@ -286,7 +288,7 @@ export function SourcesPage({
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        口径未知项：Codex / OpenCode
+        口径未知项：Codex / OpenCode / WorkBuddy
         的“缓存写入”与输入的关系无法从本机数据判定，因此不计入总量，仅在会话与分桶中单独展示。
       </p>
     </div>

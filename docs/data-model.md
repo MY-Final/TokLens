@@ -3,17 +3,17 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                                      | 职责                                                                                |
-| ---------- | ----------------------------------------- | ----------------------------------------------------------------------------------- |
-| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                              |
-| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                      |
-| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                    |
-| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                |
-| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                   |
-| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop 的独立规则 |
-| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                          |
-| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                               |
-| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                          |
+| 模块       | 文件                                      | 职责                                                                                            |
+| ---------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                                          |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                                  |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                                |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                            |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                               |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy 的独立规则 |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                      |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                           |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                      |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -35,6 +35,7 @@
 | Kimi Code   | `kimi_code.usage_record.v1`      | 独立                      | 客户端不提供              | 独立                       | 否（四桶求和）                                          |
 | MiMoCode    | `mimocode.message.v1`            | 独立                      | 独立                      | 独立                       | 是（旧记录无 total 时由五桶求和）                       |
 | Pi Desktop  | `pi_desktop.operation.v1`        | 独立                      | 包含（子集）              | 独立                       | 是（input + output + 两个缓存桶）                       |
+| WorkBuddy   | `workbuddy.item_usage.v1`        | 包含（子集）              | 包含（子集）              | 未知                       | 是（total = input + output）                            |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
@@ -48,7 +49,7 @@
 
 规范总量 `total_tokens`：
 
-1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop）直接采用客户端值（`total_basis = client_reported`），
+1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy）直接采用客户端值（`total_basis = client_reported`），
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
 2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
@@ -76,15 +77,16 @@
 | Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                         | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
 | MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
 | Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
+| WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                               |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
 - `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
 - `client_reported`：OpenCode，直接使用会话聚合列。
-- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop，由去重后的消息求和得出。
+- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
 
 ## 4. SQLite 表结构（v1）
 
@@ -383,3 +385,13 @@ sidechain 和 unknown relations；不包含正文，详情查询不回读源文�
 
 SQLite schema 不变。RangeTotals / StatsBucket 增加成对已知缓存样本会话数与可空缓存命中率基点；ClientUsage / GroupUsage 与对应 DTO 增加 sessionsWithoutUsage，不能仅凭求和结果 0 判断真实零。排行 messages 为组内所有会话明细合计。
 Codex 失败读取不提交 SourceFile 水位；合法无换行末行允许导入，未完成 JSON 尾行下次重试。CODEX_HOME 或用户 home 只在采集发现层解析，来源 DTO 的 sourcePath 是本地展示元数据，不默认对外复制或上传。
+
+## 13. WorkBuddy（口径 2.7，2026-10-12）
+
+实现：collectors/workbuddy/{parser,rollup,sync}.rs，复用 usage/normalize/request_ledger.rs。只读 WORKBUDDY_CONFIG_DIR/projects 或 ~/.workbuddy/projects；不使用 CodeBuddy 的独立目录。现有 SQLite 表结构不变，client 新增 workbuddy。
+
+口径 id 为 workbuddy.item_usage.v1：inputTokens 含缓存读取，outputTokens 含推理；互不重叠桶为 input − cached_tokens、output − reasoning_tokens、cached_tokens、reasoning_tokens。缓存写入关系未知且不计总量；总量沿用客户端 totalTokens。蛇形镜像字段来自 message.usage，只补缺，不与 providerData.usage 相加。详情数组 / 对象均支持，缺字段保持未知；超大值与 aggregate requests != 1 不当作单次请求导入。
+
+会话键 sessionId，请求键原生输出事件 id。一次模型调用的 usage 仅挂在最后一个输出事件；无 usage 的片段不生成明细。多个调用可复用 providerData.messageId / conversationRequestId / traceId；跨文件按 (sessionId, id) 和事件时间选新，不按内容去重。时间使用日志的 Unix 毫秒，completed_at 保持 NULL，不将落盘时间伪装为完成时间；模型和 agent 取 providerData 元数据。没有旁链标识时不从代理名称推断旁链。
+
+会话总量 sum_of_messages，完整成功扫描为 complete；有损坏行或未知记录时保守标记 partial，没有用量为 none。请求缺失总量时会话总量保持未知。同步仅在文件集合及指纹稳定后替换完整客户端快照；失败保留历史、水位，下次重试。记录只落统计元数据，费用保持 none。

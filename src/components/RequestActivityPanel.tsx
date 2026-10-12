@@ -35,6 +35,7 @@ const CLIENTS: ClientKey[] = [
   "kimi_code",
   "mimocode",
   "pi_desktop",
+  "workbuddy",
 ];
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 const CHART_CONFIG = { value: { label: "已记录请求", color: "var(--chart-1)" } };

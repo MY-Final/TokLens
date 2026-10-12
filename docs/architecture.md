@@ -5,6 +5,16 @@
 
 ## 1. 现状
 
+### WorkBuddy 采集器决策（2026-10-12）
+
+新增 `collectors/workbuddy/`，按 JSONL 白名单解析、跨文件请求去重与会话聚合、同步拆分；复用 `usage/normalize/request_ledger.rs` 和完整快照事务。
+只读 `WORKBUDDY_CONFIG_DIR/projects`，未设置时使用 `~/.workbuddy/projects`，不借用 CodeBuddy 的独立配置目录。
+不读取账户、配置正文、blobs、工具输出、记忆、标题、心跳元数据或 session_usage 上下文占用；无新增依赖、权限、迁移或网络能力。
+已核对 WorkBuddy 5.2.6 的落盘契约：一次模型调用的 usage 挂在最后一个输出事件，`message.usage` 是 `providerData.usage` 的镜像，不能相加。
+请求按 `(sessionId, id)` 去重，不能使用跨多个模型调用复用的 conversationRequestId、traceId 或 providerData.messageId。
+总量沿用客户端值，缓存读取是输入子集，推理是输出子集；缓存写入关系未知，不计入总量。缺字段保持未知，异常关系标记可见。
+读取失败、不完整尾行、未知文件格式或文件指纹变化保留历史和水位；成功快照才反映来源删除。客户端统一使用 workbuddy 标识和现有 lucide Bot 图标。
+
 ### 桌面设置与更新决策（2026-10-11）
 
 新增 `settings/`（版本化 JSON、校验与原子保存）、`desktop/`（托盘、窗口生命周期）、
@@ -85,7 +95,7 @@ DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/se
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop 采集器已接入；费用换算未实现（不展示统一金额）。
+Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -96,7 +106,7 @@ Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop 采集器已接
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries + request_queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -136,7 +146,7 @@ usage/tokens ────────→ usage/client
 | ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------- |
 | `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
 | `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                       |
-| `get_client_usage`       | `fromMs` / `toMs`                                          | 七个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_client_usage`       | `fromMs` / `toMs`                                          | 八个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
 | `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
 | `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因    |

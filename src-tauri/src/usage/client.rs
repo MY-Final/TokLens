@@ -12,10 +12,11 @@ pub enum Client {
     KimiCode,
     MimoCode,
     PiDesktop,
+    WorkBuddy,
 }
 
 impl Client {
-    pub const ALL: [Client; 7] = [
+    pub const ALL: [Client; 8] = [
         Client::Codex,
         Client::ClaudeCode,
         Client::OpenCode,
@@ -23,6 +24,7 @@ impl Client {
         Client::KimiCode,
         Client::MimoCode,
         Client::PiDesktop,
+        Client::WorkBuddy,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -34,6 +36,7 @@ impl Client {
             Client::KimiCode => "kimi_code",
             Client::MimoCode => "mimocode",
             Client::PiDesktop => "pi_desktop",
+            Client::WorkBuddy => "workbuddy",
         }
     }
 
@@ -46,6 +49,7 @@ impl Client {
             "kimi_code" => Some(Client::KimiCode),
             "mimocode" => Some(Client::MimoCode),
             "pi_desktop" => Some(Client::PiDesktop),
+            "workbuddy" => Some(Client::WorkBuddy),
             _ => None,
         }
     }

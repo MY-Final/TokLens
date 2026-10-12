@@ -389,3 +389,15 @@ operationId 是物理请求，operations 是原子账本，父 aggregate 不得�
 usageOrigin 当前约定 pi / legacy；costStatus 明确 reported / estimated / unknown，本机全部为 estimated，当前不导入 cost。
 LobeHub XiaomiMiMo 对应小米品牌；其 Pi 标识为 Inflection AI，Pi Desktop 使用本地通用终端图标避免错标。
 这些数字是本机只读时点快照；自动回归使用合成 fixture，无真实会话正文进入仓库。
+
+## WorkBuddy — 5.2.6 输出事件用量（2026-10-12）
+
+只读本机安装的 WorkBuddy 5.2.6 CLI 打包代码与 ~/.workbuddy/projects JSONL 的字段形状、数值；不保存或输出正文、凭据及真实事件 / 会话 ID。WorkBuddy 的 app-instance 将 WORKBUDDY_CONFIG_DIR 同时传给内部 CODEBUDDY_CONFIG_DIR，默认 ~/.workbuddy；TokLens 只尊重 WorkBuddy 自己的配置路径。
+
+客户端 transformItemForSaveAsync 将 providerData.usage 经 normalizeUsageFormat 转成 message.usage；input item processor 只把一次 raw response 的 usage 挂在最后一个输出 item，随后累加到会话。getTotalUsage 遍历携带 usage 的历史项，不按对话轮次 ID 去重。
+
+本机 30 个日志、781 个携带 usage 的原生输出事件：所有 totalTokens == inputTokens + outputTokens；规范 cached_tokens 来自 inputTokensDetails，reasoning_tokens 来自 outputTokensDetails。message.usage 镜像省略为零的缓存字段，故优先读 provider details 中的显式零。10 条记录 reasoning 超出 output，必须标为异常，不能改写原生总量。providerData.messageId 在 7 组事件复用且用量不同，conversationRequestId / traceId 跨多次调用复用；原生 item id 唯一，是本轮请求标识证据。
+
+总原生输入 67,498,728、输出 458,995、客户端总量 67,957,723，message.usage 的缓存读取合计 24,698,540；此处只记录字段研究时的聚合计数，验收对账另记。session_usage.used / size 为上下文占用，不读取为消耗；usage-log.json 为技能 / MCP 活跃记录，不是 Token 账本。rawUsage.prompt_cache_miss_tokens 不是缓存创建计数，credit 非费用币种，均不导入。正文、工具输出、blobs、账号及心跳文件不纳入统计。
+
+验收对账（2026-10-12）：通过 pnpm tauri dev 开启 WorkBuddy 并手动同步，导入 30 个会话 / 30 个文件 / 781 个请求，无法解析为 0。独立只读脚本按原生 (sessionId, id) 核对全部 781 条的时间、客户端总量及缓存 / 推理扣除后的分项，781/781 一致，客户端总量 67,957,723；无正文、真实标识或路径进入提交。采集开关在已有设置中显式开启，其他来源选择保留。

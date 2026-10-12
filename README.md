@@ -1,13 +1,13 @@
 # TokLens
 
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
-**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, and **Pi Desktop** on this machine (sessions, requests, tokens, models, cost).
+**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, **Pi Desktop**, and **WorkBuddy** on this machine (sessions, requests, tokens, models, cost).
 
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
 - a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
-- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, and Pi Desktop JSONL collectors (`src-tauri/src/collectors/`),
+- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, Pi Desktop JSONL, and WorkBuddy JSONL collectors (`src-tauri/src/collectors/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
@@ -122,7 +122,7 @@ TokLens/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
       ├─ commands/          # State, errors, DTOs, queries & background sync
-      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop collectors
+      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy collectors
       └─ usage/
          ├─ client.rs        # Stable client identity
          ├─ model.rs         # Unified records and deduplication identifiers
@@ -146,3 +146,5 @@ TokLens/
   For the other three clients, use `--example client_usage_report`; it imports into memory and prints aggregate metadata only.
 - Statistics must distinguish measured data from estimated data, and local session data is private by default:
   see [`docs/data-metrics.md`](./docs/data-metrics.md).
+
+WorkBuddy reads `~/.workbuddy/projects` (or `WORKBUDDY_CONFIG_DIR/projects`) and counts only native output items with usage. Provider usage and transcript usage are mirrors, not additive. Existing installations can enable WorkBuddy in Data Sources without changing other client choices.

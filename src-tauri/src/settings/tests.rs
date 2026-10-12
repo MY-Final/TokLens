@@ -1,4 +1,5 @@
 use super::*;
+use crate::usage::client::Client;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -38,7 +39,7 @@ fn defaults_preserve_local_first_and_upgrade_missing_fields() {
     assert_eq!(snapshot.settings.default_range, "today");
     assert_eq!(snapshot.settings.token_display, model::TokenDisplay::Auto);
     assert_eq!(snapshot.settings.sync_interval_minutes, 5);
-    assert_eq!(snapshot.settings.clients().len(), 7);
+    assert_eq!(snapshot.settings.clients().len(), Client::ALL.len());
 }
 
 #[test]

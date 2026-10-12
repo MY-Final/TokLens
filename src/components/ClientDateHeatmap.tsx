@@ -18,6 +18,7 @@ const CLIENTS: ClientKey[] = [
   "kimi_code",
   "mimocode",
   "pi_desktop",
+  "workbuddy",
 ];
 
 export function ClientDateHeatmap({

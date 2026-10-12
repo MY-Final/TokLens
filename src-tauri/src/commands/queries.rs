@@ -100,7 +100,7 @@ pub fn get_daily_token_trend(
     Ok(dtos)
 }
 
-/// 客户端用量分布：固定返回七个客户端，空数据保持为 0，占比由领域查询提供。
+/// 客户端用量分布：固定返回八个客户端，空数据保持为 0，占比由领域查询提供。
 #[tauri::command(rename_all = "camelCase")]
 pub fn get_client_usage(
     state: State<'_, AppState>,

@@ -2,7 +2,14 @@
 
 /** 客户端标识（与 Rust `Client::as_str()` 一致）。 */
 export type ClientKey =
-  "codex" | "claude_code" | "opencode" | "dsh" | "kimi_code" | "mimocode" | "pi_desktop";
+  | "codex"
+  | "claude_code"
+  | "opencode"
+  | "dsh"
+  | "kimi_code"
+  | "mimocode"
+  | "pi_desktop"
+  | "workbuddy";
 
 export type TokenTotals = {
   inputTokens: number;

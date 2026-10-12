@@ -19,6 +19,7 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   kimi_code: "[&_[data-slot=progress-indicator]]:bg-client-kimi",
   mimocode: "[&_[data-slot=progress-indicator]]:bg-client-mimo",
   pi_desktop: "[&_[data-slot=progress-indicator]]:bg-client-pi",
+  workbuddy: "[&_[data-slot=progress-indicator]]:bg-client-workbuddy",
 };
 
 export function ClientUsageCard({

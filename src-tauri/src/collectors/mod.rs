@@ -10,6 +10,7 @@ pub mod opencode;
 pub mod pi_desktop;
 mod sync;
 mod types;
+pub mod workbuddy;
 
 pub use sync::{ClientSyncResult, CollectorRoots, SyncBatch, sync_clients};
 pub use types::{ScanReason, SyncError, SyncOptions, SyncReport};
