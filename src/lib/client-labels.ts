@@ -11,6 +11,7 @@ export const CLIENT_LABELS: Record<ClientKey, string> = {
   mimocode: "MiMoCode",
   pi_desktop: "Pi Desktop",
   workbuddy: "WorkBuddy",
+  copilot: "GitHub Copilot",
 };
 
 export function clientLabel(client: ClientKey): string {

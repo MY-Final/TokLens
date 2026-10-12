@@ -5,6 +5,27 @@
 
 ## 1. 现状
 
+### Copilot Agent Host 补采决策（2026-10-12）
+
+在 `collectors/copilot/` 增加 `events.rs`（SDK JSONL 元数据白名单）、`agent_host.rs`（VS Code 用量关联）和 `database.rs`（内存只读 SQLite/WAL 快照）。
+默认同时发现 Copilot 根目录的 `session-state/*/events.jsonl` 与 Windows `%APPDATA%/Code/agentSessionData/*/session.db`。
+通过 provider metadata 的 sdkSessionId 合并会话，通过 turns.event_id 对应 SDK user.message.id；镜像按 SDK 会话和原始用户事件去重。
+整轮 turnTokenTotals 只用于会话总量；vscode.modelCall 仅补对应 apiCallId 的请求用量，缺少的调用计数保持未知，明细标记 partial。
+复用已有统一模型的 client_reported / partial，无新迁移、权限、依赖包或网络能力；启用已有 rusqlite 的 serialize feature，在内存合成已提交 WAL 快照，避免 SQLite 修改客户端 shm。
+只反序列化白名单；不保存正文、草稿、工具结果或文件内容。任何读取失败、尾行不完整或扫描中变化均不提交新快照。
+非零缓存的包含关系缺乏正样本，暂不推断整轮总量；缓存为零时 input + output 可确定性换算，reasoning/cache_write 仍未知。
+
+### Copilot CLI 采集器决策（2026-10-12）
+
+新增 `collectors/copilot/`（只读 SQLite 白名单查询 / 同步 / 合成测试）与 `usage/normalize/copilot.rs`（包含缓存的输入换算）。
+读取 `COPILOT_HOME/session-store.db`，未设置时为 `~/.copilot/session-store.db`；配置目录只能由客户端环境显式指定。
+复用已有 rusqlite、请求账本与完整快照事务，不新增依赖、权限、迁移或网络能力。
+仅读取 sessions 元数据与 assistant_usage_events 的身份、模型、时间和 Token 字段；不读正文、账户、日志或上下文占用。
+每次读取 WAL 可见快照，以用量表主键去重；缺少用量表的旧版本保留会话且标记明细无法确认完整。
+输入包含缓存读写，reasoning 包含于输出；归一化拆分缓存且不重复计入。缺失保持未知，费用和 premium requests 不换算。
+新安装默认启用九个来源；已有设置保留原选择，新增 Copilot 可从数据源管理开启。
+Copilot 使用已登记 LobeHub `GithubCopilot` 本地图标与独立语义色。
+
 ### WorkBuddy 采集器决策（2026-10-12）
 
 新增 `collectors/workbuddy/`，按 JSONL 白名单解析、跨文件请求去重与会话聚合、同步拆分；复用 `usage/normalize/request_ledger.rs` 和完整快照事务。
@@ -95,7 +116,7 @@ DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/se
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy 采集器已接入；费用换算未实现（不展示统一金额）。
+Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、Copilot CLI 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -106,7 +127,7 @@ Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy 采
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries + request_queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy / copilot
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -147,7 +168,7 @@ usage/tokens ────────→ usage/client
 | ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------- |
 | `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
 | `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                       |
-| `get_client_usage`       | `fromMs` / `toMs`                                          | 八个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_client_usage`       | `fromMs` / `toMs`                                          | 九个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
 | `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
 | `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因    |

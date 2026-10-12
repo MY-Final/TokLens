@@ -133,6 +133,17 @@ pub const WORKBUDDY_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "WorkBuddy 5.2.6 last response item contract; 781 local usage records total == input + output; cached_tokens is an input detail",
 };
 
+/// Canonical Copilot input excludes both caches after normalize::copilot conversion.
+pub const COPILOT_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "copilot.assistant_usage.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::IncludedIn,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: false,
+    basis: "Copilot CLI 1.0.91 FJt accounting: native input includes read/write caches; reasoning is an output detail",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
@@ -143,6 +154,7 @@ pub fn semantics_for(client: Client) -> &'static TokenSemantics {
         Client::MimoCode => &MIMOCODE_SEMANTICS,
         Client::PiDesktop => &PI_DESKTOP_SEMANTICS,
         Client::WorkBuddy => &WORKBUDDY_SEMANTICS,
+        Client::Copilot => &COPILOT_SEMANTICS,
     }
 }
 

@@ -122,6 +122,7 @@ function SessionBrowser({
             <SelectItem value="mimocode">MiMoCode</SelectItem>
             <SelectItem value="pi_desktop">Pi Desktop</SelectItem>
             <SelectItem value="workbuddy">WorkBuddy</SelectItem>
+            <SelectItem value="copilot">GitHub Copilot</SelectItem>
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">

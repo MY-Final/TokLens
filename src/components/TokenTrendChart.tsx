@@ -50,6 +50,12 @@ const TOTAL_SERIES = [
     color: "var(--client-workbuddy)",
     dotClass: "bg-client-workbuddy",
   },
+  {
+    key: "copilot",
+    label: "GitHub Copilot",
+    color: "var(--client-copilot)",
+    dotClass: "bg-client-copilot",
+  },
 ] as const;
 const CHART_CONFIG = {
   codex: { label: "Codex", color: "var(--client-codex)" },
@@ -60,6 +66,7 @@ const CHART_CONFIG = {
   mimocode: { label: "MiMoCode", color: "var(--client-mimo)" },
   pi_desktop: { label: "Pi Desktop", color: "var(--client-pi)" },
   workbuddy: { label: "WorkBuddy", color: "var(--client-workbuddy)" },
+  copilot: { label: "GitHub Copilot", color: "var(--client-copilot)" },
   cacheWrite: { label: "缓存写入（计入总量）", color: "var(--chart-5)" },
   cacheRead: { label: "缓存读取", color: "var(--chart-1)" },
   input: { label: "输入（未命中缓存）", color: "var(--chart-2)" },
@@ -109,6 +116,7 @@ export function TokenTrendChart({
     mimocode: clientValue(bucket, "mimocode"),
     pi_desktop: clientValue(bucket, "pi_desktop"),
     workbuddy: clientValue(bucket, "workbuddy"),
+    copilot: clientValue(bucket, "copilot"),
     cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,

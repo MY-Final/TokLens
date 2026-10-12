@@ -401,3 +401,30 @@ LobeHub XiaomiMiMo 对应小米品牌；其 Pi 标识为 Inflection AI，Pi Desk
 总原生输入 67,498,728、输出 458,995、客户端总量 67,957,723，message.usage 的缓存读取合计 24,698,540；此处只记录字段研究时的聚合计数，验收对账另记。session_usage.used / size 为上下文占用，不读取为消耗；usage-log.json 为技能 / MCP 活跃记录，不是 Token 账本。rawUsage.prompt_cache_miss_tokens 不是缓存创建计数，credit 非费用币种，均不导入。正文、工具输出、blobs、账号及心跳文件不纳入统计。
 
 验收对账（2026-10-12）：通过 pnpm tauri dev 开启 WorkBuddy 并手动同步，导入 30 个会话 / 30 个文件 / 781 个请求，无法解析为 0。独立只读脚本按原生 (sessionId, id) 核对全部 781 条的时间、客户端总量及缓存 / 推理扣除后的分项，781/781 一致，客户端总量 67,957,723；无正文、真实标识或路径进入提交。采集开关在已有设置中显式开启，其他来源选择保留。
+
+## Copilot CLI（2026-10-12）
+
+本机安装包版本 1.0.91，默认 ~/.copilot；客户端尊重 COPILOT_HOME。session-store.db schema_version=8；sessions 有 3 行，assistant_usage_events 有 0 行。
+只查询 sessions(id,cwd,created_at,updated_at) 和 assistant_usage_events(id,session_id,agent_id,parent_tool_call_id,model,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,reasoning_tokens,created_at)。不读取 summary、turns 正文、配置、账户、token_details_json、FTS 内容或工具输出。
+安装包 app.js 的 FJt 原生用量适配将 inputTokensUncached 定义为 inputTokens − cacheReadTokens − cacheWriteTokens；tokenDetails 存在时 input 类为未缓存输入，显示输入为其加两种缓存。reasoning 是输出明细。统计当前依赖用量表规范数字列；混合模型 token_details_json 细粒度计费归属不展开，模型取行级 model，不使用计费模型替代。
+三个 JSONL 会话各有一次 user.message / assistant.turn_start / session.error，没有成功调用用量；shutdown.modelMetrics 为空。currentTokens / systemTokens / conversationTokens / toolDefinitionsTokens 是上下文占用，不能纳入累计用量。JSONL 不与数据库镜像相加。
+本机正数 Token 样本缺失，暂不能做正数实测对账；合成测试覆盖缓存、推理、零、缺失、溢出、负数、跨日、WAL 修正、幂等、旧格式和隐私。
+
+### Copilot Agent Host 本机补充实测（2026-10-12）
+
+已实测确认：CLI 的 `~/.copilot/session-store.db` 与 VS Code `%APPDATA%/Code/agentSessionData/*/session.db` 是两套 SQLite 存储；前者3个会话 / 0条 assistant_usage_events，SDK session-state 中还有一个未登记在前者的 Agent Host 会话。workspace client_name=vscode-agent-host；不能靠 producer=copilot-agent 区分 CLI 与 Host。
+后者通过 session_metadata.defaultChatProviderData.sdkSessionId 关联 SDK ID；外层会话 ID 不同。3个 turns.event_id 全部对应 SDK user.message.id，3个 vscode.modelCall.apiCallId 全部对应 assistant.message.data.apiCallId；modelCall.eventId 和 SDK turnId 不能替代关联键。
+已实测确认：SDK 有10个独立模型调用，Host库只持久化3个轮级用量。turnTokenTotals 合计 input314042 / output3372 / cached0；顶层最后调用合计98680 /2353。安装包累加器按模型分别累加 inputTokens/cacheReadTokens/outputTokens，证实顶层并非整轮总量。
+已实测确认：globalStorage/agent-host.db 是会话目录（sessions 与 sessions_v2 为镜像），无用量计数；github.copilot-chat/session-store.db 为旧会话索引；agentSessionData 的 backing / migration 目录不等同独立会话。采集仅选择明确的 SDK 关联与用量，不用目录数量当会话数量。
+推测待验证：非零 cachedTokens 与输入的包含关系、cost 的金额单位、不同客户端版本 / 非默认 Code 目录契约。当前采集不推断这些值；普通 workspace chatSessions 需要独立格式验证，未纳入本次修复。源数据库、事件含正文，解析只使用白名单字段，研究输出及仓库无正文样本。
+
+| 数据源                      | 路径                                                                     | 可获取指标                                                       | 是否含正文          | 本次采集用途                   |
+| --------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------- | ------------------- | ------------------------------ |
+| Copilot CLI 索引 / 用量库   | `%USERPROFILE%/.copilot/session-store.db`（或 COPILOT_HOME）             | session / request / token / model / time；本机用量表为空         | 是，非白名单表 / 列 | 兼容既有 CLI 用量              |
+| SDK 事件                    | `%USERPROFILE%/.copilot/session-state/*/events.jsonl`                    | session / apiCallId / model / ISO time；本机 Host 事件没有 usage | 是                  | 调用身份、模型、时间；跳过正文 |
+| VS Code Agent Host 轮级用量 | `%APPDATA%/Code/agentSessionData/*/session.db`                           | 整轮 token；最后调用 token；SDK 关联                             | 是，草稿 / 编辑等表 | 关联 SDK，整轮与请求分别统计   |
+| Agent Host 会话目录         | `%APPDATA%/Code/User/globalStorage/agent-host.db`                        | provider / session / 毫秒 time；无 token                         | 含标题等私密元数据  | 不作为用量来源                 |
+| 旧 Copilot Chat 索引        | `%APPDATA%/Code/User/globalStorage/github.copilot-chat/session-store.db` | session / turn；本机无新用量表                                   | 是                  | 本次不采集                     |
+| 普通 VS Code Chat 历史      | `%APPDATA%/Code/User/workspaceStorage/*/chatSessions/`                   | 部分 promptTokens / outputTokens 元数据；尚未核定完整口径        | 是                  | 待独立验证，不纳入本次修复     |
+
+落地验证（2026-10-12）：TokLens 本机库已导入4个 Copilot 会话，3个旧会话用量未知；Host 会话整轮317414 Token。10条调用中3条有独立 Token，总和101033，其余7条为 NULL。桌面请求视图同样显示10条调用、101033已知 Token与7条未知，未把轮级聚合重复入请求表。

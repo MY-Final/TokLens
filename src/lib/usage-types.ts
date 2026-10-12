@@ -9,7 +9,8 @@ export type ClientKey =
   | "kimi_code"
   | "mimocode"
   | "pi_desktop"
-  | "workbuddy";
+  | "workbuddy"
+  | "copilot";
 
 export type TokenTotals = {
   inputTokens: number;

@@ -24,6 +24,7 @@ const CLIENT_HINTS: Record<string, string> = {
   mimocode: "MiMoCode：MIMOCODE_DB / XDG_DATA_HOME",
   pi_desktop: "Pi Desktop：PI_DESKTOP_SESSIONS_DIR",
   workbuddy: "WorkBuddy：WORKBUDDY_CONFIG_DIR",
+  copilot: "Copilot：CLI 与 VS Code Agent Host（自动发现本机默认目录）",
   kimi_code: "Kimi Code：KIMI_CODE_HOME",
   opencode: "OpenCode：XDG_DATA_HOME",
 };

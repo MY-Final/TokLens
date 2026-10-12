@@ -181,6 +181,9 @@ pub fn dedup_key_note(client: Client) -> &'static str {
         Client::WorkBuddy => {
             "sessionId + item.id; providerData.usage and message.usage are mirrors"
         }
+        Client::Copilot => {
+            "SDK session id + apiCallId; CLI usage:<row id>; host totals by user event id"
+        }
         Client::OpenCode => "message.id",
         Client::MimoCode => "native session id + message id; exclude imported session copies",
         Client::PiDesktop => {

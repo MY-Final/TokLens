@@ -3,17 +3,17 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                                      | 职责                                                                                            |
-| ---------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                                          |
-| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                                  |
-| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                                |
-| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                            |
-| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                               |
-| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy 的独立规则 |
-| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                      |
-| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                           |
-| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                      |
+| 模块       | 文件                                      | 职责                                                                                                          |
+| ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                                                        |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                                                |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                                              |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                                          |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                                             |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI 的独立规则 |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                                    |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                                         |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                                    |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -26,16 +26,17 @@
 
 字段关系来自本机实测与客户端源码契约（证据见 `data-source-research.md`），代码中每条口径都带 `basis` 说明。
 
-| 客户端      | 口径 id                          | `cache_read` 相对 `input` | `reasoning` 相对 `output` | `cache_write` 相对 `input` | 客户端是否提供总量                                      |
-| ----------- | -------------------------------- | ------------------------- | ------------------------- | -------------------------- | ------------------------------------------------------- |
-| Codex       | `codex.usage.v1`                 | 包含（子集）              | 包含（子集）              | 未知                       | 是（`total = input + output`）                          |
-| Claude Code | `claude_code.anthropic_usage.v1` | 独立                      | 客户端不提供              | 独立                       | 否                                                      |
-| OpenCode    | `opencode.message.v1`            | 独立                      | 独立                      | 未知                       | 是（`total = input + output + reasoning + cache.read`） |
-| DSH         | `dsh.token_usage.v1`             | 独立                      | 包含（子集）              | 独立                       | 否（按 token-meter 四个独立桶求和）                     |
-| Kimi Code   | `kimi_code.usage_record.v1`      | 独立                      | 客户端不提供              | 独立                       | 否（四桶求和）                                          |
-| MiMoCode    | `mimocode.message.v1`            | 独立                      | 独立                      | 独立                       | 是（旧记录无 total 时由五桶求和）                       |
-| Pi Desktop  | `pi_desktop.operation.v1`        | 独立                      | 包含（子集）              | 独立                       | 是（input + output + 两个缓存桶）                       |
-| WorkBuddy   | `workbuddy.item_usage.v1`        | 包含（子集）              | 包含（子集）              | 未知                       | 是（total = input + output）                            |
+| 客户端      | 口径 id                          | `cache_read` 相对 `input` | `reasoning` 相对 `output` | `cache_write` 相对 `input`   | 客户端是否提供总量                                      |
+| ----------- | -------------------------------- | ------------------------- | ------------------------- | ---------------------------- | ------------------------------------------------------- |
+| Codex       | `codex.usage.v1`                 | 包含（子集）              | 包含（子集）              | 未知                         | 是（`total = input + output`）                          |
+| Claude Code | `claude_code.anthropic_usage.v1` | 独立                      | 客户端不提供              | 独立                         | 否                                                      |
+| OpenCode    | `opencode.message.v1`            | 独立                      | 独立                      | 未知                         | 是（`total = input + output + reasoning + cache.read`） |
+| DSH         | `dsh.token_usage.v1`             | 独立                      | 包含（子集）              | 独立                         | 否（按 token-meter 四个独立桶求和）                     |
+| Kimi Code   | `kimi_code.usage_record.v1`      | 独立                      | 客户端不提供              | 独立                         | 否（四桶求和）                                          |
+| MiMoCode    | `mimocode.message.v1`            | 独立                      | 独立                      | 独立                         | 是（旧记录无 total 时由五桶求和）                       |
+| Pi Desktop  | `pi_desktop.operation.v1`        | 独立                      | 包含（子集）              | 独立                         | 是（input + output + 两个缓存桶）                       |
+| WorkBuddy   | `workbuddy.item_usage.v1`        | 包含（子集）              | 包含（子集）              | 未知                         | 是（total = input + output）                            |
+| Copilot CLI | `copilot.assistant_usage.v1`     | 原生包含；归一化后独立    | 包含（子集）              | 原生包含；归一化后独立、计入 | 否（原生 input + output 直接换算）                      |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
@@ -54,7 +55,7 @@
 2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
 4. `cache_write` 是否计入总量由口径决定：Codex/OpenCode 的客户端总量本身不含它，故不计入且标注未知；
-   Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 的 cache_write 与 input 独立，故计入。DSH 缓存字段省略时按协议默认 0，详见第 10 节。
+   Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 的 cache_write 与 input 独立，故计入。Copilot CLI 原生缓存已含于输入，拆分后计入；DSH 缓存字段省略时按协议默认 0，详见第 10 节。
 
 ## 2. 未确认的语义（明确标注，不推断）
 
@@ -78,15 +79,16 @@
 | MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
 | Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
 | WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                               |
+| Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                           | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                          |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
 - `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
 - `client_reported`：OpenCode，直接使用会话聚合列。
-- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy，由去重后的消息求和得出。
+- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
 
 ## 4. SQLite 表结构（v1）
 
@@ -395,3 +397,27 @@ Codex 失败读取不提交 SourceFile 水位；合法无换行末行允许导�
 会话键 sessionId，请求键原生输出事件 id。一次模型调用的 usage 仅挂在最后一个输出事件；无 usage 的片段不生成明细。多个调用可复用 providerData.messageId / conversationRequestId / traceId；跨文件按 (sessionId, id) 和事件时间选新，不按内容去重。时间使用日志的 Unix 毫秒，completed_at 保持 NULL，不将落盘时间伪装为完成时间；模型和 agent 取 providerData 元数据。没有旁链标识时不从代理名称推断旁链。
 
 会话总量 sum_of_messages，完整成功扫描为 complete；有损坏行或未知记录时保守标记 partial，没有用量为 none。请求缺失总量时会话总量保持未知。同步仅在文件集合及指纹稳定后替换完整客户端快照；失败保留历史、水位，下次重试。记录只落统计元数据，费用保持 none。
+
+## 14. Copilot CLI（口径 2.8，2026-10-12；Agent Host 扩展见 2.9）
+
+实现：collectors/copilot/{queries,sync,tests}.rs 与 usage/normalize/copilot.rs。只读 COPILOT_HOME/session-store.db 或 ~/.copilot/session-store.db；client=copilot，无 schema 迁移。
+会话键 sessions.id；消息键 usage:<assistant_usage_events.id>，每行一个用量请求，agent_id / parent_tool_call_id 仅用于子代理标记；不查询 turns 正文、summary、token_details_json、账号或日志。
+口径 copilot.assistant_usage.v1：客户端输入包含缓存读写，领域层先扣除两者，规范桶的缓存均独立；reasoning 属 output 子集。
+总量按原生 input + output 换算，领域标记 derived_from_buckets，请求保存 derived 来源等级；会话按完整快照中去重请求求和。缓存写入参与 countedCacheWriteTokens。
+缺失输入 / 输出使总量未知；缺失缓存使输入分桶未知，保留输入输出直接换算的已知总量。缓存和大于输入时不回绕、输入分桶保持未知并标记 anomaly.copilot_caches_gt_input。
+SQL 每次在只读事务中读取 WAL，完整快照原子替换，失败保留旧水位。无用量表的旧库只导入未知会话并标记 partial。
+时间读取 created_at / updated_at；ISO UTC 和 SQLite UTC datetime 默认形式可解析，非法 / 缺失保持未知；无时间请求只在全会话详情中显示，不按会话时间补造请求时间。
+没有客户端原生总量、金额和费用换算；premium requests、AIU 和上下文占用不冒充 Token。真实目录对账限制见 data-metrics.md 2.8。
+
+### Copilot Agent Host（口径 2.9，2026-10-12）
+
+client 仍为 copilot，展示名 GitHub Copilot，parser_version=2；无 schema 迁移。新增 collectors/copilot/{database,events,agent_host,agent_host_tests}.rs，职责见 architecture.md。
+默认 Windows Code 数据目录来自 APPDATA，测试显式注入路径；不在测试中发现真实客户端目录。Code Insiders、便携版与普通 workspace chatSessions 暂不发现。
+events.jsonl 通过白名单读取 session.start.data.sessionId / startTime / context.cwd、session.model_change.data.newModel、user.message.id、assistant.message.data.apiCallId / model、外层 ISO timestamp；无 apiCallId 不虚构模型调用。
+Agent Host 的 session_metadata.defaultChatProviderData（兼容镜像 agentHost.chatProviderData）提供 sdkSessionId；turns.event_id 关联 SDK user.message.id。外层目录 UUID、turns.id 和 SDK turnId 均不能当作跨源关联键。
+会话以 SDK ID 归一，调用键 api:<apiCallId>；同 SDK 会话 CLI 有用量时不叠加 SDK 空用量消息，关联到 Host 时整轮总量优先。Host 镜像以 (sdkSessionId, turns.event_id) 去重，primary defaultChatProviderData 优先，等优先级不一致则放弃本次快照。
+turn_usage.usage._meta.turnTokenTotals 的模型桶只求和一次，用于 SessionRecord（total_basis=client_reported 指客户端提供轮级聚合依据，total_tokens 本身仍 derived_from_buckets）。不与 directTurnTokenTotals、顶层计数或 vscode.modelCall 相加。
+顶层 inputTokens/outputTokens/cacheReadTokens 仅属于该轮最后一次调用，按 _meta.vscode.modelCall.apiCallId 关联已有 SDK 调用。其他调用保留身份、模型、时间，Token 为 NULL。明细始终 partial；会话总量与请求求和可以不同。
+口径 copilot.agent_host.turn.v1：仅已验证零缓存记录可由 input + output 得到总量，推理与缓存写入仍 NULL，不补零；非零或未知缓存不猜包含关系，输入分桶与总量保持未知并标记 cache_relation_unverified。缺任意已发现用户轮的聚合时会话总量 NULL，已知分项仍可显示。
+SQLite 原文件 / WAL 仅文件读取，在内存校验 WAL checksum、salt、commit 后合成只读快照，忽略未提交尾帧；不打开 shm、不生成客户端侧文件，不持久化数据库镜像。
+所有来源文件集合 / 主库及 WAL 指纹在扫描前后复核；失败、未知 schema、残缺 JSONL 尾行或关联缺失时保留旧数据和水位。缺 CLI 库但存在 SDK + Host 时可导入，使用 merge 保留未确认的旧来源；完整发现时原子替换。暂不采集只存在 Host 而 SDK 事件已丢失的记录，避免伪造请求或时间。

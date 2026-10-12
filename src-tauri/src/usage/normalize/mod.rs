@@ -6,6 +6,7 @@
 
 mod claude_code;
 mod codex;
+pub mod copilot;
 pub mod dsh;
 pub mod kimi_code;
 mod opencode;

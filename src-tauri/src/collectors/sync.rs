@@ -1,5 +1,6 @@
 //! Dispatch independent client scans; one failure never stops the remaining clients.
 
+use super::copilot::CopilotCollector;
 use super::workbuddy::WorkBuddyCollector;
 use super::{
     SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
@@ -20,6 +21,8 @@ pub struct CollectorRoots {
     pub mimocode: Option<PathBuf>,
     pub pi_desktop: Option<PathBuf>,
     pub workbuddy: Option<PathBuf>,
+    pub copilot: Option<PathBuf>,
+    pub copilot_agent_host: Option<PathBuf>,
 }
 
 impl CollectorRoots {
@@ -33,6 +36,7 @@ impl CollectorRoots {
             Client::MimoCode => &self.mimocode,
             Client::PiDesktop => &self.pi_desktop,
             Client::WorkBuddy => &self.workbuddy,
+            Client::Copilot => &self.copilot,
         }
         .as_deref()
     }
@@ -47,6 +51,8 @@ impl CollectorRoots {
             mimocode: MiMoCodeCollector::default_database(),
             pi_desktop: PiDesktopCollector::default_root(),
             workbuddy: WorkBuddyCollector::default_root(),
+            copilot: CopilotCollector::default_database(),
+            copilot_agent_host: CopilotCollector::default_agent_host(),
         }
     }
 }
@@ -112,6 +118,11 @@ pub fn sync_clients(
                 .dsh
                 .as_ref()
                 .map(|root| DshCollector::new(root).sync(store, options)),
+            Client::Copilot => roots.copilot.as_ref().map(|root| {
+                CopilotCollector::new(root)
+                    .with_agent_host(roots.copilot_agent_host.clone())
+                    .sync(store, options)
+            }),
             Client::WorkBuddy => roots
                 .workbuddy
                 .as_ref()

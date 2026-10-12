@@ -1,4 +1,12 @@
-import { ClaudeCode, Codex, DeepSeek, Kimi, OpenCode, XiaomiMiMo } from "@lobehub/icons";
+import {
+  ClaudeCode,
+  Codex,
+  GithubCopilot,
+  DeepSeek,
+  Kimi,
+  OpenCode,
+  XiaomiMiMo,
+} from "@lobehub/icons";
 import { Bot, TerminalSquare } from "lucide-react";
 import type { ComponentType } from "react";
 
@@ -15,6 +23,7 @@ const CLIENT_STYLES = {
   mimocode: { icon: XiaomiMiMo, className: "bg-client-mimo/10 text-client-mimo" },
   pi_desktop: { icon: TerminalSquare, className: "bg-client-pi/10 text-client-pi" },
   workbuddy: { icon: Bot, className: "bg-client-workbuddy/10 text-client-workbuddy" },
+  copilot: { icon: GithubCopilot, className: "bg-client-copilot/10 text-client-copilot" },
 } satisfies Record<ClientKey, { icon: ComponentType<{ size: number }>; className: string }>;
 
 export function ClientIdentity({

@@ -2,6 +2,7 @@
 
 pub mod claude_code;
 pub mod codex;
+pub mod copilot;
 pub mod dsh;
 mod files;
 pub mod kimi_code;

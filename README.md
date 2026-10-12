@@ -1,13 +1,13 @@
 # TokLens
 
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
-**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, **Pi Desktop**, and **WorkBuddy** on this machine (sessions, requests, tokens, models, cost).
+**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, **Pi Desktop**, **WorkBuddy**, and **GitHub Copilot** on this machine (sessions, requests, tokens, models, cost).
 
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
 - a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
-- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, Pi Desktop JSONL, and WorkBuddy JSONL collectors (`src-tauri/src/collectors/`),
+- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, Pi Desktop JSONL, WorkBuddy JSONL, and GitHub Copilot SQLite collectors (`src-tauri/src/collectors/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
@@ -122,7 +122,7 @@ TokLens/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
       ├─ commands/          # State, errors, DTOs, queries & background sync
-      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy collectors
+      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / GitHub Copilot collectors
       └─ usage/
          ├─ client.rs        # Stable client identity
          ├─ model.rs         # Unified records and deduplication identifiers
@@ -148,3 +148,5 @@ TokLens/
   see [`docs/data-metrics.md`](./docs/data-metrics.md).
 
 WorkBuddy reads `~/.workbuddy/projects` (or `WORKBUDDY_CONFIG_DIR/projects`) and counts only native output items with usage. Provider usage and transcript usage are mirrors, not additive. Existing installations can enable WorkBuddy in Data Sources without changing other client choices.
+
+GitHub Copilot reads `~/.copilot/session-store.db` (or `COPILOT_HOME/session-store.db`) and SDK metadata in `session-state/*/events.jsonl`. On Windows it also links VS Code `%APPDATA%/Code/agentSessionData/*/session.db` to the SDK sessions. Whole-turn Token totals are kept separate from partial API-call usage; mirrors are counted once. SQLite/WAL snapshots stay in memory without opening client databases for writing. Missing usage, reasoning, cache writes and unverified nonzero-cache totals stay unknown. Context counters, premium requests and costs are not converted to tokens. Enable GitHub Copilot in Data Sources for existing installations.
