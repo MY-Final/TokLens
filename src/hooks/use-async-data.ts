@@ -35,7 +35,13 @@ export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncDat
       })
       .catch((cause: unknown) => {
         if (active) {
-          setSnapshot({ key: requestKey, data: null, error: toErrorMessage(cause) });
+          // Keep the last successful result visible while reporting the new
+          // request error; a transient refresh must not blank the page.
+          setSnapshot((previous) => ({
+            key: requestKey,
+            data: previous?.data ?? null,
+            error: toErrorMessage(cause),
+          }));
         }
       });
     return () => {
@@ -47,10 +53,13 @@ export function useAsyncData<T>(loader: () => Promise<T>, key: string): AsyncDat
   const fresh = snapshot?.key === requestKey ? snapshot : null;
 
   return {
-    data: fresh?.data ?? null,
+    // Keep stale data during a key change so rolling ranges and background
+    // collection update in place instead of replacing the page with skeletons.
+    data: snapshot?.data ?? null,
     error: fresh?.error ?? null,
-    // 当 key 变化或首次加载时视为加载中（派生值，不需要在 effect 里同步 setState）。
-    loading: fresh === null,
+    // Only the first load (or a refresh after an empty/error result) is a
+    // blocking load. Existing data remains visible while the new request runs.
+    loading: snapshot === null || (fresh !== null && fresh.data === null),
     reload,
   };
 }
