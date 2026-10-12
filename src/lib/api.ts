@@ -100,6 +100,7 @@ import type {
   OverviewStats,
   RangeArgs,
   RequestActivity,
+  RequestAnalysis,
   SessionDetail,
   Rankings,
   SessionSummary,
@@ -154,6 +155,12 @@ export function getRequestActivity(
   args: RangeArgs & { dayBoundaries: number[]; client?: ClientKey | null },
 ): Promise<RequestActivity> {
   return invoke("get_request_activity", { ...args, client: args.client ?? null });
+}
+
+export function getRequestAnalysis(
+  args: RangeArgs & { client?: ClientKey | null },
+): Promise<RequestAnalysis> {
+  return invoke("get_request_analysis", { ...args, client: args.client ?? null });
 }
 
 export function getSessionDetail(args: {

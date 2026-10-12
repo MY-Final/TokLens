@@ -16,7 +16,8 @@ mod sql;
 mod types;
 
 pub use requests::{
-    RequestActivity, RequestCoverage, RequestDailyBucket, RequestDailyClient, RequestTotals,
+    RequestActivity, RequestAnalysis, RequestAnalysisGroup, RequestAnalysisMetrics,
+    RequestCoverage, RequestDailyBucket, RequestDailyClient, RequestTotals,
 };
 pub use session_detail::{RequestCoverageDetail, RequestDetail, SessionDetail};
 pub use types::{

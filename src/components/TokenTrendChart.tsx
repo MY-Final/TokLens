@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 import { useId, useState } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
@@ -9,7 +10,7 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import { formatCompactTokens, formatDateTime, formatNumber } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import type { DailyTokenBucket } from "@/lib/usage-types";
 
 const SERIES = [
@@ -75,6 +76,7 @@ export function TokenTrendChart({
   rangeLabel: string;
   selectedRange?: DailyRange;
 }) {
+  const { formatTokens } = useTokenFormat();
   const [mode, setMode] = useState("client");
   const gradientId = useId().replace(/:/g, "");
   const clientValue = (bucket: DailyTokenBucket, key: string) => {
@@ -180,11 +182,11 @@ export function TokenTrendChart({
                   minTickGap={24}
                 />
                 <YAxis
-                  tickFormatter={(value: number) => formatCompactTokens(value)}
+                  tickFormatter={(value: number) => formatTokens(value)}
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  width={60}
+                  width="auto"
                 />
                 <ChartTooltip
                   content={({ active, label }) => {
@@ -201,19 +203,21 @@ export function TokenTrendChart({
                           unknown={entry.bucket.sessionsWithoutUsage}
                           partial={entry.bucket.sessionsPartial}
                           basis="sessions"
-                        >
-                          {series.map((item) => (
-                            <div key={item.key} className="flex justify-between gap-6">
-                              <span className="text-muted-foreground">{item.label}</span>
-                              <span className="font-mono tabular-nums">
-                                {entry[item.key] === null
-                                  ? "—"
-                                  : formatNumber(entry[item.key] ?? 0)}{" "}
-                                Token
-                              </span>
-                            </div>
-                          ))}
-                        </UsageTooltip>
+                          breakdown={series.map((item) => {
+                            const client =
+                              mode === "client"
+                                ? entry.bucket.clients.find((client) => client.client === item.key)
+                                : undefined;
+                            return {
+                              key: item.key,
+                              label: item.label,
+                              value: entry[item.key],
+                              note: client?.sessionsWithoutUsage
+                                ? `${client.sessionsWithoutUsage} 个会话用量未知`
+                                : undefined,
+                            };
+                          })}
+                        />
                       </div>
                     );
                   }}

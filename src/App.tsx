@@ -12,6 +12,7 @@ import { SessionsPage } from "@/pages/SessionsPage";
 import { SourcesPage } from "@/pages/SourcesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useSettings } from "@/hooks/use-settings";
+import { TokenDisplayContext } from "@/hooks/use-token-format";
 import { useUpdates } from "@/hooks/use-updates";
 import { useLocalClock } from "@/hooks/use-local-clock";
 import { useTrayUsage } from "@/hooks/use-tray-usage";
@@ -116,66 +117,70 @@ export default function App() {
   }, [handleNavigate]);
 
   return (
-    <TooltipProvider delayDuration={200}>
-      <AppShell
-        page={page}
-        sidebarCollapsed={settings.settings?.sidebarCollapsed ?? false}
-        sidebarBusy={settings.busy || !settings.settings}
-        onSidebarCollapsedChange={(sidebarCollapsed) => {
-          void settings.patch({ sidebarCollapsed });
-        }}
-        collectionPaused={settings.settings?.collectionPaused ?? false}
-        range={range}
-        nowMs={nowMs}
-        status={status}
-        syncBusy={syncBusy}
-        error={error ?? settings.error}
-        onRetry={() => {
-          void Promise.all([reload(), settings.reload()]);
-        }}
-        onNavigate={handleNavigate}
-        onRangeChange={setSelectedRange}
-        onSync={handleSync}
-      >
-        {page === "overview" ? (
-          <OverviewPage
-            range={range}
-            nowMs={nowMs}
-            refreshToken={refreshToken}
-            onNavigate={handleNavigate}
-          />
-        ) : null}
-        {page === "analytics" ? <AnalyticsPage range={range} refreshToken={refreshToken} /> : null}
-        {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}
-        {page === "sources" ? (
-          <SourcesPage
-            settingsController={settings}
-            status={status}
-            loading={loading}
-            error={error}
-            syncBusy={syncBusy}
-            refreshToken={refreshToken}
-            onRetry={() => {
-              void reload();
-            }}
-            onSync={handleSync}
-          />
-        ) : null}
-        {page === "settings" ? (
-          <SettingsPage
-            controller={settings}
-            updates={updates}
-            updateFocusToken={updateFocusToken}
-          />
-        ) : null}
-      </AppShell>
-      <UpdateAnnouncement
-        state={updates.state}
-        currentVersion={settings.appInfo?.version ?? null}
-        onOpenUpdates={handleOpenUpdates}
-      />
-      <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
-      <CloseWindowDialog />
-    </TooltipProvider>
+    <TokenDisplayContext value={settings.settings?.tokenDisplay ?? "auto"}>
+      <TooltipProvider delayDuration={200}>
+        <AppShell
+          page={page}
+          sidebarCollapsed={settings.settings?.sidebarCollapsed ?? false}
+          sidebarBusy={settings.busy || !settings.settings}
+          onSidebarCollapsedChange={(sidebarCollapsed) => {
+            void settings.patch({ sidebarCollapsed });
+          }}
+          collectionPaused={settings.settings?.collectionPaused ?? false}
+          range={range}
+          nowMs={nowMs}
+          status={status}
+          syncBusy={syncBusy}
+          error={error ?? settings.error}
+          onRetry={() => {
+            void Promise.all([reload(), settings.reload()]);
+          }}
+          onNavigate={handleNavigate}
+          onRangeChange={setSelectedRange}
+          onSync={handleSync}
+        >
+          {page === "overview" ? (
+            <OverviewPage
+              range={range}
+              nowMs={nowMs}
+              refreshToken={refreshToken}
+              onNavigate={handleNavigate}
+            />
+          ) : null}
+          {page === "analytics" ? (
+            <AnalyticsPage range={range} refreshToken={refreshToken} />
+          ) : null}
+          {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}
+          {page === "sources" ? (
+            <SourcesPage
+              settingsController={settings}
+              status={status}
+              loading={loading}
+              error={error}
+              syncBusy={syncBusy}
+              refreshToken={refreshToken}
+              onRetry={() => {
+                void reload();
+              }}
+              onSync={handleSync}
+            />
+          ) : null}
+          {page === "settings" ? (
+            <SettingsPage
+              controller={settings}
+              updates={updates}
+              updateFocusToken={updateFocusToken}
+            />
+          ) : null}
+        </AppShell>
+        <UpdateAnnouncement
+          state={updates.state}
+          currentVersion={settings.appInfo?.version ?? null}
+          onOpenUpdates={handleOpenUpdates}
+        />
+        <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
+        <CloseWindowDialog />
+      </TooltipProvider>
+    </TokenDisplayContext>
   );
 }

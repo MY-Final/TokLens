@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 /** Client distribution: percentages are calculated by the backend. */
 
 import { DashboardCard } from "@/components/DashboardCard";
@@ -8,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { ClientKey, ClientUsage } from "@/lib/usage-types";
 import { clientLabel } from "@/lib/client-labels";
-import { formatCompactTokens, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 
 const BAR_CLASSES: Record<ClientKey, string> = {
   codex: "[&_[data-slot=progress-indicator]]:bg-client-codex",
@@ -31,6 +32,7 @@ export function ClientUsageCard({
   error: string | null;
   onRetry: () => void;
 }) {
+  const { formatTokens } = useTokenFormat();
   return (
     <DashboardCard className="h-full">
       <CardHeader className="gap-1.5 px-5">
@@ -76,7 +78,7 @@ export function ClientUsageCard({
                         {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)} 条明细
                       </span>
                       <span title={`${formatNumber(row.totals.totalTokens)} Token`}>
-                        {formatCompactTokens(row.totals.totalTokens)} Token
+                        {formatTokens(row.totals.totalTokens)} Token
                       </span>
                     </div>
                   </>

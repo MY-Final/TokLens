@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -14,10 +15,9 @@ import { ChartContainer } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { clientLabel } from "@/lib/client-labels";
 import {
-  formatCompactTokens,
   formatDateTime,
   formatNumber,
-  formatTokensOrDash,
+  formatTokensOrDash as formatExactOrDash,
 } from "@/lib/format";
 import type {
   ClientKey,
@@ -69,7 +69,7 @@ function description(totals: RequestTotals | undefined, metric: Metric): string 
   if (totals.requests === 0)
     return "未记录请求：0 条；已记录请求的已知 Token 求和为 0。不代表客户端实测总量为零或没有活动。按请求发生日期归属，本地时区，不含估算。";
   const value = metricValue(totals, metric);
-  return `${metric === "tokens" ? "已知 Token" : "请求数"}：${formatTokensOrDash(value)}。${totals.requestsWithoutUsage > 0 ? `${value !== null && metric === "tokens" ? "Token 仅含已知子集；" : ""}${formatNumber(totals.requestsWithoutUsage)} 条请求用量未知。` : ""}实测 ${formatNumber(totals.measuredRequests)} 条，换算 ${formatNumber(totals.derivedRequests)} 条；不含估算。按请求发生时间归属，本地时区。`;
+  return `${metric === "tokens" ? "已知 Token" : "请求数"}：${formatExactOrDash(value)}。${totals.requestsWithoutUsage > 0 ? `${value !== null && metric === "tokens" ? "Token 仅含已知子集；" : ""}${formatNumber(totals.requestsWithoutUsage)} 条请求用量未知。` : ""}实测 ${formatNumber(totals.measuredRequests)} 条，换算 ${formatNumber(totals.derivedRequests)} 条；不含估算。按请求发生时间归属，本地时区。`;
 }
 
 /** Only align backend buckets to local calendar weeks; never aggregate metrics here. */
@@ -157,6 +157,7 @@ export function RequestActivityPanel({
   client?: ClientKey | null;
   selectedRange?: DailyRange;
 }) {
+  const { formatTokens, formatTokensOrDash } = useTokenFormat();
   const [metric, setMetric] = useState<Metric>("tokens");
   const days = data?.daily ?? [];
   const clients = client ? [client] : CLIENTS;
@@ -170,7 +171,7 @@ export function RequestActivityPanel({
   const unit = metric === "tokens" ? "Token" : "条请求";
   const hasData = (range?.requests ?? 0) > 0;
   return (
-    <DashboardCard className="min-w-0 overflow-hidden">
+    <DashboardCard className="min-w-0">
       <CardHeader className="gap-3 px-5">
         <CardTitle className="text-sm">请求发生时间统计</CardTitle>
         <CardDescription className="text-xs">
@@ -192,7 +193,16 @@ export function RequestActivityPanel({
               ].map(([label, value]) => (
                 <div key={label} className="space-y-1">
                   <dt className="text-muted-foreground">{label}</dt>
-                  <dd className="font-mono text-lg tabular-nums">{value}</dd>
+                  <dd
+                    className="font-mono text-lg tabular-nums"
+                    title={
+                      label === "已知 Token"
+                        ? `${formatExactOrDash(metricValue(range, "tokens"))} Token`
+                        : undefined
+                    }
+                  >
+                    {value}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -278,10 +288,12 @@ export function RequestActivityPanel({
                         minTickGap={24}
                       />
                       <YAxis
-                        tickFormatter={(value: number) => formatCompactTokens(value)}
+                        tickFormatter={(value: number) =>
+                          metric === "tokens" ? formatTokens(value) : formatNumber(value)
+                        }
                         axisLine={false}
                         tickLine={false}
-                        width={60}
+                        width="auto"
                       />
                       <Tooltip
                         content={({ active, label }) => {
@@ -298,6 +310,16 @@ export function RequestActivityPanel({
                                 sessions={bucket?.totals.sessions}
                                 unknown={bucket?.totals.requestsWithoutUsage}
                                 basis="requests"
+                                breakdownUnit={unit}
+                                breakdown={(bucket?.clients ?? []).map((entry) => ({
+                                  key: entry.client,
+                                  label: clientLabel(entry.client),
+                                  value: metricValue(entry.totals, metric),
+                                  note:
+                                    metric === "tokens" && entry.totals.requestsWithoutUsage > 0
+                                      ? `${formatNumber(entry.totals.requestsWithoutUsage)} 条请求用量未知`
+                                      : undefined,
+                                }))}
                               />
                             </div>
                           );

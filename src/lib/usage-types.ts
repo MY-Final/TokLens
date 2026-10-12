@@ -179,6 +179,26 @@ export type RequestActivity = {
   daily: RequestDailyBucket[];
   coverage: RequestCoverage;
 };
+
+export type RequestAnalysisMetrics = {
+  totals: RequestTotals;
+  averageTokens: number | null;
+  shareBps: number | null;
+  cacheHitBps: number | null;
+  cacheKnownRequests: number;
+  knownTokenFields: string[];
+};
+export type RequestAnalysisGroup = {
+  key: string | null;
+  metrics: RequestAnalysisMetrics;
+};
+export type RequestAnalysis = {
+  summary: RequestAnalysisMetrics;
+  clients: RequestAnalysisGroup[];
+  models: RequestAnalysisGroup[];
+  projects: RequestAnalysisGroup[];
+  coverage: RequestCoverage;
+};
 export type RequestDetail = {
   dedupKey: string;
   seq: number | null;

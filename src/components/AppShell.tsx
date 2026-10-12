@@ -146,7 +146,7 @@ export function AppShell({
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header className="flex h-16 items-center justify-between gap-3 border-b border-border/50 px-5">
+        <header className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 px-3 py-2 lg:gap-3 lg:px-5">
           <div className="flex shrink-0 items-center gap-2">
             <Button
               variant="ghost"
@@ -160,17 +160,17 @@ export function AppShell({
             </Button>
             <h1 className="truncate text-base font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
-            {page !== "settings" && (
-              <div className="max-w-80 min-w-0">
-                <DateRangePicker
-                  range={range}
-                  firstEventMs={status?.firstEventMs ?? null}
-                  nowMs={nowMs}
-                  onChange={onRangeChange}
-                />
-              </div>
-            )}
+          {page !== "settings" && page !== "sources" ? (
+            <DateRangePicker
+              range={range}
+              firstEventMs={status?.firstEventMs ?? null}
+              nowMs={nowMs}
+              onChange={onRangeChange}
+            />
+          ) : (
+            <div />
+          )}
+          <div className="flex shrink-0 items-center gap-2">
             <SyncControl
               sync={sync}
               busy={syncBusy}

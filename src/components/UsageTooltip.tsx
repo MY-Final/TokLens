@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { formatNumber } from "@/lib/format";
+import { useTokenFormat } from "@/hooks/use-token-format";
 
 export function UsageTooltip({
   title,
@@ -10,6 +11,8 @@ export function UsageTooltip({
   partial = 0,
   basis,
   children,
+  breakdown = [],
+  breakdownUnit = "Token",
 }: {
   title: string;
   total: number | null;
@@ -19,7 +22,13 @@ export function UsageTooltip({
   partial?: number;
   basis: "requests" | "sessions";
   children?: ReactNode;
+  breakdown?: { key: string; label: string; value: number | null; note?: string }[];
+  breakdownUnit?: "Token" | "条请求";
 }) {
+  const { formatTokens } = useTokenFormat();
+  const sorted = [...breakdown].sort((a, b) =>
+    a.value === null ? (b.value === null ? 0 : 1) : b.value === null ? -1 : b.value - a.value,
+  );
   return (
     <div className="min-w-56 space-y-2 text-xs">
       <p className="font-medium">{title}</p>
@@ -29,9 +38,12 @@ export function UsageTooltip({
           {unknown > 0 && total !== null ? " · 已知子集" : ""}
         </p>
         <p className="font-mono text-lg font-semibold tabular-nums">
-          {total === null ? "—（未知）" : formatNumber(total)}{" "}
+          {total === null ? "—（未知）" : formatTokens(total)}{" "}
           <span className="font-sans text-xs font-normal">Token</span>
         </p>
+        {total !== null && formatTokens(total) !== formatNumber(total) ? (
+          <p className="text-muted-foreground tabular-nums">精确值：{formatNumber(total)} Token</p>
+        ) : null}
       </div>
       <dl className="space-y-1">
         {requests !== undefined ? (
@@ -51,6 +63,33 @@ export function UsageTooltip({
         <p className="text-muted-foreground">未记录请求，不代表无活动。</p>
       ) : null}
       {children}
+      {sorted.length > 0 ? (
+        <dl className="space-y-1 border-t pt-2">
+          {sorted.map((entry) => (
+            <div key={entry.key} className="flex justify-between gap-4">
+              <dt className="text-muted-foreground">
+                {entry.label}
+                {entry.note ? <span className="block text-xs">{entry.note}</span> : null}
+              </dt>
+              <dd
+                className="shrink-0 font-mono tabular-nums"
+                title={
+                  entry.value === null
+                    ? "用量未知"
+                    : `${formatNumber(entry.value)} ${breakdownUnit}`
+                }
+              >
+                {entry.value === null
+                  ? "—"
+                  : breakdownUnit === "Token"
+                    ? formatTokens(entry.value)
+                    : formatNumber(entry.value)}{" "}
+                {breakdownUnit}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       {unknown > 0 ? (
         <p className="text-muted-foreground">
           {formatNumber(unknown)} {basis === "requests" ? "条请求" : "个会话"}

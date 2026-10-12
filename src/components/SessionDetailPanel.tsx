@@ -18,8 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useTokenFormat } from "@/hooks/use-token-format";
 import type { AsyncData } from "@/hooks/use-async-data";
-import { formatDateTime, formatNumber, formatTokensOrDash } from "@/lib/format";
+import {
+  formatDateTime,
+  formatNumber,
+  formatTokensOrDash as formatExactOrDash,
+} from "@/lib/format";
 import type { RequestDetail, SessionDetail, SessionSummary } from "@/lib/usage-types";
 
 const TOTAL_BASIS_LABELS = {
@@ -39,12 +44,13 @@ const TOKEN_FIELDS = [
 ] as const;
 
 function RequestRow({ request }: { request: RequestDetail }) {
+  const { formatTokensOrDash } = useTokenFormat();
   const missing = TOKEN_FIELDS.filter(([field]) => request[field] === null).map(
     ([, label]) => label,
   );
   return (
     <TableRow>
-      <TableCell className="tabular-nums">{formatTokensOrDash(request.seq)}</TableCell>
+      <TableCell className="tabular-nums">{formatExactOrDash(request.seq)}</TableCell>
       <TableCell className="whitespace-nowrap tabular-nums">
         <div>{formatDateTime(request.createdAtMs)}</div>
         <div className="text-muted-foreground">结束 {formatDateTime(request.completedAtMs)}</div>
@@ -54,7 +60,11 @@ function RequestRow({ request }: { request: RequestDetail }) {
         <div className="text-muted-foreground">{request.agent ?? "—"}</div>
       </TableCell>
       {TOKEN_FIELDS.map(([field]) => (
-        <TableCell key={field} className="text-right font-mono tabular-nums">
+        <TableCell
+          key={field}
+          className="text-right font-mono tabular-nums"
+          title={`${formatExactOrDash(request[field])} Token`}
+        >
           {formatTokensOrDash(request[field])}
         </TableCell>
       ))}
@@ -91,6 +101,7 @@ export function SessionDetailPanel({
   offset: number;
   onOffsetChange: (offset: number) => void;
 }) {
+  const { formatTokensOrDash } = useTokenFormat();
   const session = detail.data?.session ?? selectedSession;
   const coverage = detail.data?.requestCoverage;
   return (
@@ -130,11 +141,17 @@ export function SessionDetailPanel({
                 "开始 / 结束",
                 `${formatDateTime(session.startedAtMs)} / ${formatDateTime(session.endedAtMs)}`,
               ],
-              ...TOKEN_FIELDS.map(([field, label]) => [label, formatTokensOrDash(session[field])]),
-            ].map(([label, value]) => (
+              ...TOKEN_FIELDS.map(([field, label]) => [
+                label,
+                formatTokensOrDash(session[field]),
+                `${formatExactOrDash(session[field])} Token`,
+              ]),
+            ].map(([label, value, exact]) => (
               <div key={label} className="min-w-0 space-y-1">
                 <dt className="text-muted-foreground">{label}</dt>
-                <dd className="font-mono break-all tabular-nums">{value}</dd>
+                <dd className="font-mono break-all tabular-nums" title={exact}>
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>

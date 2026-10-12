@@ -36,8 +36,49 @@ fn defaults_preserve_local_first_and_upgrade_missing_fields() {
     assert!(!snapshot.settings.autostart);
     assert!(!snapshot.settings.sidebar_collapsed);
     assert_eq!(snapshot.settings.default_range, "today");
+    assert_eq!(snapshot.settings.token_display, model::TokenDisplay::Auto);
     assert_eq!(snapshot.settings.sync_interval_minutes, 5);
     assert_eq!(snapshot.settings.clients().len(), 7);
+}
+
+#[test]
+fn token_display_preferences_persist_and_reset_without_changing_other_settings() {
+    let directory = Directory::new();
+    let store = SettingsStore::load(&directory.0);
+    for display in ["auto", "chinese", "k", "m", "b", "exact"] {
+        let patch: SettingsPatch = serde_json::from_value(serde_json::json!({
+            "tokenDisplay": display,
+        }))
+        .expect("synthetic display patch");
+        store.update(patch).expect("save display preference");
+        let settings = SettingsStore::load(&directory.0)
+            .snapshot()
+            .expect("reload display preference")
+            .settings;
+        assert_eq!(
+            serde_json::to_value(&settings).expect("serialize")["tokenDisplay"],
+            display
+        );
+        assert_eq!(settings.default_range, "today");
+        assert!(!settings.automatic_updates);
+    }
+    assert!(
+        serde_json::from_value::<SettingsPatch>(serde_json::json!({
+            "tokenDisplay": "unsupported",
+        }))
+        .is_err()
+    );
+    store
+        .update(AppSettings::default().into())
+        .expect("reset preferences");
+    assert_eq!(
+        SettingsStore::load(&directory.0)
+            .snapshot()
+            .expect("reset")
+            .settings
+            .token_display,
+        model::TokenDisplay::Auto
+    );
 }
 
 #[test]

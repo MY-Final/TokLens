@@ -201,3 +201,166 @@ fn four_hundred_display_days_do_not_truncate_range_and_invalid_boundaries_are_re
         assert!(store.request_activity(&filter, &invalid).is_err());
     }
 }
+
+#[test]
+fn analysis_compares_full_range_and_client_drilldown_with_known_only_averages() {
+    let store = UsageStore::open_in_memory().expect("store");
+    session(&store, "a", Client::Codex, "alpha", -100, false);
+    session(&store, "b", Client::ClaudeCode, "beta", 999, false);
+    session(&store, "c", Client::OpenCode, "gamma", 0, false);
+    request(&store, "a1", "a", Some(100), Some(100), "measured");
+    request(&store, "a2", "a", Some(150), None, "measured");
+    request(&store, "b1", "b", Some(120), Some(20), "derived");
+    request(&store, "c1", "c", Some(130), None, "measured");
+    request(
+        &store,
+        "excluded-start",
+        "a",
+        Some(99),
+        Some(999),
+        "measured",
+    );
+    request(
+        &store,
+        "excluded-end",
+        "a",
+        Some(200),
+        Some(999),
+        "measured",
+    );
+    request(
+        &store,
+        "excluded-guess",
+        "a",
+        Some(120),
+        Some(999),
+        "estimated",
+    );
+    request(&store, "excluded-time", "a", None, Some(999), "measured");
+    store
+        .conn
+        .execute("UPDATE sessions SET model='main-model' WHERE id='a'", [])
+        .expect("model");
+    store
+        .conn
+        .execute(
+            "UPDATE messages SET model='request-model' WHERE id='a1'",
+            [],
+        )
+        .expect("request model");
+    let filter = AnalyticsFilter {
+        from_ms: Some(100),
+        to_ms: Some(200),
+        ..Default::default()
+    };
+    let result = store.request_analysis(&filter).expect("analysis");
+    assert_eq!(result.summary.totals.requests, 4);
+    assert_eq!(result.summary.totals.sessions, 3);
+    assert_eq!(result.summary.average_tokens, Some(60.0));
+    assert_eq!(result.clients[0].key.as_deref(), Some("codex"));
+    assert_eq!(result.clients[0].metrics.share_bps, Some(8333));
+    assert_eq!(result.clients[0].metrics.average_tokens, Some(100.0));
+    assert_eq!(result.clients[2].key.as_deref(), Some("opencode"));
+    assert_eq!(result.clients[2].metrics.average_tokens, None);
+    assert_eq!(result.clients[2].metrics.share_bps, None);
+    assert_eq!(result.models[0].key.as_deref(), Some("main-model"));
+    assert!(result.models.iter().any(|entry| entry.key.is_none()));
+    let selected = store
+        .request_analysis(&AnalyticsFilter {
+            client: Some(Client::Codex),
+            ..filter
+        })
+        .expect("drilldown");
+    assert_eq!(selected.clients, result.clients);
+    assert_eq!(selected.summary.totals.requests, 2);
+    assert_eq!(selected.summary.average_tokens, Some(100.0));
+    assert_eq!(selected.projects.len(), 1);
+    assert_eq!(selected.projects[0].metrics.share_bps, Some(10_000));
+    assert_eq!(selected.coverage.untimed_requests, 1);
+    assert_eq!(selected.coverage.estimated_requests, 1);
+    assert!(
+        store
+            .request_analysis(&AnalyticsFilter {
+                from_ms: Some(200),
+                to_ms: Some(100),
+                ..filter
+            })
+            .is_err()
+    );
+}
+
+#[test]
+fn analysis_cache_ratio_uses_paired_fields_and_retains_unknown_and_zero() {
+    let store = UsageStore::open_in_memory().expect("store");
+    session(&store, "a", Client::Codex, "alpha", 0, false);
+    request(&store, "paired", "a", Some(10), Some(100), "measured");
+    request(&store, "missing", "a", Some(10), None, "measured");
+    store.conn.execute("UPDATE messages SET input_tokens=25, cache_read_tokens=75, reasoning_tokens=NULL WHERE id='paired'", []).expect("paired");
+    store.conn.execute("UPDATE messages SET input_tokens=NULL, cache_read_tokens=100, reasoning_tokens=NULL WHERE id='missing'", []).expect("unpaired");
+    let result = store
+        .request_analysis(&AnalyticsFilter::default())
+        .expect("analysis");
+    assert_eq!(result.summary.cache_hit_bps, Some(7500));
+    assert_eq!(result.summary.cache_known_requests, 1);
+    assert_eq!(result.summary.totals.sums.cache_read_tokens, 175);
+    assert!(
+        !result
+            .summary
+            .known_token_fields
+            .iter()
+            .any(|f| f == "reasoningTokens")
+    );
+    assert!(
+        result
+            .summary
+            .known_token_fields
+            .iter()
+            .any(|f| f == "outputTokens")
+    );
+    store
+        .conn
+        .execute(
+            "UPDATE messages SET total_tokens=0, input_tokens=0, cache_read_tokens=0",
+            [],
+        )
+        .expect("zeros");
+    let zeros = store
+        .request_analysis(&AnalyticsFilter::default())
+        .expect("zeros");
+    assert_eq!(zeros.summary.average_tokens, Some(0.0));
+    assert_eq!(zeros.summary.cache_hit_bps, None);
+    assert_eq!(zeros.clients[0].metrics.share_bps, None);
+    assert_eq!(
+        ratio_bps(i128::from(i64::MAX), i128::from(i64::MAX) * 2),
+        Some(5000)
+    );
+    let empty = store
+        .request_analysis(&AnalyticsFilter {
+            from_ms: Some(100),
+            ..Default::default()
+        })
+        .expect("empty");
+    assert!(empty.clients.is_empty());
+    assert_eq!(empty.summary.average_tokens, None);
+}
+
+#[test]
+fn analysis_top_groups_keep_full_range_share_denominator() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for i in 0..10 {
+        let id = format!("group-{i}");
+        session(&store, &id, Client::Codex, &id, 0, false);
+        store
+            .conn
+            .execute("UPDATE sessions SET model=?1 WHERE id=?1", [&id])
+            .expect("model");
+        request(&store, &id, &id, Some(10), Some(10), "measured");
+    }
+    let result = store
+        .request_analysis(&AnalyticsFilter::default())
+        .expect("top groups");
+    assert_eq!(result.models.len(), 8);
+    assert_eq!(result.projects.len(), 8);
+    assert_eq!(result.models[0].metrics.share_bps, Some(1000));
+    assert_eq!(result.summary.totals.requests, 10);
+}

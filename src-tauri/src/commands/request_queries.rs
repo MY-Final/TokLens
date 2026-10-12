@@ -1,9 +1,28 @@
 //! Thin query boundary for request activity and session detail.
 use super::dto::ClientParam;
-use super::request_dto::{RequestActivityDto, SessionDetailDto};
+use super::request_dto::{RequestActivityDto, RequestAnalysisDto, SessionDetailDto};
 use super::{AppState, CommandError};
 use crate::usage::analytics::AnalyticsFilter;
 use tauri::State;
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_request_analysis(
+    state: State<'_, AppState>,
+    from_ms: Option<i64>,
+    to_ms: Option<i64>,
+    client: Option<ClientParam>,
+) -> Result<RequestAnalysisDto, CommandError> {
+    if matches!((from_ms, to_ms), (Some(from), Some(to)) if from >= to) {
+        return Err(CommandError::new("结束时间必须晚于开始时间。"));
+    }
+    let filter = AnalyticsFilter {
+        from_ms,
+        to_ms,
+        client: client.map(Into::into),
+        project_path: None,
+    };
+    Ok(state.store()?.request_analysis(&filter)?.into())
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn get_request_activity(

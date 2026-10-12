@@ -1,5 +1,6 @@
 /** 展示层格式化：只做单位与显示处理，不改变统计口径。 */
 import type { SyncState } from "@/lib/usage-types";
+import type { TokenDisplay } from "@/lib/settings-types";
 
 const NUMBER_FORMAT = new Intl.NumberFormat("zh-CN");
 
@@ -20,7 +21,37 @@ export function formatCompactTokens(value: number): string {
   if (abs >= 1_000) {
     return `${(value / 1_000).toFixed(1)}k`;
   }
-  return String(value);
+  return formatNumber(value);
+}
+
+export const TOKEN_DISPLAY_OPTIONS: { value: TokenDisplay; label: string }[] = [
+  { value: "auto", label: "自动（k / M / B）" },
+  { value: "chinese", label: "自动（万 / 亿）" },
+  { value: "k", label: "千（k）" },
+  { value: "m", label: "百万（M）" },
+  { value: "b", label: "十亿（B）" },
+  { value: "exact", label: "完整数字（千分位）" },
+];
+
+/** Only changes presentation; original Token counts remain available as exact values. */
+export function formatTokenDisplay(value: number, display: TokenDisplay): string {
+  if (display === "exact") return formatNumber(value);
+  if (display === "auto") return formatCompactTokens(value);
+  const abs = Math.abs(value);
+  if (display === "chinese" && abs < 10_000) return formatNumber(value);
+  const [divisor, suffix] =
+    display === "chinese"
+      ? abs >= 100_000_000
+        ? ([100_000_000, "亿"] as const)
+        : ([10_000, "万"] as const)
+      : display === "k"
+        ? ([1_000, "k"] as const)
+        : display === "m"
+          ? ([1_000_000, "M"] as const)
+          : ([1_000_000_000, "B"] as const);
+  if (value === 0) return `0 ${suffix}`;
+  if (abs / divisor < 0.01) return `${value < 0 ? "−" : ""}<0.01 ${suffix}`;
+  return `${(value / divisor).toFixed(2)} ${suffix}`;
 }
 
 /** 缺失值统一显示为 "—"（未知，不是 0）。 */

@@ -8,6 +8,7 @@ import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { SettingsController } from "@/hooks/use-settings";
 import type { CloseBehavior, Theme } from "@/lib/settings-types";
 import { RANGE_OPTIONS } from "@/lib/ranges";
+import { TOKEN_DISPLAY_OPTIONS } from "@/lib/format";
 import { CollectionSettings } from "@/components/CollectionSettings";
 import { DataSettings } from "@/components/DataSettings";
 import { UpdateSettings } from "@/components/UpdateSettings";
@@ -189,6 +190,16 @@ export function SettingsPage({
                 disabled={busy}
                 onChange={(defaultRange) => {
                   void patch({ defaultRange });
+                }}
+              />
+              <SettingsSelect
+                title="Token 显示单位"
+                description="统一用于统计数值、图表与列表；浮框保留精确值。仅改变显示，不影响统计。"
+                value={settings.tokenDisplay}
+                options={TOKEN_DISPLAY_OPTIONS}
+                disabled={busy}
+                onChange={(tokenDisplay) => {
+                  void patch({ tokenDisplay });
                 }}
               />
             </SettingsSection>

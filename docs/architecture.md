@@ -139,6 +139,7 @@ usage/tokens ────────→ usage/client
 | `get_client_usage`       | `fromMs` / `toMs`                                          | 七个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
 | `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
+| `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因    |
 | `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries`             | 完整范围请求汇总、最多 400 日本地日桶与全已导入日期覆盖计数    |
 | `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`          | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）   |
 | `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                 |
@@ -246,7 +247,7 @@ usage/tokens ────────→ usage/client
 
 日历热力图复用 `get_daily_token_trend` 的总 Token / 会话数 / 请求数，客户端 × 日期热力图复用其 `clients` 的总 Token。
 `CalendarHeatmap` / `ClientDateHeatmap` 只呈现 DTO，`HeatmapCell` 共用语义色阶、完整度标记与 tooltip。
-总览日历默认查询最近 365 天，也可切换为跟随页面日期；客户端矩阵复用用量分析的日期与客户端筛选结果。
+总览日历默认查询最近 365 天，也可切换为跟随页面日期；客户端矩阵组件保留；2026-10-12 分析页已收束为请求用量对比与归因，不再显示矩阵。
 `usage/analytics` 在已有每日查询中补充 `sessions_without_usage` 与 `sessions_partial`；命令层仅映射为 camelCase DTO。
 `DailyTokenBucket` 返回 `sessionsWithoutUsage` / `sessionsPartial`，每个客户端日条目同时返回
 `sessions` / `sessionsWithoutUsage` / `sessionsPartial`，前端仅依据这些元数据展示未知与不完整状态。
@@ -322,8 +323,15 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-11 | 界面不展示费用金额（`costAvailable` 恒为 false）                                  | 已采纳 | 本机数据没有可靠成本来源，不用 token 反推金额                           |
 | 2026-10-11 | UI 采用统一 DashboardCard / ClientIdentity，图表采用 shadcn Chart + 已有 Recharts | 已采纳 | 统一外观与客户端配色，保留 Tauri DTO 和 Rust 统计边界，不新增运行时依赖 |
 | 2026-10-11 | 日期时间选择器复用 shadcn Popover 与原生分钟输入，根级 Hook 统一滚动预设时间      | 已采纳 | 无新依赖；自定义确认后固定，精确范围与每日显示桶独立                    |
+| 2026-10-12 | Token 展示偏好复用原生设置，通过 React 内置 Context 传递给展示组件                | 已采纳 | 默认自动单位，支持用户选择；仅改变格式，无新增状态库或统计计算          |
 
 待登记（引入前补一行）：前端状态管理、前端测试框架、错误类型库（当前 `UsageError` 为模块内自定义枚举）、价格表来源。
+
+### Token 显示偏好（2026-10-12）
+
+`AppSettings.tokenDisplay` 使用已有原生 JSON 设置存储，缺失字段默认 `auto`，支持 `chinese` / `k` / `m` / `b` / `exact`；恢复默认回到自动单位。
+`hooks/use-token-format.ts` 使用 React 内置 Context 将根级设置传递给展示组件，`lib/format.ts` 仅格式化显示，不改变原始计数、统计口径、DTO 用量字段或 SQLite schema。
+日期预设移至统计页面主工具栏，与标题及同步操作共用一行，复用 `DateRangePicker` 即时解析；精确区间为控件内辅助文字，自定义通过日历按钮确认后仍保持固定。无新增依赖、权限或联网能力。
 
 ### AI 品牌图标（2026-10-11）
 
@@ -361,10 +369,18 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 
 ### 统一日期时间筛选（2026-10-11）
 
-`DateRangePicker` 采用已有 shadcn Popover、Button、Input 与原生 `datetime-local` 分钟输入组合日期时间选择器，不新增日期库或修改 vendor 组件。
+`DateRangePicker` 采用一级 Button 日期预设，以及已有 shadcn Popover、Button、Input 与原生 `datetime-local` 分钟输入组合日期时间选择器，不新增日期库或修改 vendor 组件。
 自定义范围在确认后应用；根级时间 Hook 为所有统计页面提供同一当前时间，滚动预设统一刷新，已确认自定义范围保持固定。
 `hooks/use-local-clock.ts` 在分钟边界、窗口获得焦点和页面恢复可见时刷新时间，统一由 `App` 解析范围；编辑中的草稿不随时钟刷新。
 本周从本地周一零点起、本月从本地月初零点起。全局范围共享给总览、用量分析及会话明细。
 `get_daily_token_trend` 的 `fromMs` 是精确过滤开始，可选 `toMs` 为排他结束；`dayStartMs` 单独提供本地零点显示桶起点，省略时回退至 `fromMs`，兼容旧调用。
 命令层只校验结束晚于开始并将参数映射给领域查询；领域同时筛选会话总量与所属请求数。显示桶仍固定 24 小时，最多 400 天，无 DTO / schema / 权限 / 依赖变化。
 超长选择仅截断每日图表至最近 400 天并注明实际日期，区间指标查询完整范围；日历最近 365 天模式独立保留。
+
+### 用量分析收束（2026-10-12）
+
+用量分析使用独立 `get_request_analysis` 查询：`commands/request_queries` → `usage/analytics/requests` → SQLite。
+请求分析复用已有请求时间过滤与分桶语义，返回完整区间客户端对比、已知请求均量、缓存命中率、Token 分项与模型 / 项目排行。
+全客户端比较不受下钻客户端影响；分项与排行使用选中客户端。模型按会话主模型归属，不能称为逐请求模型。
+所有聚合与比例在 Rust 领域层提供，查询共用读取事务快照；前端只排序、格式化、绘制相对条形。
+新增业务展示组件 `RequestAnalysisPanel`、`RequestAnalysisDetails`，复用现有 Card / Table / Progress / Tabs，不新增目录、依赖、权限或联网能力。

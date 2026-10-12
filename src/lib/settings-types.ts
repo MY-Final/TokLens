@@ -3,6 +3,7 @@ import type { RangeKey } from "@/lib/ranges";
 
 export type CloseBehavior = "ask" | "tray" | "exit";
 export type Theme = "system" | "light" | "dark";
+export type TokenDisplay = "auto" | "chinese" | "k" | "m" | "b" | "exact";
 export type AppSettings = {
   closeBehavior: CloseBehavior;
   autostart: boolean;
@@ -10,6 +11,7 @@ export type AppSettings = {
   rememberWindow: boolean;
   sidebarCollapsed: boolean;
   theme: Theme;
+  tokenDisplay: TokenDisplay;
   defaultRange: RangeKey;
   syncOnStart: boolean;
   syncIntervalMinutes: number;

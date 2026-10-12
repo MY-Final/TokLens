@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 /** 条形仅表示相对榜首大小；排行与数值均来自 Rust 查询。 */
 
 import { Cpu, Folder } from "lucide-react";
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { RankingEntry } from "@/lib/usage-types";
-import { formatCompactTokens, formatNumber, shortenPath } from "@/lib/format";
+import { formatNumber, shortenPath } from "@/lib/format";
 
 export function RankingCard({
   title,
@@ -38,6 +39,7 @@ export function RankingCard({
   emptyDescription: string;
   shortenKeys?: boolean;
 }) {
+  const { formatTokens } = useTokenFormat();
   const rows = entries ?? [];
   const max = rows[0]?.totalTokens ?? 0;
   const Icon = shortenKeys ? Folder : Cpu;
@@ -119,7 +121,7 @@ export function RankingCard({
                       className="pr-0 text-right font-mono text-xs"
                       title={`${formatNumber(entry.totalTokens)} Token`}
                     >
-                      {formatCompactTokens(entry.totalTokens)}
+                      {formatTokens(entry.totalTokens)}
                     </TableCell>
                   </TableRow>
                 );

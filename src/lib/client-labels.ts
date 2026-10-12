@@ -15,3 +15,7 @@ export const CLIENT_LABELS: Record<ClientKey, string> = {
 export function clientLabel(client: ClientKey): string {
   return CLIENT_LABELS[client];
 }
+
+export function isClientKey(value: string | null): value is ClientKey {
+  return value !== null && Object.prototype.hasOwnProperty.call(CLIENT_LABELS, value);
+}

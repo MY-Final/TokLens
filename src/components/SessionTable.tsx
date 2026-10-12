@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 /** 会话明细表：只展示元数据与用量，不含任何正文。 */
 
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import type { SessionSummary } from "@/lib/usage-types";
-import { formatCompactOrDash, formatDateTime, formatNumber, shortenPath } from "@/lib/format";
+import { formatDateTime, formatNumber, shortenPath } from "@/lib/format";
 
 function CoverageBadge({ session }: { session: SessionSummary }) {
   if (session.totalTokens === null) {
@@ -63,6 +64,7 @@ export function SessionTable({
   onOpenAll?: () => void;
   onOpenSession?: (session: SessionSummary) => void;
 }) {
+  const { formatTokensOrDash } = useTokenFormat();
   const rows = sessions ?? [];
   return (
     <div className="space-y-3">
@@ -114,8 +116,15 @@ export function SessionTable({
                   <TableCell className="text-right font-mono text-xs tabular-nums">
                     {formatNumber(session.messages)}
                   </TableCell>
-                  <TableCell className="text-right font-mono text-xs tabular-nums">
-                    {formatCompactOrDash(session.totalTokens)}
+                  <TableCell
+                    className="text-right font-mono text-xs tabular-nums"
+                    title={
+                      session.totalTokens === null
+                        ? "用量未知"
+                        : `${formatNumber(session.totalTokens)} Token`
+                    }
+                  >
+                    {formatTokensOrDash(session.totalTokens)}
                   </TableCell>
                   <TableCell>
                     <CoverageBadge session={session} />

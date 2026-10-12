@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 /** 总览：统计卡片 + 趋势 + 分布 + 排行 + 最近会话（全部来自真实采集数据）。 */
 
 import { DashboardCard } from "@/components/DashboardCard";
@@ -28,7 +29,7 @@ import {
   getRankings,
   getSessions,
 } from "@/lib/api";
-import { formatCompactTokens, formatNumber, formatPercent, formatTokensOrDash } from "@/lib/format";
+import { formatNumber, formatPercent } from "@/lib/format";
 import type { DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
@@ -56,6 +57,7 @@ export function OverviewPage(props: OverviewPageProps) {
 }
 
 function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPageProps) {
+  const { formatTokens, formatTokensOrDash } = useTokenFormat();
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const todayStart = startOfDay(nowMs).getTime();
@@ -125,7 +127,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
         <div className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4">
           <StatCard
             label="今日 Token"
-            value={formatCompactTokens(today?.totals.totalTokens ?? 0)}
+            value={formatTokens(today?.totals.totalTokens ?? 0)}
             detail={`${formatNumber(today?.totals.totalTokens ?? 0)} Token`}
             hint={`${formatNumber(today?.sessions ?? 0)} 个会话 · ${formatNumber(today?.messages ?? 0)} 条明细`}
             tooltip={TOTAL_TOOLTIP}
@@ -133,7 +135,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
           />
           <StatCard
             label="区间 Token"
-            value={formatCompactTokens(bucket?.totals.totalTokens ?? 0)}
+            value={formatTokens(bucket?.totals.totalTokens ?? 0)}
             detail={`${formatNumber(bucket?.totals.totalTokens ?? 0)} Token`}
             unit={`（${range.label}）`}
             hint={bucket?.totals.totalTokens ? "本机客户端 · 已知用量" : "本机客户端 · 暂无用量"}

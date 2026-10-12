@@ -20,6 +20,17 @@ pub enum Theme {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TokenDisplay {
+    Auto,
+    Chinese,
+    K,
+    M,
+    B,
+    Exact,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
     pub close_behavior: CloseBehavior,
@@ -28,6 +39,7 @@ pub struct AppSettings {
     pub remember_window: bool,
     pub sidebar_collapsed: bool,
     pub theme: Theme,
+    pub token_display: TokenDisplay,
     pub default_range: String,
     pub sync_on_start: bool,
     pub sync_interval_minutes: u32,
@@ -45,6 +57,7 @@ impl Default for AppSettings {
             remember_window: true,
             sidebar_collapsed: false,
             theme: Theme::System,
+            token_display: TokenDisplay::Auto,
             default_range: "today".into(),
             sync_on_start: true,
             sync_interval_minutes: 5,
@@ -64,6 +77,7 @@ pub struct SettingsPatch {
     pub remember_window: Option<bool>,
     pub sidebar_collapsed: Option<bool>,
     pub theme: Option<Theme>,
+    pub token_display: Option<TokenDisplay>,
     pub default_range: Option<String>,
     pub sync_on_start: Option<bool>,
     pub sync_interval_minutes: Option<u32>,
@@ -81,6 +95,7 @@ impl From<AppSettings> for SettingsPatch {
             remember_window: Some(settings.remember_window),
             sidebar_collapsed: Some(settings.sidebar_collapsed),
             theme: Some(settings.theme),
+            token_display: Some(settings.token_display),
             default_range: Some(settings.default_range),
             sync_on_start: Some(settings.sync_on_start),
             sync_interval_minutes: Some(settings.sync_interval_minutes),
@@ -104,6 +119,7 @@ impl AppSettings {
             remember_window,
             sidebar_collapsed,
             theme,
+            token_display,
             default_range,
             sync_on_start,
             sync_interval_minutes,

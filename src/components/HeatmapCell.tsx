@@ -1,3 +1,4 @@
+import { useTokenFormat } from "@/hooks/use-token-format";
 import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -64,6 +65,7 @@ export function HeatmapCell({
 }
 
 export function HeatmapLegend({ maxValue, unit }: { maxValue: number; unit: string }) {
+  const { formatTokens } = useTokenFormat();
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
@@ -75,8 +77,8 @@ export function HeatmapLegend({ maxValue, unit }: { maxValue: number; unit: stri
             className={cn("size-3 rounded-sm border border-border/60", className)}
           />
         ))}
-        <span>
-          {formatNumber(maxValue)} {unit}
+        <span title={`${formatNumber(maxValue)} ${unit}`}>
+          {unit.toLowerCase() === "token" ? formatTokens(maxValue) : formatNumber(maxValue)} {unit}
         </span>
       </span>
       <span className="inline-flex items-center gap-1.5">

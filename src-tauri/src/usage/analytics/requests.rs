@@ -46,6 +46,75 @@ pub struct RequestActivity {
     pub coverage: RequestCoverage,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RequestAnalysisMetrics {
+    pub totals: RequestTotals,
+    pub average_tokens: Option<f64>,
+    pub share_bps: Option<i64>,
+    pub cache_hit_bps: Option<i64>,
+    pub cache_known_requests: i64,
+    pub known_token_fields: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RequestAnalysisGroup {
+    pub key: Option<String>,
+    pub metrics: RequestAnalysisMetrics,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RequestAnalysis {
+    pub summary: RequestAnalysisMetrics,
+    pub clients: Vec<RequestAnalysisGroup>,
+    pub models: Vec<RequestAnalysisGroup>,
+    pub projects: Vec<RequestAnalysisGroup>,
+    pub coverage: RequestCoverage,
+}
+
+const ANALYSIS_COLUMNS: &str = "COALESCE(SUM(m.input_tokens IS NOT NULL AND m.cache_read_tokens IS NOT NULL),0),
+    COALESCE(SUM(CASE WHEN m.input_tokens IS NOT NULL AND m.cache_read_tokens IS NOT NULL THEN m.input_tokens END),0),
+    COALESCE(SUM(CASE WHEN m.input_tokens IS NOT NULL AND m.cache_read_tokens IS NOT NULL THEN m.cache_read_tokens END),0),
+    COUNT(m.input_tokens), COUNT(m.output_tokens), COUNT(m.reasoning_tokens), COUNT(m.cache_read_tokens), COUNT(m.cache_write_tokens)";
+
+fn ratio_bps(numerator: i128, denominator: i128) -> Option<i64> {
+    (denominator > 0).then(|| ((numerator * 10_000) / denominator) as i64)
+}
+
+fn read_analysis(
+    row: &rusqlite::Row<'_>,
+    offset: usize,
+) -> rusqlite::Result<RequestAnalysisMetrics> {
+    let totals = read_totals(row, offset)?;
+    let cache_input: i64 = row.get(offset + 14)?;
+    let cache_read: i64 = row.get(offset + 15)?;
+    Ok(RequestAnalysisMetrics {
+        average_tokens: (totals.requests_with_usage > 0)
+            .then(|| totals.sums.total_tokens as f64 / totals.requests_with_usage as f64),
+        totals,
+        share_bps: None,
+        cache_hit_bps: ratio_bps(
+            cache_read.into(),
+            i128::from(cache_input) + i128::from(cache_read),
+        ),
+        cache_known_requests: row.get(offset + 13)?,
+        known_token_fields: [
+            "inputTokens",
+            "outputTokens",
+            "reasoningTokens",
+            "cacheReadTokens",
+            "cacheWriteTokens",
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, field)| Ok((field, row.get::<_, i64>(offset + 16 + index)?)))
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .filter(|(_, count)| *count > 0)
+        .map(|(field, _)| field.into())
+        .collect(),
+    })
+}
+
 const REQUEST_COLUMNS: &str = "COUNT(DISTINCT m.session_id), COUNT(*),
     COALESCE(SUM(m.total_tokens IS NOT NULL), 0),
     COALESCE(SUM(m.total_tokens IS NULL), 0),
@@ -78,6 +147,103 @@ fn read_totals(row: &rusqlite::Row<'_>, offset: usize) -> rusqlite::Result<Reque
 }
 
 impl UsageStore {
+    /// Full-range comparisons and drill-downs use one read snapshot, never truncated daily buckets.
+    pub fn request_analysis(
+        &self,
+        filter: &AnalyticsFilter<'_>,
+    ) -> Result<RequestAnalysis, UsageError> {
+        if matches!((filter.from_ms, filter.to_ms), (Some(from), Some(to)) if from >= to) {
+            return Err(UsageError::InvalidInput(
+                "request range must be increasing".into(),
+            ));
+        }
+        let transaction = self.conn.unchecked_transaction()?;
+        let comparison_filter = AnalyticsFilter {
+            client: None,
+            ..*filter
+        };
+        let summary = self.request_analysis_summary(filter)?;
+        let comparison = self.request_analysis_summary(&comparison_filter)?;
+        let clients = self.request_analysis_groups(
+            "s.client",
+            &comparison_filter,
+            comparison.totals.sums.total_tokens,
+            None,
+        )?;
+        let models = self.request_analysis_groups(
+            "s.model",
+            filter,
+            summary.totals.sums.total_tokens,
+            Some(8),
+        )?;
+        let projects = self.request_analysis_groups(
+            "s.project_path",
+            filter,
+            summary.totals.sums.total_tokens,
+            Some(8),
+        )?;
+        let coverage = self.request_coverage(filter)?;
+        transaction.commit()?;
+        Ok(RequestAnalysis {
+            summary,
+            clients,
+            models,
+            projects,
+            coverage,
+        })
+    }
+
+    fn request_analysis_summary(
+        &self,
+        filter: &AnalyticsFilter<'_>,
+    ) -> Result<RequestAnalysisMetrics, UsageError> {
+        Ok(self.conn.query_row(
+            &format!("SELECT {REQUEST_COLUMNS}, {ANALYSIS_COLUMNS} {REQUEST_FROM} {REQUEST_WHERE}"),
+            rusqlite::params![
+                filter.from_ms,
+                filter.to_ms,
+                filter.client.map(Client::as_str),
+                filter.project_path
+            ],
+            |row| read_analysis(row, 0),
+        )?)
+    }
+
+    fn request_analysis_groups(
+        &self,
+        column: &str,
+        filter: &AnalyticsFilter<'_>,
+        total: i64,
+        limit: Option<u32>,
+    ) -> Result<Vec<RequestAnalysisGroup>, UsageError> {
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT {column}, {REQUEST_COLUMNS}, {ANALYSIS_COLUMNS} {REQUEST_FROM} {REQUEST_WHERE}
+             GROUP BY {column} ORDER BY COUNT(m.total_tokens) = 0, SUM(m.total_tokens) DESC, COUNT(*) DESC, {column}
+             LIMIT ?5"
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![
+                filter.from_ms,
+                filter.to_ms,
+                filter.client.map(Client::as_str),
+                filter.project_path,
+                limit.map(i64::from).unwrap_or(-1)
+            ],
+            |row| {
+                let mut metrics = read_analysis(row, 1)?;
+                if metrics.totals.requests_with_usage > 0 {
+                    metrics.share_bps =
+                        ratio_bps(metrics.totals.sums.total_tokens.into(), total.into());
+                }
+                Ok(RequestAnalysisGroup {
+                    key: row.get(0)?,
+                    metrics,
+                })
+            },
+        )?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// Only recorded request timestamps locate usage in the half-open range.
     /// Coverage ignores dates, while the supplied display boundaries may be truncated.
     pub fn request_activity(

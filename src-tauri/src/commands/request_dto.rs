@@ -3,9 +3,69 @@ use serde::Serialize;
 
 use super::dto::{SessionSummaryDto, TokenTotalsDto};
 use crate::usage::analytics::{
-    RequestActivity, RequestCoverage, RequestCoverageDetail, RequestDailyBucket, RequestDetail,
-    RequestTotals, SessionDetail,
+    RequestActivity, RequestAnalysis, RequestAnalysisGroup, RequestAnalysisMetrics,
+    RequestCoverage, RequestCoverageDetail, RequestDailyBucket, RequestDetail, RequestTotals,
+    SessionDetail,
 };
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestAnalysisMetricsDto {
+    pub totals: RequestTotalsDto,
+    pub average_tokens: Option<f64>,
+    pub share_bps: Option<i64>,
+    pub cache_hit_bps: Option<i64>,
+    pub cache_known_requests: i64,
+    pub known_token_fields: Vec<String>,
+}
+impl From<RequestAnalysisMetrics> for RequestAnalysisMetricsDto {
+    fn from(value: RequestAnalysisMetrics) -> Self {
+        Self {
+            totals: value.totals.into(),
+            average_tokens: value.average_tokens,
+            share_bps: value.share_bps,
+            cache_hit_bps: value.cache_hit_bps,
+            cache_known_requests: value.cache_known_requests,
+            known_token_fields: value.known_token_fields,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestAnalysisGroupDto {
+    pub key: Option<String>,
+    pub metrics: RequestAnalysisMetricsDto,
+}
+impl From<RequestAnalysisGroup> for RequestAnalysisGroupDto {
+    fn from(value: RequestAnalysisGroup) -> Self {
+        Self {
+            key: value.key,
+            metrics: value.metrics.into(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestAnalysisDto {
+    pub summary: RequestAnalysisMetricsDto,
+    pub clients: Vec<RequestAnalysisGroupDto>,
+    pub models: Vec<RequestAnalysisGroupDto>,
+    pub projects: Vec<RequestAnalysisGroupDto>,
+    pub coverage: RequestCoverageDto,
+}
+impl From<RequestAnalysis> for RequestAnalysisDto {
+    fn from(value: RequestAnalysis) -> Self {
+        Self {
+            summary: value.summary.into(),
+            clients: value.clients.into_iter().map(Into::into).collect(),
+            models: value.models.into_iter().map(Into::into).collect(),
+            projects: value.projects.into_iter().map(Into::into).collect(),
+            coverage: value.coverage.into(),
+        }
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

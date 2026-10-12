@@ -364,3 +364,10 @@ SQL 求和空集合返回 0；UI 必须结合请求数与未知总量计数区�
 默认 100 条、上限 200 条，按 `created_at_ms IS NULL, created_at_ms, seq IS NULL, seq, id` 稳定排序，NULL 时间最后。
 请求字段限定为去重键、序号、创建 / 完成时间、模型、agent、归一化 Token、`source_kind`、`source_ref`、
 sidechain 和 unknown relations；不包含正文，详情查询不回读源文件。未知 Token 保持 NULL，覆盖计数不随分页改变。
+
+### 请求用量分析查询（口径 2.4，2026-10-12）
+
+`usage/analytics/requests.rs` 提供 `request_analysis(filter)`：复用已有请求时间筛选，完整区间客户端比较与选中客户端的分项、模型 / 项目归因共用读取事务快照。
+均量仅用已知总量请求作为分母；缓存命中率只统计 input / cache_read 成对已知的请求，分母为零保持 NULL。
+提供 `knownTokenFields` 区分没有已知字段与实测零；分项不补总量。客户端及 Top 8 来源占比以完整区间已知总量作为分母。
+模型使用会话主模型，项目使用会话目录，不回填逐请求模型。无表结构、迁移、去重或原始计数变化；公式与边界见 `data-metrics.md` 2.4。
