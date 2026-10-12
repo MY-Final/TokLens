@@ -20,6 +20,9 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   pi_desktop: "[&_[data-slot=progress-indicator]]:bg-client-pi",
   workbuddy: "[&_[data-slot=progress-indicator]]:bg-client-workbuddy",
   copilot: "[&_[data-slot=progress-indicator]]:bg-client-copilot",
+  gemini_cli: "[&_[data-slot=progress-indicator]]:bg-client-gemini",
+  grok: "[&_[data-slot=progress-indicator]]:bg-client-grok",
+  mcode: "[&_[data-slot=progress-indicator]]:bg-client-mcode",
 };
 
 type ClientUsageCardProps = {

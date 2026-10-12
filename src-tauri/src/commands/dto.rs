@@ -57,6 +57,9 @@ pub enum ClientParam {
     #[serde(rename = "workbuddy")]
     WorkBuddy,
     Copilot,
+    GeminiCli,
+    Grok,
+    Mcode,
 }
 
 impl From<ClientParam> for Client {
@@ -71,6 +74,9 @@ impl From<ClientParam> for Client {
             ClientParam::PiDesktop => Client::PiDesktop,
             ClientParam::WorkBuddy => Client::WorkBuddy,
             ClientParam::Copilot => Client::Copilot,
+            ClientParam::GeminiCli => Client::GeminiCli,
+            ClientParam::Grok => Client::Grok,
+            ClientParam::Mcode => Client::Mcode,
         }
     }
 }
@@ -88,6 +94,9 @@ pub fn is_supported(client: Client) -> bool {
             | Client::PiDesktop
             | Client::WorkBuddy
             | Client::Copilot
+            | Client::GeminiCli
+            | Client::Grok
+            | Client::Mcode
     )
 }
 
@@ -200,7 +209,7 @@ pub struct ClientUsageDto {
     pub totals: TokenTotalsDto,
 }
 
-/// 按固定顺序（Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI）输出九个客户端，缺失数据补 0。
+/// 按 Client::ALL 固定顺序输出十二个客户端，无记录时返回零计数；未知 Token 通过未知计数区分。
 pub fn client_usage_dto(usage: &[ClientUsage]) -> Vec<ClientUsageDto> {
     Client::ALL
         .into_iter()

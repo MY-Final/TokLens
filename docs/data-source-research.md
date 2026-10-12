@@ -1,4 +1,4 @@
-# 数据来源调研：Codex / Claude Code / OpenCode
+# 数据来源调研：十二个本地 AI 编程客户端
 
 本文记录 TokLens 第一项调研工作的**实际结果**：三个客户端在本机（Windows）落地的本地用量数据来源、文件格式、
 可获取字段、口径与限制。所有结论均来自本机真实数据的只读检查，未联网核实官方文档。
@@ -428,3 +428,25 @@ LobeHub XiaomiMiMo 对应小米品牌；其 Pi 标识为 Inflection AI，Pi Desk
 | 普通 VS Code Chat 历史      | `%APPDATA%/Code/User/workspaceStorage/*/chatSessions/`                   | 部分 promptTokens / outputTokens 元数据；尚未核定完整口径        | 是                  | 待独立验证，不纳入本次修复     |
 
 落地验证（2026-10-12）：TokLens 本机库已导入4个 Copilot 会话，3个旧会话用量未知；Host 会话整轮317414 Token。10条调用中3条有独立 Token，总和101033，其余7条为 NULL。桌面请求视图同样显示10条调用、101033已知 Token与7条未知，未把轮级聚合重复入请求表。
+
+## Gemini CLI — journal 与字段关系（2026-10-13）
+
+本机安装 @google/gemini-cli 0.63.0；只读安装bundle/chunk-RWBXO4OP.js契约与 ~/.gemini/tmp 项目日志元数据，不执行客户端、不输出正文。Storage.homedir(252011)、getGlobalGeminiDir(253177)说明GEMINI_CLI_HOME替代home后追加.gemini，GEMINI_DIR是常量并非环境配置；项目slug契约位于253037/253111，统计可直接发现tmp目录，无需重造slug。
+日志回放契约：286299的$set.messages为全量替换，pushMessage同id替换整记录；286250–286268的$rewindTo删除目标及后续，目标未找到则清空。$set不能按新请求相加。项目路径来自directories或已核实.project_root，仅存项目元数据。排除antigravity；subagent元数据标旁链，不保存提示词。
+recordMessageTokens(286643–286655)把prompt/candidates/cachedContent/thoughts/toolUse/total原样写input/output/cached/thoughts/tool/total；287027恢复metrics用prompt−cached，证明缓存含于输入。thoughts为独立输出，tool无已验证非零关系，不映射cache_write。
+时点样本：10日志、28最终gemini记录，21次同ID全记录替换、11次$set.messages；input554736/output4196/thoughts15541/cached0/tool0/total574473，22条thoughts大于output。总量与原生total求和一致；非零cached关系来自安装契约，不能声称本机正样本验证。旧.json和sandbox-exec数据根未纳入。
+
+## Grok CLI — 权威用量快照（2026-10-13）
+
+本机版本1.0.50（version.json元数据）；grok.exe内嵌Paths文档明确GROK_HOME覆盖配置根，默认~/.grok。只读sessions/<编码cwd>/<会话>/usage.json、summary.json的身份/cwd/UTC时间，不读chat_history、reasoning密文、events、updates、prompt_context或账号信息。
+安装exe用量展示字符串明确Input tokens包含cached、Output tokens包含reasoning；本机1会话/3轮/9次modelCalls，三个轮级total均等于input+output，且有正缓存/正推理子集。session与turns六计数合计对应：input233668/output3959/cacheRead142848/cacheCreation0/reasoning2202/total237627。规范input90820/output1757，与缓存、推理求和为237627。
+cacheCreation无正样本，headless projector的独立cache creation语义不能直接套usage.json，暂unknown且不计入总量。costUsdTicks未交叉验证，本次不采集、不换算。
+请求表每轮一条、键turnNumber，不把modelCalls展开为9条；会话total采用权威session值不叠加turns。endedAt是轮级记账发生时间，source_ref标timeBasis=turnEndedAt；不称单次调用开始。原生UTC时间含纳秒Z/+00:00，只确定性截断到毫秒。多会话关系未本机验证，覆盖不满足对应条件则partial。
+
+## MCode — runtime-state 请求账本（2026-10-13）
+
+只读已安装MCode app.asar内的代码契约及runtime-state.sqlite白名单；不读取原始raw/record_json、正文、费用或revision文件。dist/main/modules/local-runtime/data-dir.js:150–179、@mavis/config/dist/config.js:359–360确认MINIMAX_DATA_DIR > MAVIS_DATA_DIR > ~/.minimax；数据库为v2/sqlite/runtime-state.sqlite。
+@mavis/local-runtime-v2/dist/infra/db/schema/usage.js:3–17确认id主键、model可NULL、五整数桶且无total列；usage/pi-usage.js:86–105原样写桶，119–121客户端缺失时存0，但TokLens遇NULL/缺列保持未知。@mavis/local-runtime/dist/usage/api.js:72–89明确input/cacheRead/cacheWrite独立及四桶total。
+缓存正样本：主库17请求中16条cache_read>input；全部reasoning/cache_write为0，17模型均NULL。reasoning的非零包含关系未确认，不能把hasUsage的五桶“是否非空”判断冒充total契约；非零/缺失reasoning时output与total未知。
+主库时点统计：1会话/17请求，input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770。usage/repo/drizzle.js:132–136的fresh/goal summary total=input+output+reasoning、排除缓存，67544与TokLens差814226是已解释口径差，不是重复计数。
+当时WAL非空，上述仅immutable主库研究值；最终运行对账使用collectors/sqlite_snapshot.rs校验已提交WAL内存镜像。SQLite账本无需正文activeRevision/generation，不复制多代历史、不回读正文补NULL模型。源主库/WAL/SHM只读，测试全部合成。

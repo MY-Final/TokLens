@@ -6,6 +6,7 @@ use super::{
     SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
     dsh::DshCollector, kimi_code::KimiCodeCollector, opencode::OpenCodeCollector,
 };
+use super::{gemini_cli::GeminiCliCollector, grok::GrokCollector, mcode::MCodeCollector};
 use super::{mimocode::MiMoCodeCollector, pi_desktop::PiDesktopCollector};
 use crate::usage::client::Client;
 use crate::usage::store::UsageStore;
@@ -23,6 +24,9 @@ pub struct CollectorRoots {
     pub workbuddy: Option<PathBuf>,
     pub copilot: Option<PathBuf>,
     pub copilot_agent_host: Option<PathBuf>,
+    pub gemini_cli: Option<PathBuf>,
+    pub grok: Option<PathBuf>,
+    pub mcode: Option<PathBuf>,
 }
 
 impl CollectorRoots {
@@ -37,6 +41,9 @@ impl CollectorRoots {
             Client::PiDesktop => &self.pi_desktop,
             Client::WorkBuddy => &self.workbuddy,
             Client::Copilot => &self.copilot,
+            Client::GeminiCli => &self.gemini_cli,
+            Client::Grok => &self.grok,
+            Client::Mcode => &self.mcode,
         }
         .as_deref()
     }
@@ -53,6 +60,9 @@ impl CollectorRoots {
             workbuddy: WorkBuddyCollector::default_root(),
             copilot: CopilotCollector::default_database(),
             copilot_agent_host: CopilotCollector::default_agent_host(),
+            gemini_cli: GeminiCliCollector::default_root(),
+            grok: GrokCollector::default_root(),
+            mcode: MCodeCollector::default_database(),
         }
     }
 }
@@ -127,6 +137,18 @@ pub fn sync_clients(
                 .workbuddy
                 .as_ref()
                 .map(|root| WorkBuddyCollector::new(root).sync(store, options)),
+            Client::GeminiCli => roots
+                .gemini_cli
+                .as_ref()
+                .map(|root| GeminiCliCollector::new(root).sync(store, options)),
+            Client::Grok => roots
+                .grok
+                .as_ref()
+                .map(|root| GrokCollector::new(root).sync(store, options)),
+            Client::Mcode => roots
+                .mcode
+                .as_ref()
+                .map(|root| MCodeCollector::new(root).sync(store, options)),
         }
         .unwrap_or_else(|| {
             Ok(SyncReport {
@@ -148,4 +170,43 @@ pub fn sync_clients(
         });
     }
     batch
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::collectors::test_support::TempDir;
+
+    #[test]
+    fn new_clients_report_independently_after_an_invalid_mcode_database() {
+        let dir = TempDir::new();
+        let database = dir.0.join("invalid.sqlite");
+        std::fs::write(&database, b"not a SQLite database").expect("synthetic source");
+        let store = UsageStore::open_in_memory().expect("store");
+        let roots = CollectorRoots {
+            mcode: Some(database),
+            gemini_cli: Some(dir.0.join("missing-gemini")),
+            grok: Some(dir.0.join("missing-grok")),
+            ..Default::default()
+        };
+        let batch = sync_clients(
+            &store,
+            &roots,
+            &SyncOptions::default(),
+            &[Client::Mcode, Client::GeminiCli, Client::Grok],
+        );
+        assert_eq!(batch.clients.len(), 3);
+        assert!(batch.has_errors());
+        for entry in &batch.clients[1..] {
+            assert!(entry.error.is_none());
+            assert!(
+                entry
+                    .report
+                    .as_ref()
+                    .expect("missing source report")
+                    .root_missing
+            );
+        }
+        assert_eq!(store.session_count().expect("no imported data"), 0);
+    }
 }

@@ -40,12 +40,12 @@ fn stamp(path: &Path) -> std::io::Result<Option<(i64, i64)>> {
         Err(e) => Err(e),
     }
 }
-pub(super) type Signature = ((i64, i64), Option<(i64, i64)>);
-pub(super) fn signature(path: &Path) -> std::io::Result<Signature> {
+pub(crate) type Signature = ((i64, i64), Option<(i64, i64)>);
+pub(crate) fn signature(path: &Path) -> std::io::Result<Signature> {
     Ok((fingerprint(path)?, stamp(&wal_path(path))?))
 }
 
-pub(super) fn open(path: &Path) -> Result<Connection, SyncError> {
+pub(crate) fn open(path: &Path) -> Result<Connection, SyncError> {
     let wal = wal_path(path);
     let before = signature(path)?;
     let mut bytes = std::fs::read(path)?;

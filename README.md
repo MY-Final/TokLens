@@ -1,13 +1,13 @@
 # TokLens
 
 TokLens is a local-first desktop app that summarizes how you use AI coding clients such as
-**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, **Pi Desktop**, **WorkBuddy**, and **GitHub Copilot** on this machine (sessions, requests, tokens, models, cost).
+**Codex**, **Claude Code**, **OpenCode**, **DSH (deepseek-hermes)**, **Kimi Code**, **MiMoCode**, **Pi Desktop**, **WorkBuddy**, **GitHub Copilot**, **Gemini CLI**, **Grok CLI**, and **MCode** on this machine (sessions, requests, tokens, models, cost).
 
 What is implemented today:
 
 - a unified usage data model with local SQLite storage (`src-tauri/src/usage/`),
 - a read-only Codex collector for `%USERPROFILE%\.codex\sessions` (`src-tauri/src/collectors/codex/`),
-- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, Pi Desktop JSONL, WorkBuddy JSONL, and GitHub Copilot SQLite collectors (`src-tauri/src/collectors/`),
+- read-only Claude Code JSONL, OpenCode SQLite, DSH JSONL/Zstandard, Kimi Code state/wire, MiMoCode SQLite, Pi Desktop JSONL, WorkBuddy JSONL, GitHub Copilot SQLite, Gemini CLI journals, Grok CLI usage snapshots, and MCode SQLite collectors (`src-tauri/src/collectors/`),
 - the Tauri command layer (`src-tauri/src/commands/`) powering the desktop UI,
 - the overview UI: overview / analytics / sessions / data sources pages (`src/pages/`).
 
@@ -19,7 +19,7 @@ including live WAL updates. Imported Claude/external messages are excluded to av
 Pi Desktop reads `~/.pi-desktop/sessions` (`PI_DESKTOP_SESSIONS_DIR` supported) and deduplicates physical
 request operations; client-estimated cost is not imported as measured cost.
 
-All seven clients participate in startup/manual sync, filters, trends, and rankings. OpenCode's old JSON
+All twelve clients participate in startup/manual sync, filters, trends, and rankings. OpenCode's old JSON
 storage and unverified DSH persistence formats are not supported. No unified cost figures are shown;
 client-reported costs are preserved as metadata without treating them as a shared pricing source.
 
@@ -122,7 +122,7 @@ TokLens/
       ├─ main.rs            # Binary entry point
       ├─ lib.rs             # Tauri setup: state, initial sync, command registry
       ├─ commands/          # State, errors, DTOs, queries & background sync
-      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / GitHub Copilot collectors
+      ├─ collectors/        # Read-only Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / GitHub Copilot / Gemini CLI / Grok CLI / MCode collectors
       └─ usage/
          ├─ client.rs        # Stable client identity
          ├─ model.rs         # Unified records and deduplication identifiers
@@ -150,3 +150,11 @@ TokLens/
 WorkBuddy reads `~/.workbuddy/projects` (or `WORKBUDDY_CONFIG_DIR/projects`) and counts only native output items with usage. Provider usage and transcript usage are mirrors, not additive. Existing installations can enable WorkBuddy in Data Sources without changing other client choices.
 
 GitHub Copilot reads `~/.copilot/session-store.db` (or `COPILOT_HOME/session-store.db`) and SDK metadata in `session-state/*/events.jsonl`. On Windows it also links VS Code `%APPDATA%/Code/agentSessionData/*/session.db` to the SDK sessions. Whole-turn Token totals are kept separate from partial API-call usage; mirrors are counted once. SQLite/WAL snapshots stay in memory without opening client databases for writing. Missing usage, reasoning, cache writes and unverified nonzero-cache totals stay unknown. Context counters, premium requests and costs are not converted to tokens. Enable GitHub Copilot in Data Sources for existing installations.
+
+Gemini CLI reads metadata from `~/.gemini/tmp/*/chats/**/*.jsonl`, replays replacement/rewind operations before counting final response IDs, and excludes Antigravity. `GEMINI_CLI_HOME` replaces the user home before `.gemini` is appended. Cached input is a subset, thoughts are separate, and tool usage has no verified canonical bucket. Legacy `.json` and sandbox-exec paths are not collected.
+
+Grok CLI reads authoritative `usage.json` and metadata-only `summary.json` under `GROK_HOME/sessions` (default `~/.grok/sessions`). Each detail is a whole turn, not an individual model call; request counts and averages are explicitly labeled, with time assigned to the native turn end. Session and turn totals are never added together. Cache creation remains unverified; costs are ignored.
+
+MCode reads `v2/sqlite/runtime-state.sqlite` under `MINIMAX_DATA_DIR`, then `MAVIS_DATA_DIR`, then `~/.minimax`. Request IDs come from the usage ledger. Independent caches count toward Token usage; absent models stay unknown. Totals are derived only when reasoning is explicitly zero and all four required buckets exist; nonzero or missing reasoning remains unverified. SQLite/WAL snapshots stay in memory and never modify client SHM. The client's fresh/goal summary excludes caches and therefore differs from full Token usage.
+
+New installations enable all twelve collectors. Existing preferences are preserved; enable the three new sources in Data Sources. No new runtime dependencies, Tauri permissions, telemetry, or network access are introduced.

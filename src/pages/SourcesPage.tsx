@@ -16,6 +16,7 @@ import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
+import { GROK_USAGE_NOTE } from "@/lib/client-labels";
 
 const CLIENT_HINTS: Record<string, string> = {
   codex: "Codex：CODEX_HOME（VS Code 与 TokLens 需使用相同用户和环境）",
@@ -25,6 +26,9 @@ const CLIENT_HINTS: Record<string, string> = {
   pi_desktop: "Pi Desktop：PI_DESKTOP_SESSIONS_DIR",
   workbuddy: "WorkBuddy：WORKBUDDY_CONFIG_DIR",
   copilot: "Copilot：CLI 与 VS Code Agent Host（自动发现本机默认目录）",
+  gemini_cli: "Gemini CLI：tmp 项目会话（排除 Antigravity）",
+  grok: "Grok CLI：GROK_HOME 下的 sessions 用量快照",
+  mcode: "MCode：MINIMAX_DATA_DIR / MAVIS_DATA_DIR 下的 v2 用量数据库",
   kimi_code: "Kimi Code：KIMI_CODE_HOME",
   opencode: "OpenCode：XDG_DATA_HOME",
 };
@@ -199,6 +203,17 @@ export function SourcesPage({
               </CardHeader>
               <CardContent className="space-y-2">
                 <p className="text-xs text-muted-foreground">实际读取位置</p>
+                {client.client === "grok" ? (
+                  <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
+                ) : client.client === "mcode" ? (
+                  <p className="text-xs text-muted-foreground">
+                    缺失模型保持未知；推理关系未确认时，总量显示 —。
+                  </p>
+                ) : client.client === "gemini_cli" ? (
+                  <p className="text-xs text-muted-foreground">
+                    工具用量关系尚未确认，分项可能不等于客户端自报总量。
+                  </p>
+                ) : null}
                 <code className="block text-xs break-all select-text">
                   {client.sourcePath ?? "无法确定用户目录"}
                 </code>

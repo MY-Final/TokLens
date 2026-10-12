@@ -3,7 +3,7 @@ import { RequestAnalysisDetails } from "@/components/RequestAnalysisDetails";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTokenFormat } from "@/hooks/use-token-format";
-import { CLIENT_LABELS, clientLabel, isClientKey } from "@/lib/client-labels";
+import { CLIENT_LABELS, GROK_USAGE_NOTE, clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
 import { knownRequestTokens } from "@/lib/request-analysis";
 import type { ClientKey, RequestAnalysis } from "@/lib/usage-types";
@@ -73,6 +73,13 @@ export function RequestAnalysisPanel({
           ) : null}
         </div>
         {error ? <ErrorBlock message={error} onRetry={onRetry} /> : null}
+        {selectedClient === "grok" ||
+        (selectedClient === null &&
+          data?.clients.some(
+            (entry) => entry.key === "grok" && entry.metrics.totals.requests > 0,
+          )) ? (
+          <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
+        ) : null}
         {loading ? (
           <LoadingRows rows={6} />
         ) : data ? (

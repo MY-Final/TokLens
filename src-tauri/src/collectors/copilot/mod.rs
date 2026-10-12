@@ -1,6 +1,6 @@
 //! Read-only Copilot CLI and VS Code Agent Host metadata.
 mod agent_host;
-mod database;
+use super::sqlite_snapshot as database;
 mod events;
 mod queries;
 mod sync;

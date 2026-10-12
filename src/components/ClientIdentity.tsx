@@ -2,6 +2,9 @@ import {
   ClaudeCode,
   Codex,
   GithubCopilot,
+  GeminiCLI,
+  Grok,
+  Minimax,
   DeepSeek,
   Kimi,
   OpenCode,
@@ -24,6 +27,9 @@ const CLIENT_STYLES = {
   pi_desktop: { icon: TerminalSquare, className: "bg-client-pi/10 text-client-pi" },
   workbuddy: { icon: Bot, className: "bg-client-workbuddy/10 text-client-workbuddy" },
   copilot: { icon: GithubCopilot, className: "bg-client-copilot/10 text-client-copilot" },
+  gemini_cli: { icon: GeminiCLI, className: "bg-client-gemini/10 text-client-gemini" },
+  grok: { icon: Grok, className: "bg-client-grok/10 text-client-grok" },
+  mcode: { icon: Minimax, className: "bg-client-mcode/10 text-client-mcode" },
 } satisfies Record<ClientKey, { icon: ComponentType<{ size: number }>; className: string }>;
 
 export function ClientIdentity({

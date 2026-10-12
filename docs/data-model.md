@@ -3,17 +3,17 @@
 本文描述 TokLens 的本地用量数据模型、统计口径与 SQLite 表结构。实现位于
 `src-tauri/src/usage/`（本文件与代码必须保持一致，改口径时两边同改）：
 
-| 模块       | 文件                                      | 职责                                                                                                          |
-| ---------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                                                        |
-| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                                                |
-| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                                              |
-| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                                          |
-| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                                             |
-| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI 的独立规则 |
-| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                                    |
-| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                                         |
-| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                                    |
+| 模块       | 文件                                      | 职责                                                                                                                                      |
+| ---------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 客户端标识 | `src-tauri/src/usage/client.rs`           | 客户端枚举与字符串映射                                                                                                                    |
+| Token 模型 | `src-tauri/src/usage/tokens/counts.rs`    | 原始计数、规范分桶与归一化结果                                                                                                            |
+| Token 口径 | `src-tauri/src/usage/tokens/semantics.rs` | 字段关系、版本化客户端口径与证据                                                                                                          |
+| Token 换算 | `src-tauri/src/usage/tokens/normalize.rs` | 去重叠换算、规范总量选择与未知项标注                                                                                                      |
+| 领域模型   | `src-tauri/src/usage/model.rs`            | 会话/消息结构、去重标识、口径枚举                                                                                                         |
+| 归一化     | `src-tauri/src/usage/normalize/`          | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot / Gemini CLI / Grok CLI / MCode 的独立规则 |
+| 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                                                                |
+| 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                                                                     |
+| 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                                                                |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -37,6 +37,9 @@
 | Pi Desktop  | `pi_desktop.operation.v1`        | 独立                      | 包含（子集）              | 独立                         | 是（input + output + 两个缓存桶）                       |
 | WorkBuddy   | `workbuddy.item_usage.v1`        | 包含（子集）              | 包含（子集）              | 未知                         | 是（total = input + output）                            |
 | Copilot CLI | `copilot.assistant_usage.v1`     | 原生包含；归一化后独立    | 包含（子集）              | 原生包含；归一化后独立、计入 | 否（原生 input + output 直接换算）                      |
+| Gemini CLI  | `gemini_cli.response.v1`         | 包含（安装包契约）        | 独立                      | 不提供                       | 是（保留客户端 total；tool 关系未知）                   |
+| Grok CLI    | `grok.turn.v1`                   | 包含（正样本与展示契约）  | 包含（正样本与展示契约）  | 未知、不计入                 | 是（会话与轮级 totalTokens）                            |
+| MCode       | `mcode.request.v1`               | 独立                      | 未知                      | 独立、计入                   | 否（reasoning 明确为 0 时四桶换算）                     |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
@@ -50,7 +53,9 @@
 
 规范总量 `total_tokens`：
 
-1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy）直接采用客户端值（`total_basis = client_reported`），
+新增客户端规范分桶：Gemini input=input−cached、output=output、reasoning=thoughts、cache_read=cached、cache_write=NULL；tool 没有已验证对应桶，不冒充缓存写入。Grok input=inputTokens−cachedReadTokens、output=outputTokens−reasoningTokens；两者缺少拆分字段或扣除矛盾时为 NULL；缓存写入只保留自报值且不计入总量。MCode input/两缓存保持独立；reasoning 明确为 0 时保留 output，否则 output=NULL，不能把未知输出关系画成可相加的桶。三者均保留缺失与实测零的区别。
+
+1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy、Gemini CLI、Grok CLI、MCode）直接采用客户端值（`total_basis = client_reported`）；Gemini CLI 的 `total` 与 Grok 的 `session.totalTokens` 为会话总量，MCode 仅在推理关系明确时按客户端记录重建总量，
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
 2. 原始记录未提供总量时（例如 Claude Code / DSH / Kimi Code）由分桶求和得出（`total_basis = derived_from_buckets`）。
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
@@ -80,6 +85,9 @@
 | Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
 | WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                               |
 | Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                           | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                          |
+| Gemini CLI  | `sessionId`                                         | 最终 `gemini.id`                                              | 日志回放全记录替换、$set.messages 全量替换与 $rewindTo 后去重；会话镜像择一                           |
+| Grok CLI    | `usage.sessionId`                                   | `turnNumber`                                                  | 轮级快照，不把 modelCalls 展开为虚构独立调用；session 与 turns 不相加                                 |
+| MCode       | `local_runtime_sessions.session_id`                 | `local_runtime_token_usage.id`                                | 主键标识物理请求，同 turn 多次调用不合并；不读取正文 revision                                         |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
@@ -421,3 +429,27 @@ turn_usage.usage._meta.turnTokenTotals 的模型桶只求和一次，用于 Sess
 口径 copilot.agent_host.turn.v1：仅已验证零缓存记录可由 input + output 得到总量，推理与缓存写入仍 NULL，不补零；非零或未知缓存不猜包含关系，输入分桶与总量保持未知并标记 cache_relation_unverified。缺任意已发现用户轮的聚合时会话总量 NULL，已知分项仍可显示。
 SQLite 原文件 / WAL 仅文件读取，在内存校验 WAL checksum、salt、commit 后合成只读快照，忽略未提交尾帧；不打开 shm、不生成客户端侧文件，不持久化数据库镜像。
 所有来源文件集合 / 主库及 WAL 指纹在扫描前后复核；失败、未知 schema、残缺 JSONL 尾行或关联缺失时保留旧数据和水位。缺 CLI 库但存在 SDK + Host 时可导入，使用 merge 保留未确认的旧来源；完整发现时原子替换。暂不采集只存在 Host 而 SDK 事件已丢失的记录，避免伪造请求或时间。
+
+## 15. Gemini CLI（口径 2.10，2026-10-13）
+
+`collectors/gemini_cli/{discovery,parser,sync,tests}.rs` 与 `usage/normalize/gemini_cli.rs`。默认 ~/.gemini；安装 Storage 契约将 GEMINI_CLI_HOME 当用户 home 后追加 .gemini，不把不存在的 GEMINI_DIR 环境契约当真。sandbox-exec 的 .cache 根与旧 .json 格式暂未支持。
+只读 tmp/<项目>/chats 下 JSONL（含子代理），必要项目目录来自 .project_root 或会话 directories；排除 antigravity。流式只反序列化统计白名单，跳过 content/thoughts 正文。
+追加记录是 journal，先完整回放同 ID 替换、$set.messages 全量替换、$rewindTo 删除目标及后续；未找到 rewind 目标时按已安装客户端契约清空。之后只统计最终 gemini 记录，会话 SumOfMessages，total_basis 为 derived_from_buckets；不叠加同会话镜像。
+prompt 包含 cached，普通输入做减法；candidates 与 thoughts 独立，cache_write 未提供。tool 非零/缺失标 gemini_cli.tool_relation_unverified，有客户端 total 仍可保留；缺 total 且 tool 不明确为0不推算总量。缺缓存或关系矛盾使普通input NULL。
+水位记录文件与项目marker指纹；失败文件或同更新时间镜像冲突全源不提交并报告files_failed；读取缺失/源变化保留历史。无新表、迁移、费用或估算。
+
+## 16. Grok CLI（口径 2.11，2026-10-13）
+
+`collectors/grok/{discovery,parser,sync,tests}.rs` 与 `usage/normalize/grok.rs`。GROK_HOME 配置根下 sessions/<编码工作区>/<会话>/usage.json 为权威，summary.json 只取身份、cwd、时间；不读对话、密文、events、updates、prompt_context。
+session.totalTokens 是会话client_reported；turnNumber 是轮级去重键。整轮总量不平均分配给modelCalls，也不重复加到会话。重复相同轮仅保留一次，重复冲突拒绝；同会话镜像按更新时间择新、相同时间冲突保留历史。
+原生 inputTokens 包含缓存，outputTokens 包含reasoning；缺失/不符合子集时相应规范桶为NULL，自报总量仍measured。cacheCreationTokens关系unknown，不计入规范总量。turns六计数合计、turnCount与modelCalls均对应才确认轮明细完整；否则partial，不表示已取得逐调用明细。
+轮时间仅有endedAt：记账事件在轮结束时发生，created_at_ms与completed_at_ms均保存此事件时间，source_ref标timeBasis=turnEndedAt；不称它为单次调用开始时间。请求时间图按轮结束日归属，界面直接说明。时间解析支持实测UTC纳秒Z/+00:00，截断到毫秒；不猜其它时区。缺endedAt轮保持无时间，仅在全会话详情可见。
+指纹覆盖usage及summary，稳定快照原子替换。失败文件数可见并不推进水位。costUsdTicks丢弃，无费用、估算、迁移或新依赖。
+
+## 17. MCode（口径 2.12，2026-10-13）
+
+`collectors/mcode/{discovery,parser,sync,tests}.rs` 与 `usage/normalize/mcode.rs`。MINIMAX_DATA_DIR > MAVIS_DATA_DIR > ~/.minimax，数据库为v2/sqlite/runtime-state.sqlite；配置覆盖来自已安装data-dir契约。
+只投影local_runtime_sessions身份、parent、workspace、毫秒时间和local_runtime_token_usage身份、agent、model、ts、五桶；不查询raw/cost/record_json，不扫描manifest/messages/history-catalog/llm-call或正文多代revision。
+请求按用量id、会话按session_id；同turn不同id保持独立。cache_read/write独立计入规范总量；reasoning=0且四必需桶完整才derived求和，非零/缺失reasoning标mcode.reasoning_relation_unverified、output与total NULL。会话按完整请求求和，坏行使完整总量未知，NULL模型不回填。
+复用collectors/sqlite_snapshot.rs校验主库/WAL已提交帧并在内存只读反序列化；不打开客户端SHM，不checkpoint，不落盘镜像。前后指纹一致才replace_client_snapshot；坏SQLite/schema报告files_failed，失败与源变化保留旧历史水位。无用量表的旧库保留unknown会话，partial，不造零。
+计入缓存写入的查询同时支持MCode会话和请求；客户端fresh/goal summary排除缓存，不能用作TokLens完整总量对账依据。无schema变化、依赖、权限、费用或网络新增。

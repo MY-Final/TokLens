@@ -10,7 +10,10 @@ export type ClientKey =
   | "mimocode"
   | "pi_desktop"
   | "workbuddy"
-  | "copilot";
+  | "copilot"
+  | "gemini_cli"
+  | "grok"
+  | "mcode";
 
 export type TokenTotals = {
   inputTokens: number;

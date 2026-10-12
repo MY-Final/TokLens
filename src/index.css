@@ -17,6 +17,9 @@
   --color-client-pi: var(--client-pi);
   --color-client-workbuddy: var(--client-workbuddy);
   --color-client-copilot: var(--client-copilot);
+  --color-client-gemini: var(--client-gemini);
+  --color-client-grok: var(--client-grok);
+  --color-client-mcode: var(--client-mcode);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -80,6 +83,9 @@
   --client-pi: oklch(0.65 0.15 300);
   --client-workbuddy: oklch(0.58 0.15 220);
   --client-copilot: oklch(0.52 0.15 280);
+  --client-gemini: oklch(0.53 0.15 255);
+  --client-grok: oklch(0.48 0.04 250);
+  --client-mcode: oklch(0.57 0.18 15);
   --client-opencode: #6366f1;
   --chart-1: #099f83;
   --chart-2: #59beb0;
@@ -124,6 +130,9 @@
   --client-pi: oklch(0.65 0.15 300);
   --client-workbuddy: oklch(0.74 0.12 220);
   --client-copilot: oklch(0.76 0.13 280);
+  --client-gemini: oklch(0.76 0.13 255);
+  --client-grok: oklch(0.76 0.04 250);
+  --client-mcode: oklch(0.76 0.14 15);
   --client-opencode: #a3a5ff;
   --chart-1: #45c7a4;
   --chart-2: #70c8c0;

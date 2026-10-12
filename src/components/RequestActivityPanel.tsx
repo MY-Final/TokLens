@@ -38,6 +38,9 @@ const CLIENTS: ClientKey[] = [
   "pi_desktop",
   "workbuddy",
   "copilot",
+  "gemini_cli",
+  "grok",
+  "mcode",
 ];
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 const CHART_CONFIG = { value: { label: "已记录请求", color: "var(--chart-1)" } };

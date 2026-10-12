@@ -123,6 +123,9 @@ function SessionBrowser({
             <SelectItem value="pi_desktop">Pi Desktop</SelectItem>
             <SelectItem value="workbuddy">WorkBuddy</SelectItem>
             <SelectItem value="copilot">GitHub Copilot</SelectItem>
+            <SelectItem value="gemini_cli">Gemini CLI</SelectItem>
+            <SelectItem value="grok">Grok CLI</SelectItem>
+            <SelectItem value="mcode">MCode</SelectItem>
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">

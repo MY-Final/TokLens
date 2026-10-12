@@ -185,6 +185,9 @@ pub fn dedup_key_note(client: Client) -> &'static str {
             "SDK session id + apiCallId; CLI usage:<row id>; host totals by user event id"
         }
         Client::OpenCode => "message.id",
+        Client::GeminiCli => "sessionId + final gemini message id after journal replay",
+        Client::Grok => "sessionId + turnNumber; turn-level aggregate, not individual model call",
+        Client::Mcode => "local_runtime_sessions.session_id + local_runtime_token_usage.id",
         Client::MimoCode => "native session id + message id; exclude imported session copies",
         Client::PiDesktop => {
             "physical operationId; legacy session + message id; expand aggregates once"

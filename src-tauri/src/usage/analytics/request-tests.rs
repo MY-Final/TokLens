@@ -1,6 +1,72 @@
 use super::*;
 use rusqlite::params;
 
+#[test]
+fn new_client_filters_preserve_unknown_usage_and_only_mcode_counts_cache_writes() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for (index, client) in [Client::GeminiCli, Client::Grok, Client::Mcode]
+        .into_iter()
+        .enumerate()
+    {
+        let id = client.as_str();
+        session(&store, id, client, "synthetic-project", 0, false);
+        request(
+            &store,
+            &format!("{id}-known"),
+            id,
+            Some(10),
+            Some(100),
+            "measured",
+        );
+        request(
+            &store,
+            &format!("{id}-unknown"),
+            id,
+            Some(20),
+            None,
+            "derived",
+        );
+        store
+            .conn
+            .execute(
+                "UPDATE messages SET cache_write_tokens=?1 WHERE id=?2",
+                params![index as i64 + 4, format!("{id}-known")],
+            )
+            .expect("synthetic cache writes");
+        store
+            .conn
+            .execute(
+                "UPDATE sessions SET cache_write_tokens=?1 WHERE id=?2",
+                params![index as i64 + 4, id],
+            )
+            .expect("synthetic session cache writes");
+        let filter = AnalyticsFilter {
+            client: Some(client),
+            ..Default::default()
+        };
+        let analysis = store
+            .request_analysis(&filter)
+            .expect("new client analysis");
+        assert_eq!(analysis.summary.totals.requests, 2);
+        assert_eq!(analysis.summary.totals.requests_without_usage, 1);
+        assert_eq!(analysis.summary.totals.sums.total_tokens, 100);
+        assert_eq!(analysis.summary.average_tokens, Some(100.0));
+        let expected = if client == Client::Mcode { 6 } else { 0 };
+        assert_eq!(
+            analysis.summary.totals.sums.counted_cache_write_tokens,
+            expected
+        );
+        assert_eq!(
+            store
+                .range_totals(&filter)
+                .expect("session totals")
+                .sums
+                .counted_cache_write_tokens,
+            expected
+        );
+    }
+}
+
 fn session(store: &UsageStore, id: &str, client: Client, project: &str, start: i64, partial: bool) {
     store.conn.execute(
         "INSERT INTO sessions (id,client,client_session_id,project_path,started_at_ms,

@@ -6,7 +6,7 @@
 
 ## 1. 范围
 
-统计对象（客户端）当前为：**Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、Copilot CLI**，后续可扩展。
+统计对象（客户端）当前为：**Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode**，后续可扩展。
 统计维度：会话、请求、token、模型、成本、时间分布、客户端与项目维度。
 统计范围限于**本机会话/日志文件**，不涉及任何远端数据或账号数据。
 
@@ -44,19 +44,19 @@
 
 跨端字段命名统一使用 `snake_case`（Rust DTO）→ 前端 `camelCase` 映射，字段含义与等级如下：
 
-| 字段                                       | 类型               | 必需 | 等级     | 说明                                                                                                             |
-| ------------------------------------------ | ------------------ | ---- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `client`                                   | enum               | 是   | measured | `codex` / `claude_code` / `opencode` / `dsh` / `kimi_code` / `mimocode` / `pi_desktop` / `workbuddy` / `copilot` |
-| `session_id`                               | string             | 是   | measured | 客户端提供的会话标识，缺失时用文件路径哈希兜底                                                                   |
-| `event_id`                                 | string             | 是   | derived  | 会话内序号/记录哈希，用于去重                                                                                    |
-| `timestamp`                                | ISO 8601（含时区） | 是   | measured | 事件时间                                                                                                         |
-| `model`                                    | string?            | 否   | measured | 模型标识，缺失时按"未知模型"处理                                                                                 |
-| `input_tokens`                             | u64?               | 否   | measured | 输入 token                                                                                                       |
-| `output_tokens`                            | u64?               | 否   | measured | 输出 token                                                                                                       |
-| `cache_read_tokens` / `cache_write_tokens` | u64?               | 否   | measured | 缓存读写 token，单列统计                                                                                         |
-| `cost_usd`                                 | f64?               | 否   | measured | 当前仅保存客户端自报值（OpenCode）；价格换算未实现                                                               |
-| `source`                                   | enum               | 是   | -        | 该事件整体可信等级                                                                                               |
-| `confidence`                               | f64?               | 否   | -        | 估算置信度（0–1），仅 estimated 事件需要                                                                         |
+| 字段                                       | 类型               | 必需 | 等级     | 说明                                                                                                                                               |
+| ------------------------------------------ | ------------------ | ---- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client`                                   | enum               | 是   | measured | `codex` / `claude_code` / `opencode` / `dsh` / `kimi_code` / `mimocode` / `pi_desktop` / `workbuddy` / `copilot` / `gemini_cli` / `grok` / `mcode` |
+| `session_id`                               | string             | 是   | measured | 客户端提供的会话标识，缺失时用文件路径哈希兜底                                                                                                     |
+| `event_id`                                 | string             | 是   | derived  | 会话内序号/记录哈希，用于去重                                                                                                                      |
+| `timestamp`                                | ISO 8601（含时区） | 是   | measured | 事件时间                                                                                                                                           |
+| `model`                                    | string?            | 否   | measured | 模型标识，缺失时按"未知模型"处理                                                                                                                   |
+| `input_tokens`                             | u64?               | 否   | measured | 输入 token                                                                                                                                         |
+| `output_tokens`                            | u64?               | 否   | measured | 输出 token                                                                                                                                         |
+| `cache_read_tokens` / `cache_write_tokens` | u64?               | 否   | measured | 缓存读写 token，单列统计                                                                                                                           |
+| `cost_usd`                                 | f64?               | 否   | measured | 当前仅保存客户端自报值（OpenCode）；价格换算未实现                                                                                                 |
+| `source`                                   | enum               | 是   | -        | 该事件整体可信等级                                                                                                                                 |
+| `confidence`                               | f64?               | 否   | -        | 估算置信度（0–1），仅 estimated 事件需要                                                                                                           |
 
 字段可以不落库，但含义与等级必须稳定；新增字段时在本文补一行。
 
@@ -66,16 +66,16 @@
 
 | 指标                   | 单位  | 时间范围 | 等级                   | 计算方式                                                                                    | 状态                                 |
 | ---------------------- | ----- | -------- | ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
-| 会话数                 | 个    | 选定区间 | measured               | 去重后的 `session_id` 数量                                                                  | 九客户端采集与查询已实现             |
-| 请求数                 | 次    | 选定区间 | measured               | 事件条数（去重后）                                                                          | 九客户端采集与查询已实现             |
-| 输入 token             | token | 选定区间 | measured / derived     | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 九客户端采集与查询已实现             |
-| 输出 token             | token | 选定区间 | measured / derived     | 非推理输出分桶求和（Codex / DSH 扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现         | 九客户端采集与查询已实现             |
-| 缓存 token             | token | 选定区间 | measured               | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 九客户端采集与查询已实现             |
+| 会话数                 | 个    | 选定区间 | measured               | 去重后的 `session_id` 数量                                                                  | 十二客户端采集与查询已实现           |
+| 请求数                 | 次    | 选定区间 | measured               | 事件条数（去重后）                                                                          | 十二客户端采集与查询已实现           |
+| 输入 token             | token | 选定区间 | measured / derived     | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 十二客户端采集与查询已实现           |
+| 输出 token             | token | 选定区间 | measured / derived     | 非推理输出分桶求和（Codex / DSH 扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现         | 十二客户端采集与查询已实现           |
+| 缓存 token             | token | 选定区间 | measured               | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 十二客户端采集与查询已实现           |
 | 成本                   | USD   | 选定区间 | measured（客户端自报） | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | OpenCode 自报值已采集；UI 金额未开放 |
 | 活跃时长               | 小时  | 选定区间 | estimated              | 相邻事件间隔去尾求和（见第 7 节）                                                           | 未实现                               |
-| 按客户端/模型/项目分布 | %     | 选定区间 | derived                | 已知规范用量（measured / derived，排除 estimated）子集 ÷ 已知总量                           | 九客户端采集与查询已实现             |
+| 按客户端/模型/项目分布 | %     | 选定区间 | derived                | 已知规范用量（measured / derived，排除 estimated）子集 ÷ 已知总量                           | 十二客户端采集与查询已实现           |
 
-已接入 Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、Copilot CLI。新采集器的格式、快照 / 去重与限制见 `data-model.md` 第 10 / 11 / 12 / 13 / 14 节。
+已接入 Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode。新采集器的格式、快照 / 去重与限制见 `data-model.md` 第 10–17 节。
 默认使用请求时间口径，详见第 9 节 2.3；保留的会话累计口径按会话开始时间过滤，
 其趋势按会话开始日期归属且仍使用固定 24 小时桶（不表示该日实际请求活动）。
 
@@ -133,7 +133,7 @@
 
 ## 9. 口径版本与变更
 
-- 本文维护一个口径版本号，格式 `MAJOR.MINOR`，当前为 `2.8`。
+- 本文维护一个口径版本号，格式 `MAJOR.MINOR`，当前为 `2.12`。
 - 破坏性变更（去重规则、token 计入口径、价格表来源、时区处理）升 `MAJOR`；新增指标或字段升 `MINOR`。
 - 每次变更需在提交说明中记录：变更内容、原因、对历史数据展示的影响。
 - 界面展示的统计需与本文版本一致；发布说明中注明本次口径版本。
@@ -183,7 +183,7 @@ Pi Desktop input / 两个缓存独立，reasoning 包含于 output；物理 oper
 6. **可清除**：设置页提供统计缓存清除：等待当前扫描结束后，事务删除 messages / sessions / source_files，保留迁移、设置和客户端原始数据。清除前持久化暂停采集，重启保持暂停；用户恢复后可从原记录幂等重建。
 7. **导出**：导出属于用户显式操作，导出内容默认不含会话正文，并提示文件名与保存位置。
 
-采集控制（2026-10-11）：九个客户端独立启停，停用仅停止未来采集，不过滤或删除历史统计。
+采集控制（2026-10-11）：十二个客户端独立启停，停用仅停止未来采集，不过滤或删除历史统计。
 默认启动采集及每 5 分钟后台采集；间隔可为关闭 / 1 / 5 / 15 / 30 分钟。暂停优先于启动、定时和手动采集。
 同一时间仅允许一个扫描；恢复系统休眠后最多触发一次，不补跑积压任务。此行为不修改 Token 口径，版本仍为 1.3。
 
@@ -310,3 +310,26 @@ Codex parser_version 升到 2，下一次同步自动重读原日志，历史展
 - 会话趋势仍按会话开始时间归属；请求活动按事件时间归属，不能把整轮总量均分到调用或日历桶。请求统计只显示已知子集，因此可小于会话 Token 总量。
 - 本机实测一个 Host SDK 会话含 3 个用户轮、10 个独立 apiCallId；整轮 input=314042、output=3372、缓存=0，直接换算总量317414。顶层最后调用合计仅 input=98680、output=2353，不能代替整轮；不宣称取得了全部逐请求 Token。
 - parser_version 升至2，下一次同步重读补采；SQLite/WAL 全程内存快照，客户端主库 / WAL / SHM 不修改。失败或扫描中变化不推进水位；无新依赖包、迁移、权限或网络能力，仅启用 rusqlite serialize feature。
+
+### 口径 2.10（2026-10-13）：Gemini CLI 变更日志
+
+- `gemini_cli.response.v1`，只读 tmp 项目 chats/session-*.jsonl 与必要 .project_root 元数据，排除 antigravity。安装包 recorder 映射原生 usage；prompt 包含缓存，thoughts 与 candidates 独立。tool 未获非零语义证据，不映射为缓存写入。
+- 会话键 sessionId，请求键日志回放后的 gemini.id；同 ID 完整记录替换、$set.messages 全量替换与 $rewindTo 必须先回放，不将变更行当新增调用。info/user 不计请求，unknown type 计未识别记录。
+- 自报 total 为 measured；tool 明确为 0 且必需桶完整时才可 derived 换算，缓存缺失/矛盾使未命中输入未知。会话按最终请求完整求和（derived），缺失不补零；不实现估算或费用。
+- 本机 10 日志 / 28 最终 gemini 记录：input554736/output4196/thoughts15541/cached0/tool0，自报总量574473；与原生总量求和一致。缓存关系来自安装包恢复指标契约，不能声称已有非零缓存本机样本。旧 .json 会话暂未采集。
+
+### 口径 2.11（2026-10-13）：Grok CLI 轮级快照
+
+- `grok.turn.v1`，读取 GROK_HOME/sessions（默认 ~/.grok/sessions）下 usage.json、summary.json 白名单；不读 chat_history/events/updates/prompt_context。
+- 会话累计采用 session.totalTokens（measured、client_reported），不与 turns 相加。明细键 sessionId+turnNumber；一行代表一轮，不代表一次模型调用；modelCalls 仅核对覆盖，不伪造调用。界面请求计数与均量均明确 Grok 轮级含义，全部客户端汇总也保留说明。
+- input 包含 cachedRead、output 包含 reasoning；归一化减去子集，缺失或矛盾使相应桶未知。cacheCreation 无正样本、关系 unknown，不计入 countedCacheWriteTokens。totalTokens 缺失保持未知，不按零缓存样本猜测总量。没有估算或 costUsdTicks 换算。
+- Grok明细是轮级记账事件，发生于原生endedAt，存入created_at_ms并注明timeBasis=turnEndedAt，按轮结束日归属；不是独立调用开始时间，也不借用session时间。与2.3普通逐调用记录的时间含义明确区分，缺endedAt不补时间；原生纳秒UTC转换到毫秒为derived。
+- 本机仅 1 会话、3轮、9次modelCalls；session 与 turns 五计数一致：原生input233668/output3959/cacheRead142848/reasoning2202/total237627。规范未缓存input90820、普通output1757；总量与客户端一致。多会话聚合关系尚未本机验证，明细不能确认覆盖时为 partial。
+
+### 口径 2.12（2026-10-13）：MCode SQLite 请求账本
+
+- `mcode.request.v1`，MINIMAX_DATA_DIR 优先于 MAVIS_DATA_DIR，默认 ~/.minimax；只读 v2/sqlite/runtime-state.sqlite 会话和用量白名单。复用已验证的 SQLite/WAL 内存快照，不打开客户端 SHM、不持久化数据库镜像。
+- 请求键为用量 id，会话键 session_id。缓存读写与输入独立；reasoning 与 output 未确认，明确 reasoning=0 时总量=input+output+cache_read+cache_write（derived），否则普通 output 与总量 NULL。缓存写入参与 countedCacheWriteTokens；字段缺失保持未知，不把客户端曾存零当缺失默认。
+- 模型 NULL 保持未知，不回读 messages/llm-call/manifest 补造归属；只使用 SQLite 账本，正文 activeRevision/generation 不参与采集，因此不跨多代重复计数。cost/raw/正文不读取、不换算。
+- 主库只读样本 1会话/17请求：input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770；17模型均NULL。客户端 fresh/goal summary 为67544，明确排除缓存，差814226来自口径，不能把它当完整用量。最终 WAL 可见对账在验收后登记，不把主库数字冒充 WAL 结果。
+- 三客户端采用原子完整快照：重复同步幂等，稳定成功扫描可反映修正/删除；源缺失、格式失败、扫描变化不推进水位或删除历史。单客户端失败不阻塞其他来源。无迁移、依赖、权限、联网、费用或估算新增；旧客户端历史规则不变。

@@ -27,6 +27,7 @@ import {
   formatTokensOrDash as formatExactOrDash,
 } from "@/lib/format";
 import type { RequestDetail, SessionDetail, SessionSummary } from "@/lib/usage-types";
+import { GROK_USAGE_NOTE } from "@/lib/client-labels";
 
 const TOTAL_BASIS_LABELS = {
   client_cumulative: "客户端累计值",
@@ -126,6 +127,9 @@ export function SessionDetailPanel({
             </Button>
           </div>
           <DialogDescription>完整会话（不受日期筛选限制） · 本地时间</DialogDescription>
+          {session.client === "grok" ? (
+            <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
+          ) : null}
         </DialogHeader>
         <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
           <div className="flex flex-wrap items-center gap-2">

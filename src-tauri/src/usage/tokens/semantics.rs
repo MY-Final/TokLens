@@ -144,6 +144,38 @@ pub const COPILOT_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "Copilot CLI 1.0.91 FJt accounting: native input includes read/write caches; reasoning is an output detail",
 };
 
+/// Gemini recorder stores prompt including cache; metrics restoration subtracts cached.
+/// Thoughts are separate output, while tool-use tokens have no canonical bucket.
+pub const GEMINI_CLI_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "gemini_cli.response.v1",
+    cache_read: FieldRelation::IncludedIn,
+    reasoning: FieldRelation::Separate,
+    cache_write_in_input: FieldRelation::NotProvided,
+    cache_write_counts_in_total: false,
+    client_reports_total: true,
+    basis: "Gemini CLI recorder/metrics contract: prompt includes cached; 22 local positive thoughts exceed candidates; tool relation unverified",
+};
+
+pub const GROK_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "grok.turn.v1",
+    cache_read: FieldRelation::IncludedIn,
+    reasoning: FieldRelation::IncludedIn,
+    cache_write_in_input: FieldRelation::Unknown,
+    cache_write_counts_in_total: false,
+    client_reports_total: true,
+    basis: "Grok usage display contract: input includes cached/output includes reasoning; three positive local turns total == input + output; cache creation unverified",
+};
+
+pub const MCODE_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "mcode.request.v1",
+    cache_read: FieldRelation::Separate,
+    reasoning: FieldRelation::Unknown,
+    cache_write_in_input: FieldRelation::Separate,
+    cache_write_counts_in_total: true,
+    client_reports_total: false,
+    basis: "MCode local-runtime usage API sums four disjoint buckets; 16 local records cache read > input; nonzero reasoning relation unverified",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
@@ -155,6 +187,9 @@ pub fn semantics_for(client: Client) -> &'static TokenSemantics {
         Client::PiDesktop => &PI_DESKTOP_SEMANTICS,
         Client::WorkBuddy => &WORKBUDDY_SEMANTICS,
         Client::Copilot => &COPILOT_SEMANTICS,
+        Client::GeminiCli => &GEMINI_CLI_SEMANTICS,
+        Client::Grok => &GROK_SEMANTICS,
+        Client::Mcode => &MCODE_SEMANTICS,
     }
 }
 

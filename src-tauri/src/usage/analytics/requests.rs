@@ -124,7 +124,7 @@ const REQUEST_COLUMNS: &str = "COUNT(DISTINCT m.session_id), COUNT(*),
     COALESCE(SUM(m.input_tokens), 0), COALESCE(SUM(m.output_tokens), 0),
     COALESCE(SUM(m.reasoning_tokens), 0), COALESCE(SUM(m.cache_read_tokens), 0),
     COALESCE(SUM(m.cache_write_tokens), 0), COALESCE(SUM(m.total_tokens), 0),
-    COALESCE(SUM(CASE WHEN s.client IN ('claude_code', 'dsh', 'kimi_code', 'mimocode', 'pi_desktop', 'copilot')
+    COALESCE(SUM(CASE WHEN s.client IN ('claude_code', 'dsh', 'kimi_code', 'mimocode', 'pi_desktop', 'copilot', 'mcode')
                      THEN m.cache_write_tokens ELSE 0 END), 0)";
 
 const REQUEST_FROM: &str = "FROM messages m JOIN sessions s ON s.id = m.session_id";

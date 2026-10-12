@@ -171,7 +171,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 ### Codex 总览重构（2026-10-11）
 
-顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持八客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持十二客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
@@ -191,7 +191,7 @@ DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标�
 
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。
 
-MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。八客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
+MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。十二客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
 
 ### 采集的部分失败状态
 
@@ -250,15 +250,22 @@ Codex 无原生序号的日志仍可显示已记录用量，序号显示 `—`�
 ### WorkBuddy 展示（2026-10-12）
 
 WorkBuddy 使用现有 lucide Bot 与 client-workbuddy 青色语义 token；标签明确显示 WorkBuddy，不使用其他客户端的品牌图标。客户端分布、趋势、分析、会话筛选与来源开关统一支持 workbuddy。
-新安装默认开启八个来源；已有设置保留原客户端启停选择，新增 WorkBuddy 可在数据源管理手动开启。请求计数仅指日志中携带 usage 的模型调用，不将用户消息、推理片段或工具结果计为额外请求。缓存写入关系未知，不堆叠到总量；缺失与异常提示沿用现有规则。
+新安装默认开启十二个来源；已有设置保留原客户端启停选择，新增 WorkBuddy 可在数据源管理手动开启。请求计数仅指日志中携带 usage 的模型调用，不将用户消息、推理片段或工具结果计为额外请求。缓存写入关系未知，不堆叠到总量；缺失与异常提示沿用现有规则。
 
 详情布局验收（2026-10-12）：桌面开发版启动与实际会话详情打开正常；同一业务组件使用合成长模型 / 代理名、385 字符来源引用、长未知关系及 100 行请求，验证 800 / 1000 / 1440px、自动单位 / 完整数字六种组合。单元格与页面均无水平越界，表内可滚动、表头固定，空 / 加载 / 错误状态正常；合成页面仅用于验收，不进入产品或构建。
 
 ### GitHub Copilot 展示（2026-10-12）
 
-使用已有 LobeHub GithubCopilot 本地图标与 client-copilot 语义色，标签显示 GitHub Copilot（涵盖 CLI 与 VS Code Agent Host）；九来源筛选、图例、分布、会话详情和来源开关统一使用 copilot。
+使用已有 LobeHub GithubCopilot 本地图标与 client-copilot 语义色，标签显示 GitHub Copilot（涵盖 CLI 与 VS Code Agent Host）；十二来源筛选、图例、分布、会话详情和来源开关统一使用 copilot。
 Agent Host 整轮用量显示在会话视图；请求视图只显示独立调用的已知 Token 子集，未记录用量的调用和 partial 提示保持可见，不用整轮值回填单次调用。
 新安装默认启用；已有设置保留原启停选择，新增来源可手动开启。来源路径展示 session-store.db；无用量会话显示未知，不能把上下文占用当作 Token。
 缓存写入参与已计入总量系列；已知总量请求显示直接换算来源等级（derived），未知拆分及异常关系沿用元数据详情提示。
 
 Copilot 桌面验收（2026-10-12）：以独立应用标识运行 pnpm tauri dev，只开启 Copilot 来源；实际只读导入 3 个会话、0 条用量，来源路径正确且无解析失败。今天空态、全部范围的未知 Token 会话、Copilot 筛选、元数据详情、来源状态和加载态均正常；本机无正数用量样本，正数分桶通过合成 Rust 测试验证。
+
+### Gemini CLI / Grok CLI / MCode 展示（2026-10-13）
+
+来源页、会话筛选、趋势、热力图与模型用量统一支持十二客户端；ClientIdentity 使用既有 LobeHub GeminiCLI / Grok / Minimax 本地图标与 client-gemini / client-grok / client-mcode 语义色，不加载远程资源。
+新安装默认启用十二来源；已有设置保留原启停选择，新增来源由用户手动开启，不重置其它偏好。客户端分析 Tab 保持单行横向滚动及下划线激活。
+Grok 来源页、请求总览、模型分析和会话详情直接提示“请求数表示轮数，均量为每轮 Token”；全部客户端包含 Grok 时仍提示，不能把轮数称为独立模型调用数。明细未提供调用拆分时显示 partial。
+Gemini 未确认工具用量不冒充 cache_write，来源提示分项可能不等于自报总量；MCode 模型缺失为 —，推理关系无法确认则输出与总量保持未知。来源等级、未知、未解析记录和失败文件沿用现有显式提示；不新增估算值或费用。

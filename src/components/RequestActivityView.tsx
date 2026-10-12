@@ -5,6 +5,7 @@ import { getRequestActivity } from "@/lib/api";
 import { localDayBoundaries } from "@/lib/ranges";
 import { rangeScope, type DateRange } from "@/lib/ranges";
 import type { ClientKey } from "@/lib/usage-types";
+import { GROK_USAGE_NOTE } from "@/lib/client-labels";
 
 export function RequestActivityView({
   range,
@@ -32,6 +33,13 @@ export function RequestActivityView({
       : range.label;
   return (
     <div className="space-y-4">
+      {client === "grok" ||
+      (client === null &&
+        activity.data?.clients.some(
+          (entry) => entry.key === "grok" && entry.metrics.totals.requests > 0,
+        )) ? (
+        <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
+      ) : null}
       <RequestActivityPanel
         data={activity.data}
         loading={activity.loading}

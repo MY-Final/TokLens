@@ -20,6 +20,9 @@ const CLIENTS: ClientKey[] = [
   "pi_desktop",
   "workbuddy",
   "copilot",
+  "gemini_cli",
+  "grok",
+  "mcode",
 ];
 
 export function ClientDateHeatmap({

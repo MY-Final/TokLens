@@ -5,9 +5,17 @@
 
 ## 1. 现状
 
+### Gemini CLI / Grok CLI / MCode 接入决策（2026-10-13）
+
+新增 `collectors/gemini_cli/`、`collectors/grok/`、`collectors/mcode/`，各按 discovery / parser / sync / tests 拆分；纯归一化位于 `usage/normalize/{gemini_cli,grok,mcode}.rs`。
+客户端标识为 `gemini_cli` / `grok` / `mcode`，语义 ID 为 `gemini_cli.response.v1` / `grok.turn.v1` / `mcode.request.v1`。复用现有 DTO 结构，客户端集合由九个扩展为十二个；不新增数据库表或依赖。
+Gemini 只读 tmp 项目会话变更日志（排除 antigravity）；Grok 只读 usage.json 与必要 summary 元数据；MCode 只读 runtime-state.sqlite 的会话和请求白名单，不回读正文补模型。
+复用现有 Copilot SQLite/WAL 内存快照实现，提升到 `collectors/sqlite_snapshot.rs` 供 Copilot / MCode 共用；保持校验、只读范围与测试不变，不生成客户端 shm 或落盘数据库副本。
+复用已登记 LobeHub Gemini / Grok / Minimax 单色本地图标，由 ClientIdentity 统一呈现；不新增运行时依赖、权限或网络访问。字段关系以本机元数据及安装包契约为依据，未验证项保持 unknown；缺失不补零，不实现费用换算。
+
 ### Copilot Agent Host 补采决策（2026-10-12）
 
-在 `collectors/copilot/` 增加 `events.rs`（SDK JSONL 元数据白名单）、`agent_host.rs`（VS Code 用量关联）和 `database.rs`（内存只读 SQLite/WAL 快照）。
+在 `collectors/copilot/` 使用 `events.rs`（SDK JSONL 元数据白名单）、`agent_host.rs`（VS Code 用量关联）和 `sqlite_snapshot.rs`（内存只读 SQLite/WAL 快照）。
 默认同时发现 Copilot 根目录的 `session-state/*/events.jsonl` 与 Windows `%APPDATA%/Code/agentSessionData/*/session.db`。
 通过 provider metadata 的 sdkSessionId 合并会话，通过 turns.event_id 对应 SDK user.message.id；镜像按 SDK 会话和原始用户事件去重。
 整轮 turnTokenTotals 只用于会话总量；vscode.modelCall 仅补对应 apiCallId 的请求用量，缺少的调用计数保持未知，明细标记 partial。
@@ -23,7 +31,7 @@
 仅读取 sessions 元数据与 assistant_usage_events 的身份、模型、时间和 Token 字段；不读正文、账户、日志或上下文占用。
 每次读取 WAL 可见快照，以用量表主键去重；缺少用量表的旧版本保留会话且标记明细无法确认完整。
 输入包含缓存读写，reasoning 包含于输出；归一化拆分缓存且不重复计入。缺失保持未知，费用和 premium requests 不换算。
-新安装默认启用九个来源；已有设置保留原选择，新增 Copilot 可从数据源管理开启。
+新安装默认启用十二个来源；已有设置保留原选择，新增 Copilot 可从数据源管理开启。
 Copilot 使用已登记 LobeHub `GithubCopilot` 本地图标与独立语义色。
 
 ### WorkBuddy 采集器决策（2026-10-12）
@@ -116,7 +124,7 @@ DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/se
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、Copilot CLI 采集器已接入；费用换算未实现（不展示统一金额）。
+Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -127,7 +135,7 @@ Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、C
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries + request_queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy / copilot
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy / copilot / gemini_cli / grok / mcode
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -164,20 +172,20 @@ usage/tokens ────────→ usage/client
 
 ### 3.1 命令清单（2026-10-11）
 
-| 命令                     | 参数                                                       | 返回                                                           |
-| ------------------------ | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数        |
-| `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                       |
-| `get_client_usage`       | `fromMs` / `toMs`                                          | 九个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
-| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                 |
-| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                               |
-| `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因    |
-| `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries`             | 完整范围请求汇总、最多 400 日本地日桶与全已导入日期覆盖计数    |
-| `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`          | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）   |
-| `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                 |
-| `sync_usage`             | `force`                                                    | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败             |
-| `sync_codex`             | `force`                                                    | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件            |
-| `app_info`               | —                                                          | 应用名与版本（连通性检查）                                     |
+| 命令                     | 参数                                                       | 返回                                                             |
+| ------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------- |
+| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数          |
+| `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                         |
+| `get_client_usage`       | `fromMs` / `toMs`                                          | 十二个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
+| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                   |
+| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                                 |
+| `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因      |
+| `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries`             | 完整范围请求汇总、最多 400 日本地日桶与全已导入日期覆盖计数      |
+| `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`          | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）     |
+| `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                   |
+| `sync_usage`             | `force`                                                    | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败               |
+| `sync_codex`             | `force`                                                    | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件              |
+| `app_info`               | —                                                          | 应用名与版本（连通性检查）                                       |
 
 桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
@@ -322,7 +330,7 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | `collectors/kimi_code/`   | 会话目录发现、v2 / 旧版元数据、wire 1.4 / 1.5 白名单解析与原子快照同步                                                                                                                                                             |
 | `collectors/mimocode/`    | SQLite WAL 只读事务、统计白名单投影、排除外部导入与快照替换                                                                                                                                                                        |
 | `collectors/pi_desktop/`  | schema 1 JSONL 白名单、物理操作账本 / legacy 残差、指纹与原子快照                                                                                                                                                                  |
-| `collectors/` 公共模块    | `files` 发现与指纹；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                                                                                                                                   |
+| `collectors/` 公共模块    | `files` 发现与指纹；`sqlite_snapshot` 只读 SQLite/WAL 内存快照；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                                                                                       |
 | `commands/`               | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验                                                                                                     |
 | `src/lib/usage-types.ts`  | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                                                                                                                      |
 
