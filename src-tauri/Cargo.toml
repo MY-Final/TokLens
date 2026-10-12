@@ -1,6 +1,6 @@
 [package]
 name = "toklens"
-version = "0.1.3"
+version = "0.1.4"
 description = "TokLens desktop application"
 authors = ["TokLens"]
 edition = "2024"

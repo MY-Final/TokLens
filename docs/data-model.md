@@ -379,7 +379,7 @@ sidechain 和 unknown relations；不包含正文，详情查询不回读源文�
 提供 `knownTokenFields` 区分没有已知字段与实测零；分项不补总量。客户端及 Top 8 来源占比以完整区间已知总量作为分母。
 模型使用会话主模型，项目使用会话目录，不回填逐请求模型。无表结构、迁移、去重或原始计数变化；公式与边界见 `data-metrics.md` 2.4。
 
-### 查询与采集契约补充（口径 2.6，2026-10-12，待发布）
+### 查询与采集契约补充（口径 2.6，2026-10-12，纳入 v0.1.4）
 
 SQLite schema 不变。RangeTotals / StatsBucket 增加成对已知缓存样本会话数与可空缓存命中率基点；ClientUsage / GroupUsage 与对应 DTO 增加 sessionsWithoutUsage，不能仅凭求和结果 0 判断真实零。排行 messages 为组内所有会话明细合计。
 Codex 失败读取不提交 SourceFile 水位；合法无换行末行允许导入，未完成 JSON 尾行下次重试。CODEX_HOME 或用户 home 只在采集发现层解析，来源 DTO 的 sourcePath 是本地展示元数据，不默认对外复制或上传。
