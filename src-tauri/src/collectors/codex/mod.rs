@@ -6,6 +6,7 @@
 //!   `thread_token_usage` 为线程累计）与旧版 `event_msg.token_count`
 //!   （`info.last_token_usage` 为每请求增量、`info.total_token_usage` 为线程累计）。
 //!   混合格式保留旧格式历史，丢弃与新版配对的镜像事件，避免重复计数。
+//!   不要求原生 ordinal：请求 ID / 原生序号优先，否则按累计快照或文件行号去重。
 //! - 线程累计值按 `thread_id` 取最大一份，绝不相加多个文件的累计值；分页/续接文件
 //!   通过 `first_ordinal != 0` 标记为明细不完整。
 //! - 增量同步按 `(size_bytes, mtime_ms, parser_version)` 判断文件是否变化：未变化直接跳过，

@@ -2,9 +2,12 @@
 
 use super::parsed::ParsedFile;
 use crate::usage::model::MessageRecord;
-use crate::usage::normalize::{CodexUsageRecord, codex_message};
+use crate::usage::normalize::{
+    CodexRecordIdentity, CodexUsageRecord, codex_dedup_key, codex_message,
+};
 use crate::usage::tokens::RawTokenCounts;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
@@ -32,7 +35,9 @@ pub const FIELD_WHITELIST: &[&str] = &[
 /// 一条旧格式 Token 事件（`event_msg.token_count`）。
 #[derive(Debug, Clone)]
 struct LegacyEvent {
-    ordinal: i64,
+    ordinal: Option<i64>,
+    line: usize,
+    cumulative: Option<RawTokenCounts>,
     timestamp: Option<String>,
     thread_id: String,
     /// `info.last_token_usage`：本次请求的增量。
@@ -47,7 +52,19 @@ fn resolve_messages(
     legacy_events: &[LegacyEvent],
 ) {
     let mut mirror_index = 0usize;
+    let mut seen_legacy = BTreeSet::new();
+    let source_path = parsed.path.to_string_lossy();
     for event in legacy_events {
+        let record = CodexUsageRecord {
+            thread_id: &event.thread_id,
+            response_id: None,
+            identity: record_identity(event.ordinal, event.cumulative, &source_path, event.line),
+            timestamp: event.timestamp.as_deref(),
+            usage: event.usage,
+        };
+        if event.ordinal.is_none() && !seen_legacy.insert(codex_dedup_key(&record)) {
+            continue;
+        }
         let is_mirror = mirror_index < new_records.len()
             && event.usage.client_total.is_some()
             && new_records[mirror_index].usage.total_tokens == event.usage.client_total;
@@ -55,16 +72,29 @@ fn resolve_messages(
             mirror_index += 1;
             continue;
         }
-        parsed.messages.push(codex_message(&CodexUsageRecord {
-            thread_id: &event.thread_id,
-            // 旧格式没有 response_id：去重键回退为 `token_count:<ordinal>`。
-            response_id: None,
-            ordinal: event.ordinal,
-            timestamp: event.timestamp.as_deref(),
-            usage: event.usage,
-        }));
+        parsed.messages.push(codex_message(&record));
     }
     parsed.messages.extend(new_records.iter().cloned());
+    // ordinal-free 日志可反复通知同一累计值（例如状态更新），保留首次观测时间。
+    let mut seen = BTreeSet::new();
+    parsed
+        .messages
+        .retain(|message| message.seq.is_some() || seen.insert(message.dedup_key.clone()));
+}
+
+fn record_identity<'a>(
+    ordinal: Option<i64>,
+    cumulative: Option<RawTokenCounts>,
+    path: &'a str,
+    line: usize,
+) -> CodexRecordIdentity<'a> {
+    if let Some(ordinal) = ordinal {
+        CodexRecordIdentity::Ordinal(ordinal)
+    } else if let Some(counts) = cumulative.filter(|counts| counts.client_total.is_some()) {
+        CodexRecordIdentity::Cumulative(counts)
+    } else {
+        CodexRecordIdentity::FileLine { path, line }
+    }
 }
 
 /// 按行解析一个 rollout 文件。只访问白名单字段，正文不会被取出。
@@ -74,25 +104,53 @@ pub(super) fn parse_file(
     mtime_ms: i64,
 ) -> std::io::Result<ParsedFile> {
     let reader = BufReader::new(File::open(path)?);
+    let parsed = parse_reader(reader, path, size_bytes, mtime_ms)?;
+    if !fingerprint_matches(&parsed) {
+        return Err(std::io::Error::other(
+            "Codex log changed during reading; retry on next scan",
+        ));
+    }
+    Ok(parsed)
+}
+
+pub(super) fn fingerprint_matches(parsed: &ParsedFile) -> bool {
+    std::fs::metadata(&parsed.path).is_ok_and(|metadata| {
+        metadata.len() as i64 == parsed.size_bytes
+            && super::discovery::mtime_ms(&metadata) == parsed.mtime_ms
+    })
+}
+
+pub(super) fn parse_reader(
+    mut reader: impl BufRead,
+    path: &Path,
+    size_bytes: i64,
+    mtime_ms: i64,
+) -> std::io::Result<ParsedFile> {
     let mut parsed = ParsedFile::new(path, size_bytes, mtime_ms);
     let mut new_records: Vec<MessageRecord> = Vec::new();
     let mut legacy_events: Vec<LegacyEvent> = Vec::new();
 
-    for line in reader.lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(_) => {
-                // 读取中断（例如文件正在被截断）：保留已解析部分，交由水位机制下次重试。
-                parsed.unparsed_lines += 1;
-                break;
-            }
-        };
+    let mut line = String::new();
+    let mut line_number = 0;
+    loop {
+        line.clear();
+        // 读取失败必须放弃本次快照，不能把半份日志提交并推进水位。
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        line_number += 1;
         if line.trim().is_empty() {
             continue;
         }
         let value: Value = match serde_json::from_str(&line) {
             Ok(value) => value,
             Err(_) => {
+                if !line.ends_with('\n') {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "Incomplete Codex log tail; retry on next scan",
+                    ));
+                }
                 parsed.unparsed_lines += 1;
                 continue;
             }
@@ -105,9 +163,11 @@ pub(super) fn parse_file(
             Some("session_meta") => parse_session_meta(&mut parsed, &value),
             Some("turn_context") => parse_turn_context(&mut parsed, &value),
             Some("token_usage_record") => {
-                parse_token_usage_record(&mut parsed, &value, &mut new_records)
+                parse_token_usage_record(&mut parsed, &value, line_number, &mut new_records)
             }
-            Some("event_msg") => parse_legacy_token_count(&mut parsed, &value, &mut legacy_events),
+            Some("event_msg") => {
+                parse_legacy_token_count(&mut parsed, &value, line_number, &mut legacy_events)
+            }
             // 其余行类型（正文、工具输出、状态等）一律忽略，不读取任何字段。
             _ => {}
         }
@@ -176,14 +236,12 @@ fn parse_turn_context(parsed: &mut ParsedFile, value: &Value) {
 fn parse_token_usage_record(
     parsed: &mut ParsedFile,
     value: &Value,
+    line: usize,
     records: &mut Vec<MessageRecord>,
 ) {
     let payload = value.get("payload");
     let timestamp = line_timestamp(value);
-    let Some(ordinal) = value.get("ordinal").and_then(Value::as_i64) else {
-        parsed.unparsed_lines += 1;
-        return;
-    };
+    let ordinal = value.get("ordinal").and_then(Value::as_i64);
     let thread_id = payload
         .and_then(|payload| payload.get("thread_id"))
         .and_then(Value::as_str)
@@ -200,25 +258,32 @@ fn parse_token_usage_record(
             .map(str::to_string);
     }
     parsed.mark_time(timestamp);
+    let cumulative = payload
+        .and_then(|payload| payload.get("thread_token_usage"))
+        .filter(|usage| usage.is_object())
+        .map(|usage| raw_counts(Some(usage)));
+    let source_path = parsed.path.to_string_lossy();
     records.push(codex_message(&CodexUsageRecord {
         thread_id: &thread_id,
         response_id: payload
             .and_then(|payload| payload.get("response_id"))
             .and_then(Value::as_str),
-        ordinal,
+        identity: record_identity(ordinal, cumulative, &source_path, line),
         timestamp,
         usage: raw_counts(payload.and_then(|payload| payload.get("usage"))),
     }));
     // 文件按追加顺序写入：最后一条即为文件末尾的线程累计。
-    if let Some(cumulative) = payload
-        .and_then(|payload| payload.get("thread_token_usage"))
-        .map(|usage| raw_counts(Some(usage)))
-    {
+    if let Some(cumulative) = cumulative {
         parsed.new_cumulative = Some(cumulative);
     }
 }
 
-fn parse_legacy_token_count(parsed: &mut ParsedFile, value: &Value, events: &mut Vec<LegacyEvent>) {
+fn parse_legacy_token_count(
+    parsed: &mut ParsedFile,
+    value: &Value,
+    line: usize,
+    events: &mut Vec<LegacyEvent>,
+) {
     let payload = value.get("payload");
     if payload
         .and_then(|payload| payload.get("type"))
@@ -227,17 +292,20 @@ fn parse_legacy_token_count(parsed: &mut ParsedFile, value: &Value, events: &mut
     {
         return;
     }
-    let Some(info) = payload.and_then(|payload| payload.get("info")) else {
+    let Some(info) = payload
+        .and_then(|payload| payload.get("info"))
+        .filter(|info| info.is_object())
+    else {
         return;
     };
-    let Some(last_usage) = info.get("last_token_usage") else {
+    let Some(last_usage) = info
+        .get("last_token_usage")
+        .filter(|usage| usage.is_object())
+    else {
         return;
     };
     let timestamp = line_timestamp(value);
-    let Some(ordinal) = value.get("ordinal").and_then(Value::as_i64) else {
-        parsed.unparsed_lines += 1;
-        return;
-    };
+    let ordinal = value.get("ordinal").and_then(Value::as_i64);
     let thread_id = payload
         .and_then(|payload| payload.get("thread_id"))
         .and_then(Value::as_str)
@@ -248,14 +316,20 @@ fn parse_legacy_token_count(parsed: &mut ParsedFile, value: &Value, events: &mut
         return;
     };
     parsed.mark_time(timestamp);
+    let cumulative = info
+        .get("total_token_usage")
+        .filter(|usage| usage.is_object())
+        .map(|usage| raw_counts(Some(usage)));
     events.push(LegacyEvent {
         ordinal,
+        line,
+        cumulative,
         timestamp: timestamp.map(str::to_string),
         thread_id,
         usage: raw_counts(Some(last_usage)),
     });
-    if let Some(total_usage) = info.get("total_token_usage") {
-        parsed.legacy_cumulative = Some(raw_counts(Some(total_usage)));
+    if let Some(cumulative) = cumulative {
+        parsed.legacy_cumulative = Some(cumulative);
     }
 }
 

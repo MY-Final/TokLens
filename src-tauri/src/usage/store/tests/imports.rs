@@ -8,7 +8,7 @@ fn import_is_idempotent_and_watermarks_persist_across_restart() {
     let messages = [codex_message(&CodexUsageRecord {
         thread_id: CODEX_THREAD,
         response_id: Some("resp_1"),
-        ordinal: 0,
+        identity: crate::usage::normalize::CodexRecordIdentity::Ordinal(0),
         timestamp: Some("2026-10-11T07:24:36.001Z"),
         usage: RawTokenCounts {
             input: Some(90_065),

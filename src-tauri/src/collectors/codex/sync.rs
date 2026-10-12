@@ -16,10 +16,13 @@ pub struct CodexCollector {
 }
 
 impl CodexCollector {
-    /// 默认根目录：`%USERPROFILE%\.codex\sessions`（取不到环境变量时返回 `None`）。
+    /// 尊重 Codex 自定义目录；否则使用平台用户目录。
     pub fn default_root() -> Option<PathBuf> {
-        std::env::var_os("USERPROFILE")
-            .map(|home| PathBuf::from(home).join(".codex").join("sessions"))
+        resolve_root(
+            std::env::var_os("CODEX_HOME"),
+            std::env::var_os("USERPROFILE"),
+            std::env::var_os("HOME"),
+        )
     }
 
     pub fn new(root: impl Into<PathBuf>) -> Self {
@@ -33,9 +36,18 @@ impl CodexCollector {
     /// 扫描并增量导入。单个文件失败不会中断整次同步。
     pub fn sync(&self, store: &UsageStore, options: &SyncOptions) -> Result<SyncReport, SyncError> {
         let mut report = SyncReport::default();
-        if !self.root.is_dir() {
-            report.root_missing = true;
-            return Ok(report);
+        match std::fs::metadata(&self.root) {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => {
+                return Err(SyncError::Directory(std::io::Error::other(
+                    "Codex source is not a directory",
+                )));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                report.root_missing = true;
+                return Ok(report);
+            }
+            Err(error) => return Err(SyncError::Directory(error)),
         }
         let files = discover_rollout_files(&self.root, &mut report)?;
         report.files_seen = files.len();
@@ -74,6 +86,10 @@ impl CodexCollector {
 
         let mut threads: BTreeMap<String, ThreadAggregate> = BTreeMap::new();
         for parsed in parsed_files {
+            if !super::parser::fingerprint_matches(&parsed) {
+                report.files_failed += 1;
+                continue;
+            }
             match parsed.thread_id.clone() {
                 Some(thread_id) => threads.entry(thread_id).or_default().push(parsed),
                 None => report.files_without_identity += 1,
@@ -81,6 +97,14 @@ impl CodexCollector {
         }
 
         for (thread_id, aggregate) in threads {
+            if aggregate
+                .files
+                .iter()
+                .any(|file| !super::parser::fingerprint_matches(file))
+            {
+                report.files_failed += aggregate.files.len();
+                continue;
+            }
             let session = aggregate.session_record(&thread_id);
             let mut files = aggregate.files;
             files.sort_by(|left, right| {
@@ -118,5 +142,52 @@ impl CodexCollector {
         }
 
         Ok(report)
+    }
+}
+
+fn resolve_root(
+    codex_home: Option<std::ffi::OsString>,
+    userprofile: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    codex_home
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            userprofile
+                .filter(|path| !path.is_empty())
+                .or_else(|| home.filter(|path| !path.is_empty()))
+                .map(|path| PathBuf::from(path).join(".codex"))
+        })
+        .map(|path| path.join("sessions"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_root;
+    use std::path::PathBuf;
+
+    #[test]
+    fn respects_custom_home_and_platform_fallbacks() {
+        let root = |custom: Option<&str>, windows: Option<&str>, unix: Option<&str>| {
+            resolve_root(
+                custom.map(Into::into),
+                windows.map(Into::into),
+                unix.map(Into::into),
+            )
+        };
+        assert_eq!(
+            root(Some("custom"), Some("windows"), Some("unix")),
+            Some(PathBuf::from("custom/sessions"))
+        );
+        assert_eq!(
+            root(Some(""), Some("windows"), Some("unix")),
+            Some(PathBuf::from("windows/.codex/sessions"))
+        );
+        assert_eq!(
+            root(None, None, Some("unix")),
+            Some(PathBuf::from("unix/.codex/sessions"))
+        );
+        assert_eq!(root(None, Some(""), Some("")), None);
     }
 }

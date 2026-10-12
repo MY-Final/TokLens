@@ -17,7 +17,8 @@ pub use claude_code::{
     ClaudeMessage, ClaudeSessionRollup, claude_code_message, claude_code_session,
 };
 pub use codex::{
-    CodexThreadSnapshot, CodexUsageRecord, codex_dedup_key, codex_message, codex_session,
+    CodexRecordIdentity, CodexThreadSnapshot, CodexUsageRecord, codex_dedup_key, codex_message,
+    codex_session,
 };
 pub use opencode::{
     OpenCodeMessageRow, OpenCodeSessionRow, opencode_message, opencode_session,

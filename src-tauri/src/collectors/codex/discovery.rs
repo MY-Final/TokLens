@@ -22,7 +22,14 @@ pub(super) fn discover_rollout_files(
                 continue;
             }
         };
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    report.directories_failed += 1;
+                    continue;
+                }
+            };
             let path = entry.path();
             match entry.file_type() {
                 Ok(file_type) if file_type.is_dir() => directories.push(path),
@@ -32,6 +39,7 @@ pub(super) fn discover_rollout_files(
                         files.push(path);
                     }
                 }
+                Err(_) => report.files_failed += 1,
                 _ => {}
             }
         }

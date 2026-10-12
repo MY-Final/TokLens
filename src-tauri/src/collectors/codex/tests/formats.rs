@@ -1,6 +1,103 @@
 use super::*;
 
 #[test]
+fn imports_ordinal_free_legacy_usage_without_inventing_sequence_or_coverage() {
+    let dir = temp_dir("ordinal-free-legacy");
+    write_file(
+        &dir,
+        "rollout-vscode.jsonl",
+        &[
+            without_ordinal(session_meta_at(THREAD, "2026-10-12T01:03:00.000Z", None, 0)),
+            without_ordinal(legacy_token_count(
+                None,
+                "2026-10-12T01:04:00.000Z",
+                1,
+                counts(1_000, 100, 400, 0, 20),
+                counts(1_000, 100, 400, 0, 20),
+            )),
+        ],
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = sync(&store, &dir);
+    assert_eq!(report.messages_inserted, 1);
+    assert_eq!(report.unparsed_lines, 0);
+    assert_eq!(codex_totals(&store).total_tokens, 1_100);
+    assert_eq!(coverage(&store, THREAD), "partial");
+    let seq: Option<i64> = store
+        .connection_for_tests()
+        .query_row("SELECT seq FROM messages", [], |row| row.get(0))
+        .expect("seq");
+    assert_eq!(seq, None);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn ordinal_free_new_records_keep_response_identity_and_drop_legacy_mirror() {
+    let dir = temp_dir("ordinal-free-mixed");
+    let usage = counts(100, 10, 20, 0, 2);
+    write_file(
+        &dir,
+        "rollout-mixed.jsonl",
+        &[
+            without_ordinal(session_meta_at(THREAD, "2026-10-12T01:03:00.000Z", None, 0)),
+            without_ordinal(usage_record(
+                THREAD,
+                "2026-10-12T01:04:00.000Z",
+                1,
+                "resp_vscode",
+                usage.clone(),
+                usage.clone(),
+            )),
+            without_ordinal(legacy_token_count(
+                None,
+                "2026-10-12T01:04:00.000Z",
+                2,
+                usage.clone(),
+                usage.clone(),
+            )),
+            without_ordinal(legacy_token_count(
+                None,
+                "2026-10-12T01:05:00.000Z",
+                3,
+                usage.clone(),
+                usage,
+            )),
+        ],
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = sync(&store, &dir);
+    assert_eq!(report.unparsed_lines, 0);
+    assert_eq!(store.message_count().expect("messages"), 1);
+    let key: String = store
+        .connection_for_tests()
+        .query_row("SELECT dedup_key FROM messages", [], |row| row.get(0))
+        .expect("key");
+    assert_eq!(key, "resp_vscode");
+    assert_eq!(codex_totals(&store).total_tokens, 110);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn null_legacy_usage_notifications_do_not_create_requests() {
+    let dir = temp_dir("ordinal-free-null");
+    write_file(
+        &dir,
+        "rollout-null.jsonl",
+        &[
+            without_ordinal(session_meta_at(THREAD, "2026-10-12T01:03:00.000Z", None, 0)),
+            json!({"type": "event_msg", "payload": {"type": "token_count", "info": null}}),
+            json!({"type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": null, "total_token_usage": null}}}),
+        ],
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    sync(&store, &dir);
+    assert_eq!(store.session_count().expect("sessions"), 1);
+    assert_eq!(store.message_count().expect("messages"), 0);
+    assert_eq!(coverage(&store, THREAD), "none");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn imports_new_token_format_with_codex_semantics() {
     let dir = temp_dir("new-format");
     write_file(

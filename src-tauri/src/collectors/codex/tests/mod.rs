@@ -34,6 +34,14 @@ fn lines_to_text(lines: &[Value]) -> String {
     text
 }
 
+fn without_ordinal(mut record: Value) -> Value {
+    record
+        .as_object_mut()
+        .expect("fixture object")
+        .remove("ordinal");
+    record
+}
+
 fn write_file(dir: &Path, name: &str, lines: &[Value]) -> PathBuf {
     let path = dir.join(name);
     std::fs::write(&path, lines_to_text(lines)).expect("write synthetic jsonl");

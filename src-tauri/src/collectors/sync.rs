@@ -21,6 +21,19 @@ pub struct CollectorRoots {
 }
 
 impl CollectorRoots {
+    pub fn path(&self, client: Client) -> Option<&std::path::Path> {
+        match client {
+            Client::Codex => &self.codex,
+            Client::ClaudeCode => &self.claude_code,
+            Client::OpenCode => &self.opencode,
+            Client::Dsh => &self.dsh,
+            Client::KimiCode => &self.kimi_code,
+            Client::MimoCode => &self.mimocode,
+            Client::PiDesktop => &self.pi_desktop,
+        }
+        .as_deref()
+    }
+
     pub fn from_environment() -> Self {
         Self {
             codex: CodexCollector::default_root(),

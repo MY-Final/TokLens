@@ -6,22 +6,54 @@ use crate::usage::model::{
 use crate::usage::time::parse_iso8601_utc_ms;
 use crate::usage::tokens::{Client, RawTokenCounts, normalize_usage, semantics_for};
 
+/// Codex 请求定位：客户端序号优先，否则使用白名单元数据定位。
+#[derive(Debug, Clone, Copy)]
+pub enum CodexRecordIdentity<'a> {
+    Ordinal(i64),
+    /// 没有原生请求标识时，累计计数相同的通知只记一次。
+    Cumulative(RawTokenCounts),
+    /// 没有累计计数时保守保留每行；不伪造客户端 ordinal。
+    FileLine {
+        path: &'a str,
+        line: usize,
+    },
+}
+
 /// Codex 请求级用量记录（`token_usage_record`，或旧版 `event_msg.token_count` 的一条）。
 #[derive(Debug, Clone)]
 pub struct CodexUsageRecord<'a> {
     pub thread_id: &'a str,
     pub response_id: Option<&'a str>,
-    pub ordinal: i64,
+    pub identity: CodexRecordIdentity<'a>,
     /// ISO 8601 UTC 时间戳。
     pub timestamp: Option<&'a str>,
     pub usage: RawTokenCounts,
 }
 
-/// Codex 请求级去重键：优先 `response_id`，旧格式回落到 `token_count:<ordinal>`。
+/// 原生标识保持优先；无序号的格式回退到累计快照或文件行定位。
 pub fn codex_dedup_key(record: &CodexUsageRecord<'_>) -> String {
     match record.response_id {
         Some(response_id) if !response_id.is_empty() => response_id.to_string(),
-        _ => format!("token_count:{}", record.ordinal),
+        _ => match record.identity {
+            CodexRecordIdentity::Ordinal(ordinal) => format!("token_count:{ordinal}"),
+            CodexRecordIdentity::Cumulative(counts) => {
+                let fields = [
+                    counts.input,
+                    counts.output,
+                    counts.cache_read,
+                    counts.cache_write,
+                    counts.reasoning,
+                    counts.client_total,
+                ];
+                let key = fields
+                    .map(|field| field.map_or_else(|| "?".to_string(), |value| value.to_string()))
+                    .join(":");
+                format!("token_count:cumulative:{key}")
+            }
+            CodexRecordIdentity::FileLine { path, line } => {
+                format!("token_count:file:{path}:line:{line}")
+            }
+        },
     }
 }
 
@@ -80,7 +112,10 @@ pub fn codex_message(record: &CodexUsageRecord<'_>) -> MessageRecord {
         client: Client::Codex,
         client_session_id: record.thread_id.to_string(),
         dedup_key: codex_dedup_key(record),
-        seq: Some(record.ordinal),
+        seq: match record.identity {
+            CodexRecordIdentity::Ordinal(ordinal) => Some(ordinal),
+            _ => None,
+        },
         created_at_ms: record.timestamp.and_then(parse_iso8601_utc_ms),
         completed_at_ms: None,
         model: None,
@@ -89,7 +124,14 @@ pub fn codex_message(record: &CodexUsageRecord<'_>) -> MessageRecord {
         is_sidechain: false,
         semantics_id: semantics.id.to_string(),
         source_kind: SourceKind::Measured,
-        source_ref: Some(format!("ordinal={}", record.ordinal)),
+        source_ref: Some(match record.identity {
+            CodexRecordIdentity::Ordinal(ordinal) => format!("ordinal={ordinal}"),
+            CodexRecordIdentity::Cumulative(_) => codex_dedup_key(&CodexUsageRecord {
+                response_id: None,
+                ..record.clone()
+            }),
+            CodexRecordIdentity::FileLine { path, line } => format!("file={path};line={line}"),
+        }),
         cost_source: CostSource::None,
         client_cost_usd: None,
     }
@@ -173,7 +215,7 @@ mod tests {
         let record = CodexUsageRecord {
             thread_id: "t1",
             response_id: Some("resp_123"),
-            ordinal: 42,
+            identity: CodexRecordIdentity::Ordinal(42),
             timestamp: Some("2026-10-11T07:24:36.001Z"),
             usage: codex_raw(90_065, 161, 13_568, 56),
         };
@@ -194,5 +236,33 @@ mod tests {
             ..record
         };
         assert_eq!(codex_message(&legacy).dedup_key, "token_count:42");
+    }
+
+    #[test]
+    fn fallback_identity_preserves_unknown_counts_and_native_response_priority() {
+        let record = CodexUsageRecord {
+            thread_id: "synthetic-thread",
+            response_id: None,
+            identity: CodexRecordIdentity::Cumulative(RawTokenCounts {
+                client_total: Some(0),
+                ..RawTokenCounts::default()
+            }),
+            timestamp: None,
+            usage: RawTokenCounts::default(),
+        };
+        let unknown_key = codex_dedup_key(&record);
+        assert_eq!(unknown_key, "token_count:cumulative:?:?:?:?:?:0");
+        let zero = CodexUsageRecord {
+            identity: CodexRecordIdentity::Cumulative(codex_raw(0, 0, 0, 0)),
+            ..record.clone()
+        };
+        assert_ne!(codex_dedup_key(&zero), unknown_key);
+        let native = CodexUsageRecord {
+            response_id: Some("response-1"),
+            ..record
+        };
+        assert_eq!(codex_dedup_key(&native), "response-1");
+        assert_eq!(codex_message(&native).seq, None);
+        assert_eq!(codex_message(&native).usage.total_tokens, None);
     }
 }

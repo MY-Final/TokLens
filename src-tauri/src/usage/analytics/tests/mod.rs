@@ -3,8 +3,8 @@ use super::*;
 use crate::usage::client::Client;
 use crate::usage::model::{MessageRecord, SessionRecord, parse_iso8601_utc_ms};
 use crate::usage::normalize::{
-    ClaudeSessionRollup, CodexThreadSnapshot, CodexUsageRecord, claude_code_session, codex_message,
-    codex_session,
+    ClaudeSessionRollup, CodexRecordIdentity, CodexThreadSnapshot, CodexUsageRecord,
+    claude_code_session, codex_message, codex_session,
 };
 use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
 use crate::usage::tokens::RawTokenCounts;
@@ -74,7 +74,7 @@ fn message(thread: &str, response: &str, ordinal: i64, at: &str) -> MessageRecor
     codex_message(&CodexUsageRecord {
         thread_id: thread,
         response_id: Some(response),
-        ordinal,
+        identity: CodexRecordIdentity::Ordinal(ordinal),
         timestamp: Some(at),
         usage: counts(Some(10), Some(2), Some(0), Some(0), Some(0), Some(12)),
     })
