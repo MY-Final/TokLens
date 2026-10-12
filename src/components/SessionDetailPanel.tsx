@@ -50,12 +50,14 @@ function RequestRow({ request }: { request: RequestDetail }) {
   );
   return (
     <TableRow>
-      <TableCell className="tabular-nums">{formatExactOrDash(request.seq)}</TableCell>
+      <TableCell className="tabular-nums" title={formatExactOrDash(request.seq)}>
+        <span className="block truncate">{formatExactOrDash(request.seq)}</span>
+      </TableCell>
       <TableCell className="whitespace-nowrap tabular-nums">
         <div>{formatDateTime(request.createdAtMs)}</div>
         <div className="text-muted-foreground">结束 {formatDateTime(request.completedAtMs)}</div>
       </TableCell>
-      <TableCell className="max-w-48 font-mono break-all">
+      <TableCell className="font-mono break-all whitespace-normal">
         <div>{request.model ?? "—"}</div>
         <div className="text-muted-foreground">{request.agent ?? "—"}</div>
       </TableCell>
@@ -65,18 +67,18 @@ function RequestRow({ request }: { request: RequestDetail }) {
           className="text-right font-mono tabular-nums"
           title={`${formatExactOrDash(request[field])} Token`}
         >
-          {formatTokensOrDash(request[field])}
+          <span className="block truncate">{formatTokensOrDash(request[field])}</span>
         </TableCell>
       ))}
-      <TableCell className="space-y-1">
+      <TableCell className="space-y-1 whitespace-normal">
         <Badge variant={request.sourceKind === "estimated" ? "secondary" : "outline"}>
           {SOURCE_LABELS[request.sourceKind]}
         </Badge>
-        <div className="max-w-64 font-mono break-all text-muted-foreground">
+        <div className="font-mono break-all text-muted-foreground">
           {request.sourceRef ?? "来源引用未记录"}
         </div>
       </TableCell>
-      <TableCell className="min-w-40 space-y-1 text-muted-foreground">
+      <TableCell className="space-y-1 break-all whitespace-normal text-muted-foreground">
         <div>{request.isSidechain ? "子代理 / 旁链" : "主链"}</div>
         {request.createdAtMs === null ? <div>缺失请求时间</div> : null}
         {missing.length > 0 ? <div>缺失：{missing.join("、")}</div> : null}
@@ -189,20 +191,20 @@ export function SessionDetailPanel({
                     description="客户端可能仅记录会话累计用量；同步新记录后可重试。会话累计值仍独立展示。"
                   />
                 ) : (
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table className="text-xs">
-                      <TableHeader>
+                  <div className="rounded-md border [&>[data-slot=table-container]]:max-h-[60dvh] [&>[data-slot=table-container]]:overflow-auto">
+                    <Table className="min-w-7xl table-fixed text-xs">
+                      <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
-                          <TableHead>序号</TableHead>
-                          <TableHead>开始 / 结束</TableHead>
-                          <TableHead>模型 / 代理</TableHead>
+                          <TableHead className="w-12">序号</TableHead>
+                          <TableHead className="w-40">开始 / 结束</TableHead>
+                          <TableHead className="w-40">模型 / 代理</TableHead>
                           {TOKEN_FIELDS.map(([, label]) => (
-                            <TableHead key={label} className="text-right whitespace-nowrap">
+                            <TableHead key={label} className="w-20 text-right whitespace-nowrap">
                               {label}
                             </TableHead>
                           ))}
-                          <TableHead>来源等级 / 引用</TableHead>
-                          <TableHead>状态</TableHead>
+                          <TableHead className="w-56">来源等级 / 引用</TableHead>
+                          <TableHead className="w-52">状态</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
