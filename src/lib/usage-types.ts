@@ -150,6 +150,15 @@ export type SyncState = {
   durationMs: number | null;
   error: string | null;
   report: SyncReport | null;
+  progress: SyncProgress | null;
+};
+
+export type SyncProgress = {
+  completedClients: number;
+  totalClients: number;
+  currentClient: ClientKey | null;
+  /** 按实际处理的数据源数量计算，10000 表示 100%，不表示耗时。 */
+  percentBps: number;
 };
 
 export type DataSourceStatus = {

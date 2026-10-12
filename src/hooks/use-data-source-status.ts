@@ -57,7 +57,8 @@ export function useDataSourceStatus(): SyncController {
       if (disposed) return;
       generation.current += 1;
       applySync(sync, !sync.running && sync.startedAtMs === null && sync.finishedAtMs === null);
-      void reload();
+      // Progress events only change in-memory state; query the database on completion.
+      if (!sync.running) void reload();
     })
       .then((stop) => {
         if (disposed) stop();

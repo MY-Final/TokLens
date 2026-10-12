@@ -1,7 +1,7 @@
 //! Application database and shared synchronization state.
 
 use super::{CommandError, SyncStateDto};
-use crate::collectors::SyncBatch;
+use crate::collectors::{SyncBatch, SyncProgress};
 use crate::usage::store::{UsageError, UsageStore};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
@@ -15,6 +15,7 @@ pub struct SyncState {
     pub duration_ms: Option<i64>,
     pub error: Option<String>,
     pub report: Option<SyncBatch>,
+    pub progress: Option<SyncProgress>,
 }
 
 /// 应用状态：本地库连接 + 库路径 + 同步状态。

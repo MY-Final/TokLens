@@ -79,6 +79,14 @@ pub struct SyncBatch {
     pub clients: Vec<ClientSyncResult>,
 }
 
+/// Actual client stages processed, including missing or failed sources.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncProgress {
+    pub completed_clients: usize,
+    pub total_clients: usize,
+    pub current_client: Option<Client>,
+}
+
 impl SyncBatch {
     pub fn has_errors(&self) -> bool {
         self.clients.iter().any(|client| {
@@ -97,7 +105,22 @@ pub fn sync_clients(
     options: &SyncOptions,
     clients: &[Client],
 ) -> SyncBatch {
+    sync_clients_with_progress(store, roots, options, clients, |_| {})
+}
+
+pub(crate) fn sync_clients_with_progress(
+    store: &UsageStore,
+    roots: &CollectorRoots,
+    options: &SyncOptions,
+    clients: &[Client],
+    mut on_progress: impl FnMut(SyncProgress),
+) -> SyncBatch {
     let mut batch = SyncBatch::default();
+    on_progress(SyncProgress {
+        completed_clients: 0,
+        total_clients: clients.len(),
+        current_client: clients.first().copied(),
+    });
     for &client in clients {
         let result = match client {
             Client::Codex => roots
@@ -168,6 +191,11 @@ pub fn sync_clients(
                 error: Some(error.to_string()),
             },
         });
+        on_progress(SyncProgress {
+            completed_clients: batch.clients.len(),
+            total_clients: clients.len(),
+            current_client: clients.get(batch.clients.len()).copied(),
+        });
     }
     batch
 }
@@ -189,11 +217,38 @@ mod tests {
             grok: Some(dir.0.join("missing-grok")),
             ..Default::default()
         };
-        let batch = sync_clients(
+        let mut progress = Vec::new();
+        let batch = sync_clients_with_progress(
             &store,
             &roots,
             &SyncOptions::default(),
             &[Client::Mcode, Client::GeminiCli, Client::Grok],
+            |update| progress.push(update),
+        );
+        assert_eq!(
+            progress,
+            vec![
+                SyncProgress {
+                    completed_clients: 0,
+                    total_clients: 3,
+                    current_client: Some(Client::Mcode)
+                },
+                SyncProgress {
+                    completed_clients: 1,
+                    total_clients: 3,
+                    current_client: Some(Client::GeminiCli)
+                },
+                SyncProgress {
+                    completed_clients: 2,
+                    total_clients: 3,
+                    current_client: Some(Client::Grok)
+                },
+                SyncProgress {
+                    completed_clients: 3,
+                    total_clients: 3,
+                    current_client: None
+                },
+            ]
         );
         assert_eq!(batch.clients.len(), 3);
         assert!(batch.has_errors());
@@ -208,5 +263,27 @@ mod tests {
             );
         }
         assert_eq!(store.session_count().expect("no imported data"), 0);
+    }
+
+    #[test]
+    fn no_enabled_clients_reports_an_empty_completed_scan() {
+        let store = UsageStore::open_in_memory().expect("store");
+        let mut progress = Vec::new();
+        let batch = sync_clients_with_progress(
+            &store,
+            &CollectorRoots::default(),
+            &SyncOptions::default(),
+            &[],
+            |update| progress.push(update),
+        );
+        assert!(batch.clients.is_empty());
+        assert_eq!(
+            progress,
+            vec![SyncProgress {
+                completed_clients: 0,
+                total_clients: 0,
+                current_client: None
+            }]
+        );
     }
 }

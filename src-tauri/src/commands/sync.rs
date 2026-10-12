@@ -1,13 +1,15 @@
 //! Background multi-client synchronization and event emission.
 
 use super::{AppState, CommandError, SyncStateDto, dto};
-use crate::collectors::{CollectorRoots, SyncBatch, SyncOptions, sync_clients};
+use crate::collectors::{
+    CollectorRoots, SyncBatch, SyncOptions, SyncProgress, sync_clients_with_progress,
+};
 use crate::usage::client::Client;
 use crate::usage::store::UsageStore;
 use crate::usage::time::now_ms;
 use tauri::{AppHandle, Emitter, Manager};
 
-/// 同步开始/结束时广播给前端的事件名。
+/// 同步开始、进度变化与结束时广播给前端的事件名。
 pub const SYNC_EVENT: &str = "usage-sync";
 
 /// 触发一次全部客户端同步。已有同步在跑时直接返回当前状态（幂等）。
@@ -61,6 +63,11 @@ fn request_sync_for(
         sync.duration_ms = None;
         sync.error = None;
         sync.report = None;
+        sync.progress = Some(SyncProgress {
+            completed_clients: 0,
+            total_clients: clients.len(),
+            current_client: clients.first().copied(),
+        });
         // 守卫在代码块结束时释放，后台线程不会阻塞状态更新。
         SyncStateDto::from(&*sync)
     };
@@ -111,12 +118,24 @@ fn run_sync(app: &AppHandle, force: bool, clients: &[Client]) -> Result<SyncBatc
         state.database_path().to_path_buf()
     };
     let store = UsageStore::open(&db_path).map_err(|error| dto::usage_error_message(&error))?;
-    Ok(sync_clients(
+    Ok(sync_clients_with_progress(
         &store,
         &CollectorRoots::from_environment(),
         &SyncOptions {
             force_rescan: force,
         },
         clients,
+        |progress| {
+            let state = app.state::<AppState>();
+            let snapshot = {
+                let mut sync = state
+                    .sync
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                sync.progress = Some(progress);
+                SyncStateDto::from(&*sync)
+            };
+            let _ = app.emit(SYNC_EVENT, snapshot);
+        },
     ))
 }

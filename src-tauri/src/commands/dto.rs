@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::collectors::{ClientSyncResult, SyncBatch, SyncReport};
+use crate::collectors::{ClientSyncResult, SyncBatch, SyncProgress, SyncReport};
 use crate::usage::analytics::{
     ClientSourceStatus, ClientUsage, DailyBucket, GroupUsage, RangeTotals, SessionSummary,
     TokenSums,
@@ -26,6 +26,32 @@ pub struct SyncStateDto {
     pub duration_ms: Option<i64>,
     pub error: Option<String>,
     pub report: Option<SyncReportDto>,
+    pub progress: Option<SyncProgressDto>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncProgressDto {
+    pub completed_clients: usize,
+    pub total_clients: usize,
+    pub current_client: Option<String>,
+    /// Client count progress, never an elapsed-time estimate (10000 = 100%).
+    pub percent_bps: usize,
+}
+
+impl From<&SyncProgress> for SyncProgressDto {
+    fn from(progress: &SyncProgress) -> Self {
+        Self {
+            completed_clients: progress.completed_clients,
+            total_clients: progress.total_clients,
+            current_client: progress
+                .current_client
+                .map(|client| client.as_str().to_string()),
+            percent_bps: (progress.completed_clients * 10_000)
+                .checked_div(progress.total_clients)
+                .unwrap_or(10_000),
+        }
+    }
 }
 
 impl From<&SyncState> for SyncStateDto {
@@ -37,6 +63,7 @@ impl From<&SyncState> for SyncStateDto {
             duration_ms: state.duration_ms,
             error: state.error.clone(),
             report: state.report.clone().map(SyncReportDto::from),
+            progress: state.progress.as_ref().map(SyncProgressDto::from),
         }
     }
 }
@@ -399,6 +426,40 @@ pub fn usage_error_message(error: &UsageError) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sync_progress_dto_preserves_stages_and_count_percentage() {
+        for (completed, total, expected) in
+            [(0, 3, 0), (1, 3, 3333), (3, 3, 10_000), (0, 0, 10_000)]
+        {
+            let progress = SyncProgress {
+                completed_clients: completed,
+                total_clients: total,
+                current_client: (completed < total).then_some(Client::Codex),
+            };
+            let state = SyncState {
+                running: true,
+                progress: Some(progress),
+                ..Default::default()
+            };
+            let payload = serde_json::to_value(SyncStateDto::from(&state)).expect("sync payload");
+            assert_eq!(payload["progress"]["completedClients"], completed);
+            assert_eq!(payload["progress"]["totalClients"], total);
+            assert_eq!(payload["progress"]["percentBps"], expected);
+            assert_eq!(
+                payload["progress"]["currentClient"],
+                if completed < total {
+                    serde_json::json!("codex")
+                } else {
+                    serde_json::Value::Null
+                }
+            );
+        }
+        assert!(
+            serde_json::to_value(SyncStateDto::default()).expect("idle payload")["progress"]
+                .is_null()
+        );
+    }
 
     #[test]
     fn client_filter_accepts_the_same_ids_returned_to_the_frontend() {

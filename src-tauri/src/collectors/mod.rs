@@ -17,7 +17,8 @@ mod sync;
 mod types;
 pub mod workbuddy;
 
-pub use sync::{ClientSyncResult, CollectorRoots, SyncBatch, sync_clients};
+pub(crate) use sync::sync_clients_with_progress;
+pub use sync::{ClientSyncResult, CollectorRoots, SyncBatch, SyncProgress, sync_clients};
 pub use types::{ScanReason, SyncError, SyncOptions, SyncReport};
 
 #[cfg(test)]
