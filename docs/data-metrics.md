@@ -281,7 +281,7 @@ Codex parser_version 升到 2，下一次同步自动重读原日志，历史展
 - CODEX_HOME 优先于默认用户目录，支持 HOME 回退；只读 sessions，未扩展归档扫描。
 - 会话列表日期仍按开始时间筛选，新增分页不改变跨日请求归属。
 
-### 口径 2.7（2026-10-12）：WorkBuddy 原生输出用量
+### 口径 2.7（2026-10-12，纳入 v0.1.5）：WorkBuddy 原生输出用量
 
 - 只读 WORKBUDDY_CONFIG_DIR/projects，未配置时读取 ~/.workbuddy/projects 的 JSONL；只统计 message / assistant / function_call 中携带 usage 的模型调用。其他输出事件用于会话时间范围，不虚构缺用量请求；完全未记录的模型调用数量无法确认。
 - providerData.usage 是原始归一化计数，message.usage 为落盘镜像；二者择字段补缺，绝不求和。inputTokensDetails.cached_tokens 是输入子集，outputTokensDetails.reasoning_tokens 是输出子集；规范输入 / 输出分别扣除这两个子集。显式零保留，缺失保持 NULL；不读取 rawUsage 中的 credit，不把 prompt_cache_miss_tokens 当缓存写入。

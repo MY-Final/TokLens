@@ -386,7 +386,7 @@ sidechain 和 unknown relations；不包含正文，详情查询不回读源文�
 SQLite schema 不变。RangeTotals / StatsBucket 增加成对已知缓存样本会话数与可空缓存命中率基点；ClientUsage / GroupUsage 与对应 DTO 增加 sessionsWithoutUsage，不能仅凭求和结果 0 判断真实零。排行 messages 为组内所有会话明细合计。
 Codex 失败读取不提交 SourceFile 水位；合法无换行末行允许导入，未完成 JSON 尾行下次重试。CODEX_HOME 或用户 home 只在采集发现层解析，来源 DTO 的 sourcePath 是本地展示元数据，不默认对外复制或上传。
 
-## 13. WorkBuddy（口径 2.7，2026-10-12）
+## 13. WorkBuddy（口径 2.7，2026-10-12，纳入 v0.1.5）
 
 实现：collectors/workbuddy/{parser,rollup,sync}.rs，复用 usage/normalize/request_ledger.rs。只读 WORKBUDDY_CONFIG_DIR/projects 或 ~/.workbuddy/projects；不使用 CodeBuddy 的独立目录。现有 SQLite 表结构不变，client 新增 workbuddy。
 
