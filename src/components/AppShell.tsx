@@ -1,9 +1,8 @@
 /** 侧边导航 + 顶部工具栏。 */
 
 import { useEffect, type CSSProperties, type ReactNode } from "react";
-import { BarChart3, Database, LayoutDashboard, ListTree, PanelLeft, Settings } from "lucide-react";
+import { BarChart3, Database, LayoutDashboard, ListTree, Settings } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -43,9 +42,6 @@ const PAGE_TITLES: Record<PageKey, string> = {
 
 export function AppShell({
   page,
-  sidebarCollapsed,
-  sidebarBusy,
-  onSidebarCollapsedChange,
   collectionPaused,
   range,
   nowMs,
@@ -60,9 +56,6 @@ export function AppShell({
   updateControl,
 }: {
   page: PageKey;
-  sidebarCollapsed: boolean;
-  sidebarBusy: boolean;
-  onSidebarCollapsedChange: (collapsed: boolean) => void;
   collectionPaused: boolean;
   range: DateRange;
   nowMs: number;
@@ -78,37 +71,31 @@ export function AppShell({
 }) {
   const sync = status?.sync;
   useEffect(() => {
-    const toggle = (event: KeyboardEvent) => {
+    const preventSidebarToggle = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "b" || (!event.ctrlKey && !event.metaKey)) return;
-      // Intercept the vendor shortcut so preferences use only the native settings store.
+      // The navigation stays expanded; prevent the vendor shortcut and cookie write.
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!sidebarBusy) onSidebarCollapsedChange(!sidebarCollapsed);
     };
-    window.addEventListener("keydown", toggle, true);
-    return () => window.removeEventListener("keydown", toggle, true);
-  }, [sidebarCollapsed, sidebarBusy, onSidebarCollapsedChange]);
+    window.addEventListener("keydown", preventSidebarToggle, true);
+    return () => window.removeEventListener("keydown", preventSidebarToggle, true);
+  }, []);
   return (
-    <SidebarProvider
-      open={!sidebarCollapsed}
-      onOpenChange={(open) => {
-        if (!sidebarBusy) onSidebarCollapsedChange(!open);
-      }}
-      style={{ "--sidebar-width": "208px", "--sidebar-width-icon": "56px" } as CSSProperties}
-    >
-      <Sidebar collapsible="icon" className="border-sidebar-border">
-        <SidebarHeader className="h-16 justify-center px-4 group-data-[collapsible=icon]:px-3">
+    <SidebarProvider open style={{ "--sidebar-width": "208px" } as CSSProperties}>
+      <Sidebar
+        collapsible="none"
+        className="sticky top-0 h-svh shrink-0 border-r border-sidebar-border"
+      >
+        <SidebarHeader className="h-16 justify-center px-4">
           <div className="flex items-center gap-2.5">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <BarChart3 className="size-5" aria-hidden="true" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-foreground group-data-[collapsible=icon]:hidden">
-              TokLens
-            </span>
+            <span className="text-lg font-semibold tracking-tight text-foreground">TokLens</span>
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup className="px-3 group-data-[collapsible=icon]:px-3">
+          <SidebarGroup className="px-3">
             <SidebarGroupContent>
               <SidebarMenu>
                 {NAV_ITEMS.map((item) => (
@@ -151,16 +138,6 @@ export function AppShell({
       <SidebarInset className="min-w-0 bg-background">
         <header className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 px-3 py-2 lg:gap-3 lg:px-5">
           <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={sidebarBusy}
-              onClick={() => onSidebarCollapsedChange(!sidebarCollapsed)}
-              aria-label={sidebarCollapsed ? "展开侧边栏（Ctrl+B）" : "收起侧边栏（Ctrl+B）"}
-              aria-expanded={!sidebarCollapsed}
-            >
-              <PanelLeft className="size-4" aria-hidden="true" />
-            </Button>
             <h1 className="truncate text-base font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
           </div>
           {page !== "settings" && page !== "sources" ? (

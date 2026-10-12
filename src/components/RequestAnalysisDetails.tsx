@@ -1,7 +1,6 @@
-import { useState } from "react";
-import { DashboardCard } from "@/components/DashboardCard";
+import { Fragment, useId, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { EmptyBlock } from "@/components/StateBlocks";
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   Table,
@@ -11,196 +10,244 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { formatNumber, shortenPath } from "@/lib/format";
 import { formatBasisPoints, knownRequestTokens } from "@/lib/request-analysis";
-import type { RequestAnalysis } from "@/lib/usage-types";
+import type { RequestAnalysis, RequestAnalysisMetrics } from "@/lib/usage-types";
 
-export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis; scope: string }) {
+function TokenBreakdown({ metrics }: { metrics: RequestAnalysisMetrics }) {
   const { formatTokensOrDash } = useTokenFormat();
-  const [dimension, setDimension] = useState("models");
-  const totals = data.summary.totals;
-  const sums = totals.totals;
-  const buckets = [
+  const sums = metrics.totals.totals;
+  const fields = [
+    { field: "inputTokens", label: "输入", value: sums.inputTokens, note: "未命中缓存的输入" },
     {
       field: "cacheReadTokens",
       label: "缓存读取",
       value: sums.cacheReadTokens,
       note: "命中缓存的输入",
-      className: "[&_[data-slot=progress-indicator]]:bg-chart-1",
     },
-    {
-      field: "inputTokens",
-      label: "输入",
-      value: sums.inputTokens,
-      note: "未命中缓存的输入",
-      className: "[&_[data-slot=progress-indicator]]:bg-chart-2",
-    },
-    {
-      field: "outputTokens",
-      label: "输出",
-      value: sums.outputTokens,
-      note: "不含已分离的推理",
-      className: "[&_[data-slot=progress-indicator]]:bg-chart-3",
-    },
+    { field: "outputTokens", label: "输出", value: sums.outputTokens, note: "不含已分离的推理" },
     {
       field: "reasoningTokens",
       label: "推理",
       value: sums.reasoningTokens,
-      note: "只统计已记录的字段",
-      className: "[&_[data-slot=progress-indicator]]:bg-chart-4",
+      note: "已单列的推理 Token",
     },
     {
       field: "cacheWriteTokens",
       label: "缓存写入",
-      value: sums.countedCacheWriteTokens,
-      note: "仅计入总量的部分",
-      className: "[&_[data-slot=progress-indicator]]:bg-chart-5",
+      value: sums.cacheWriteTokens,
+      note: "客户端自报缓存写入，是否计入总量取决于客户端口径",
     },
-  ]
-    .map((bucket) => ({
-      ...bucket,
-      value: data.summary.knownTokenFields.includes(bucket.field) ? bucket.value : null,
-    }))
-    .sort((a, b) =>
-      a.value === null ? (b.value === null ? 0 : 1) : b.value === null ? -1 : b.value - a.value,
-    );
-  const max = Math.max(0, ...buckets.map((entry) => entry.value ?? 0));
-  const rankings = dimension === "models" ? data.models : data.projects;
+  ];
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-2">
-      <DashboardCard>
-        <CardHeader className="gap-1.5 px-5">
-          <CardTitle className="text-sm">Token 花在哪里</CardTitle>
-          <CardDescription className="text-xs">{scope} · 已知分项（Token）</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 px-5">
-          {totals.requests === 0 ? (
-            <EmptyBlock title="没有可分析的请求" description="选择其他客户端或时间范围。" />
-          ) : (
-            <>
-              <div className="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 text-xs">
-                <span className="text-muted-foreground">
-                  已知总量 · {formatNumber(totals.requests)} 条请求
-                </span>
-                <span
-                  className="font-mono font-medium tabular-nums"
-                  title={`${knownRequestTokens(data.summary) === null ? "未知" : formatNumber(sums.totalTokens)} Token`}
-                >
-                  {formatTokensOrDash(knownRequestTokens(data.summary))} Token
-                </span>
-              </div>
-              <ul className="space-y-3">
-                {buckets.map((bucket) => (
-                  <li key={bucket.label}>
-                    <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-                      <span title={bucket.note}>{bucket.label}</span>
-                      <span
-                        className="shrink-0 font-mono tabular-nums"
-                        title={`${bucket.value === null ? "未知" : formatNumber(bucket.value)} Token`}
-                      >
-                        {formatTokensOrDash(bucket.value)}
-                      </span>
-                    </div>
-                    <Progress
-                      className={`h-1.5 bg-muted ${bucket.className}`}
-                      value={max > 0 ? ((bucket.value ?? 0) / max) * 100 : 0}
-                      aria-label={`${bucket.label}，相对最大分项的已知用量`}
-                    />
-                  </li>
-                ))}
-              </ul>
-              {totals.requestsWithoutUsage > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {formatNumber(totals.requestsWithoutUsage)} 条请求总量未知
-                </p>
-              ) : null}
-            </>
-          )}
-        </CardContent>
-      </DashboardCard>
-      <DashboardCard>
-        <CardHeader className="flex flex-wrap items-start justify-between gap-3 px-5">
-          <div className="space-y-1.5">
-            <CardTitle className="text-sm">主要用量来源</CardTitle>
-            <CardDescription className="text-xs">
-              {scope} · Top 8 · {dimension === "models" ? "会话主模型" : "项目目录"}
-            </CardDescription>
-          </div>
-          <Tabs value={dimension} onValueChange={setDimension} aria-label="用量来源维度">
-            <TabsList className="h-8">
-              <TabsTrigger className="text-xs" value="models">
-                模型
-              </TabsTrigger>
-              <TabsTrigger className="text-xs" value="projects">
-                项目
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </CardHeader>
-        <CardContent className="px-5">
-          {rankings.length === 0 ? (
-            <EmptyBlock
-              title="没有用量来源记录"
-              description="选择其他客户端或时间范围，或刷新本地数据。"
-            />
-          ) : (
-            <Table className="table-fixed text-xs">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-0">
-                    {dimension === "models" ? "会话主模型" : "项目"}
-                  </TableHead>
-                  <TableHead className="w-24 text-right">已知 Token</TableHead>
-                  <TableHead className="w-16 text-right">占比</TableHead>
-                  <TableHead className="w-16 pr-0 text-right">请求</TableHead>
+    <div className="space-y-3 whitespace-normal">
+      <p className="text-xs text-muted-foreground">
+        Token 分项 · 实测 {formatNumber(metrics.totals.measuredRequests)} 条 · 换算{" "}
+        {formatNumber(metrics.totals.derivedRequests)} 条
+      </p>
+      <dl className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        {fields.map(({ field, label, value, note }) => {
+          const known = metrics.knownTokenFields.includes(field) ? value : null;
+          return (
+            <div key={field} className="min-w-0 space-y-1">
+              <dt className="text-xs text-muted-foreground" title={note}>
+                {label}
+              </dt>
+              <dd
+                className="truncate font-mono text-sm tabular-nums"
+                title={known === null ? "客户端未记录该字段" : `${formatNumber(known)} Token`}
+              >
+                {formatTokensOrDash(known)}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+      {metrics.knownTokenFields.includes("cacheWriteTokens") ? (
+        <p className="text-xs text-muted-foreground">
+          缓存写入中计入总量：
+          <span
+            className="font-mono tabular-nums"
+            title={`${formatNumber(sums.countedCacheWriteTokens)} Token`}
+          >
+            {formatTokensOrDash(sums.countedCacheWriteTokens)}
+          </span>{" "}
+          Token
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+        <span title="已知 Token ÷ 有总量的请求数">
+          均量 {formatTokensOrDash(metrics.averageTokens)} Token / 请求
+        </span>
+        <span
+          title={`缓存读取 ÷（输入＋缓存读取），${formatNumber(metrics.cacheKnownRequests)} 条成对已知样本`}
+        >
+          输入缓存命中率 {formatBasisPoints(metrics.cacheHitBps)} ·{" "}
+          {formatNumber(metrics.cacheKnownRequests)} 条样本
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        分项仅累加已知值，缺失显示 —，不由分项补总量。
+        {metrics.totals.requestsWithoutUsage > 0
+          ? ` ${formatNumber(metrics.totals.requestsWithoutUsage)} 条请求总量未知。`
+          : ""}
+      </p>
+    </div>
+  );
+}
+
+export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis; scope: string }) {
+  const { formatTokensOrDash } = useTokenFormat();
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const detailId = useId();
+
+  if (data.models.length === 0) {
+    return (
+      <EmptyBlock
+        title="当前范围没有请求记录"
+        description={`调整日期范围，或到数据源管理检查${scope === "全部客户端" ? "" : ` ${scope} 的`}采集状态。`}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <Table className="table-fixed text-xs">
+        <TableHeader>
+          <TableRow className="bg-muted/40 hover:bg-muted/40">
+            <TableHead className="w-[40%]">会话主模型</TableHead>
+            <TableHead className="text-right" aria-sort="descending">
+              已知 Token ↓
+            </TableHead>
+            <TableHead className="w-20 text-right">占比</TableHead>
+            <TableHead className="w-16 text-right">请求</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.models.map((entry, index) => {
+            const key = JSON.stringify(entry.key);
+            const isExpanded = expandedModel === key;
+            const metrics = entry.metrics;
+            const total = knownRequestTokens(metrics);
+            const label = entry.key ?? "未记录模型";
+            const rowId = `${detailId}-${index}`;
+            return (
+              <Fragment key={key}>
+                <TableRow className="border-border/60">
+                  <TableCell className="py-3">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      onClick={() => setExpandedModel(isExpanded ? null : key)}
+                      aria-expanded={isExpanded}
+                      aria-controls={rowId}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ChevronRight
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className="min-w-0 font-mono break-all whitespace-normal">{label}</span>
+                    </button>
+                    {metrics.totals.requestsWithoutUsage > 0 ? (
+                      <p className="mt-1 pl-5.5 text-muted-foreground">
+                        {total === null
+                          ? "用量未知"
+                          : `已知子集 · ${formatNumber(metrics.totals.requestsWithoutUsage)} 条未知`}
+                      </p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="py-3 text-right">
+                    <span
+                      className="block truncate font-mono tabular-nums"
+                      title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
+                    >
+                      {formatTokensOrDash(total)}
+                    </span>
+                    {metrics.shareBps !== null ? (
+                      <Progress
+                        value={metrics.shareBps / 100}
+                        className="mt-2 ml-auto h-1 max-w-40 bg-muted [&_[data-slot=progress-indicator]]:bg-chart-1"
+                        aria-label={`${label} 占所选客户端已知 Token 的比例`}
+                      />
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatBasisPoints(metrics.shareBps)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatNumber(metrics.totals.requests)}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rankings.map((entry) => {
-                  const metrics = entry.metrics;
-                  const total = knownRequestTokens(metrics);
-                  const label =
-                    entry.key === null
-                      ? dimension === "models"
-                        ? "未记录模型"
-                        : "未记录项目"
-                      : dimension === "models"
-                        ? entry.key
-                        : shortenPath(entry.key);
-                  return (
-                    <TableRow key={entry.key ?? "unknown"}>
-                      <TableCell className="py-2.5 pl-0">
-                        <span className="block truncate font-mono" title={entry.key ?? label}>
-                          {label}
-                        </span>
-                        {metrics.totals.requestsWithoutUsage > 0 ? (
-                          <span className="text-muted-foreground">
-                            {formatNumber(metrics.totals.requestsWithoutUsage)} 条用量未知
-                          </span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell
-                        className="text-right font-mono tabular-nums"
-                        title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
-                      >
-                        {formatTokensOrDash(total)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatBasisPoints(metrics.shareBps)}
-                      </TableCell>
-                      <TableCell className="pr-0 text-right font-mono tabular-nums">
-                        {formatNumber(metrics.totals.requests)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </DashboardCard>
+                <TableRow id={rowId} hidden={!isExpanded} className="bg-muted/20 hover:bg-muted/20">
+                  <TableCell colSpan={4} className="p-4">
+                    {isExpanded ? <TokenBreakdown metrics={metrics} /> : null}
+                  </TableCell>
+                </TableRow>
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      <details className="group border-t border-border/60 pt-3">
+        <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <ChevronRight
+            className="size-3.5 transition-transform group-open:rotate-90"
+            aria-hidden="true"
+          />
+          项目用量 · Top 8
+        </summary>
+        <Table className="mt-3 table-fixed text-xs">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>项目目录</TableHead>
+              <TableHead className="w-28 text-right">已知 Token</TableHead>
+              <TableHead className="w-20 text-right">占比</TableHead>
+              <TableHead className="w-16 text-right">请求</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.projects.map((entry) => {
+              const total = knownRequestTokens(entry.metrics);
+              const label = entry.key === null ? "未记录项目" : shortenPath(entry.key);
+              return (
+                <TableRow key={JSON.stringify(entry.key)}>
+                  <TableCell>
+                    <span className="block truncate font-mono" title={entry.key ?? label}>
+                      {label}
+                    </span>
+                    {entry.metrics.totals.requestsWithoutUsage > 0 ? (
+                      <span className="text-muted-foreground">
+                        {formatNumber(entry.metrics.totals.requestsWithoutUsage)} 条用量未知
+                      </span>
+                    ) : null}
+                  </TableCell>
+                  <TableCell
+                    className="text-right font-mono tabular-nums"
+                    title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
+                  >
+                    {formatTokensOrDash(total)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatBasisPoints(entry.metrics.shareBps)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {formatNumber(entry.metrics.totals.requests)}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </details>
     </div>
   );
 }

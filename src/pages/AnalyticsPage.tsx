@@ -1,4 +1,4 @@
-/** 用量分析：客户端比较、Token 构成与请求用量归因。 */
+/** 用量分析：按客户端浏览完整模型用量与请求分项。 */
 import { useState } from "react";
 import { RequestAnalysisPanel } from "@/components/RequestAnalysisPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
@@ -12,7 +12,6 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
     async () => ({
       result: await getRequestAnalysis({ fromMs: range.fromMs, toMs: range.toMs, client }),
       client,
-      rangeLabel: range.label,
     }),
     `request-analysis:${range.fromMs ?? "all"}:${range.toMs}:${client ?? "all"}:${refreshToken}`,
     `${rangeScope(range)}:${client ?? "all"}`,
@@ -21,7 +20,7 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
     <RequestAnalysisPanel
       data={analysis.data?.result ?? null}
       selectedClient={client}
-      rangeLabel={analysis.data?.rangeLabel ?? range.label}
+      detailScope={`${rangeScope(range)}:${client ?? "all"}`}
       loading={analysis.loading}
       error={analysis.error}
       onRetry={analysis.reload}

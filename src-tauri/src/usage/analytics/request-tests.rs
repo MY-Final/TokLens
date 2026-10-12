@@ -406,7 +406,7 @@ fn analysis_cache_ratio_uses_paired_fields_and_retains_unknown_and_zero() {
 }
 
 #[test]
-fn analysis_top_groups_keep_full_range_share_denominator() {
+fn analysis_returns_all_models_and_top_projects_with_full_range_shares() {
     let store = UsageStore::open_in_memory().expect("store");
     for i in 0..10 {
         let id = format!("group-{i}");
@@ -420,8 +420,81 @@ fn analysis_top_groups_keep_full_range_share_denominator() {
     let result = store
         .request_analysis(&AnalyticsFilter::default())
         .expect("top groups");
-    assert_eq!(result.models.len(), 8);
+    assert_eq!(result.models.len(), 10);
     assert_eq!(result.projects.len(), 8);
     assert_eq!(result.models[0].metrics.share_bps, Some(1000));
     assert_eq!(result.summary.totals.requests, 10);
+}
+
+#[test]
+fn all_model_groups_keep_client_scope_unknown_fields_and_zero_usage() {
+    let store = UsageStore::open_in_memory().expect("store");
+    for i in 0..10 {
+        let id = format!("model-{i}");
+        session(&store, &id, Client::Codex, "alpha", 0, false);
+        store
+            .conn
+            .execute("UPDATE sessions SET model=?1 WHERE id=?1", [&id])
+            .expect("model");
+        request(&store, &id, &id, Some(10), Some(10), "measured");
+    }
+    session(&store, "zero", Client::Codex, "alpha", 0, false);
+    session(&store, "unknown", Client::Codex, "alpha", 0, false);
+    session(&store, "other", Client::ClaudeCode, "beta", 0, false);
+    store
+        .conn
+        .execute(
+            "UPDATE sessions SET model=id WHERE id IN ('zero', 'unknown')",
+            [],
+        )
+        .expect("special models");
+    request(&store, "zero", "zero", Some(10), Some(0), "derived");
+    request(&store, "unknown", "unknown", Some(10), None, "measured");
+    request(&store, "other", "other", Some(10), Some(500), "measured");
+    store
+        .conn
+        .execute("UPDATE messages SET input_tokens=NULL, reasoning_tokens=NULL, cache_read_tokens=0 WHERE id='unknown'", [])
+        .expect("missing fields and known zero");
+    let all = store
+        .request_analysis(&AnalyticsFilter::default())
+        .expect("all");
+    let selected = store
+        .request_analysis(&AnalyticsFilter {
+            client: Some(Client::Codex),
+            ..Default::default()
+        })
+        .expect("client models");
+    assert_eq!(selected.models.len(), 12);
+    assert_eq!(selected.clients, all.clients);
+    assert_eq!(selected.summary.totals.sums.total_tokens, 100);
+    assert!(selected.models.iter().all(|group| group.key.is_some()));
+    assert_eq!(selected.models[0].metrics.share_bps, Some(1000));
+    let zero = selected
+        .models
+        .iter()
+        .find(|group| group.key.as_deref() == Some("zero"))
+        .expect("zero model");
+    assert_eq!(zero.metrics.totals.requests_with_usage, 1);
+    assert_eq!(zero.metrics.totals.sums.total_tokens, 0);
+    assert_eq!(zero.metrics.totals.derived_requests, 1);
+    assert_eq!(zero.metrics.share_bps, Some(0));
+    let unknown = selected.models.last().expect("unknown last");
+    assert_eq!(unknown.key.as_deref(), Some("unknown"));
+    assert_eq!(unknown.metrics.share_bps, None);
+    assert_eq!(unknown.metrics.totals.requests_without_usage, 1);
+    assert!(
+        !unknown
+            .metrics
+            .known_token_fields
+            .iter()
+            .any(|field| field == "inputTokens" || field == "reasoningTokens")
+    );
+    assert!(
+        unknown
+            .metrics
+            .known_token_fields
+            .iter()
+            .any(|field| field == "cacheReadTokens")
+    );
+    assert_eq!(unknown.metrics.totals.sums.cache_read_tokens, 0);
 }

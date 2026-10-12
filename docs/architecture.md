@@ -247,8 +247,8 @@ usage/tokens ────────→ usage/client
 
 ### 桌面布局、说明分层与更新提醒（2026-10-12）
 
-应用框架复用现有 Sidebar、Popover、DropdownMenu 与 Dialog，采用单工具栏和可折叠图标导航；不手改 vendor 组件。
-`AppSettings` / `SettingsPatch` 增加 `sidebarCollapsed`，默认展开，继续通过原生设置存储持久化并广播，不增加另一套偏好存储。
+应用框架复用现有 Sidebar、Popover、DropdownMenu 与 Dialog，采用单工具栏和固定展开的 208px 导航；不手改 vendor 组件，不提供折叠按钮或 Ctrl+B 切换。
+`AppSettings` / `SettingsPatch` 中的 `sidebarCollapsed` 保留用于旧设置兼容，布局不再读取或写入该字段；不新增偏好存储或迁移。
 新安装、缺失字段与恢复默认的统计范围为 `today`，保留已有用户保存的范围。设置按六个分类呈现，托盘更新入口选择更新分类。
 设置页在应用导航内使用固定的第二级分类侧栏，按应用 / 管理分组；800px 窗口仍保留分类导航，设置内容使用分隔行布局，不引入新的导航库或偏好存储。
 图表浮层直接展示已有后端日桶总量、明细计数和完整度，前端不累加系列；详细采集覆盖与口径改为可点击的数据说明。
@@ -413,8 +413,9 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 ### 用量分析收束（2026-10-12）
 
 用量分析使用独立 `get_request_analysis` 查询：`commands/request_queries` → `usage/analytics/requests` → SQLite。
-请求分析复用已有请求时间过滤与分桶语义，返回完整区间客户端对比、已知请求均量、缓存命中率、Token 分项与模型 / 项目排行。
-全客户端比较不受下钻客户端影响；分项与排行使用选中客户端。模型按会话主模型归属，不能称为逐请求模型。
+请求分析复用已有请求时间过滤与分桶语义，返回完整区间客户端对比、已知请求均量、缓存命中率、Token 分项、全部模型分组与项目 Top 8。
+客户端文字 Tab 复用现有 Tabs 的 line 样式、键盘导航与独立横向滚动；模型表为主内容，每行展开已有分项与来源计数，项目排行位于可展开的次要区。
+全客户端查询结果继续保留；分项与排行使用选中客户端。模型按会话主模型归属，全部客户端下相同模型合并，不能称为逐请求模型。
 所有聚合与比例在 Rust 领域层提供，查询共用读取事务快照；前端只排序、格式化、绘制相对条形。
 新增业务展示组件 `RequestAnalysisPanel`、`RequestAnalysisDetails`，复用现有 Card / Table / Progress / Tabs，不新增目录、依赖、权限或联网能力。
 

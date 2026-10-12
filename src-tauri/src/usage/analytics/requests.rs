@@ -175,7 +175,7 @@ impl UsageStore {
             "s.model",
             filter,
             summary.totals.sums.total_tokens,
-            Some(8),
+            None,
         )?;
         let projects = self.request_analysis_groups(
             "s.project_path",

@@ -123,11 +123,6 @@ export default function App() {
       <TooltipProvider delayDuration={200}>
         <AppShell
           page={page}
-          sidebarCollapsed={settings.settings?.sidebarCollapsed ?? false}
-          sidebarBusy={settings.busy || !settings.settings}
-          onSidebarCollapsedChange={(sidebarCollapsed) => {
-            void settings.patch({ sidebarCollapsed });
-          }}
           collectionPaused={settings.settings?.collectionPaused ?? false}
           range={range}
           nowMs={nowMs}
@@ -142,7 +137,7 @@ export default function App() {
           updateControl={
             <Button
               variant="ghost"
-              className="h-10 w-full justify-start gap-3 px-3 text-primary group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+              className="h-10 w-full justify-start gap-3 px-3 text-primary"
               aria-label={updateLabel}
               title={updateLabel}
               onClick={() => {
@@ -158,7 +153,7 @@ export default function App() {
               }}
             >
               <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate group-data-[collapsible=icon]:hidden">{updateLabel}</span>
+              <span className="truncate">{updateLabel}</span>
             </Button>
           }
           onSync={handleSync}
