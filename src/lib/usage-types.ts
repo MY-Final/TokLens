@@ -117,17 +117,30 @@ export type SessionSummary = {
 
 export type ClientSourceStatus = {
   sourcePath: string | null;
+  sourcePaths: { path: string; state: "available" | "missing" | "inaccessible" }[];
+  /** 本次应用运行期间该客户端最后完成的检查时间，失败也记录。 */
+  lastCheckedMs: number | null;
+  lastResult: ClientSyncResult | null;
   client: ClientKey;
   supported: boolean;
   sessions: number;
+  sessionsWithoutUsage: number;
   messages: number;
   filesTracked: number;
   unparsedRecords: number;
   lastScanMs: number | null;
+  /** 已导入请求的最近原生时间；缺失时间不会用会话时间补造。 */
+  lastRequestMs: number | null;
+};
+
+export type ClientSyncResult = {
+  client: ClientKey;
+  error: string | null;
+  report: SyncReport | null;
 };
 
 export type SyncReport = {
-  clients: { client: ClientKey; error: string | null; report: SyncReport | null }[];
+  clients: ClientSyncResult[];
   rootMissing: boolean;
   filesSeen: number;
   filesParsed: number;
@@ -176,6 +189,31 @@ export type RangeArgs = {
   toMs: number | null;
 };
 
+export type SessionSort = "newest" | "oldest" | "tokens_desc" | "requests_desc";
+/** Tauri get_sessions request DTO, aligned with Rust commands/dto.rs. */
+export type SessionQuery = RangeArgs & {
+  client: ClientKey | null;
+  limit: number | null;
+  offset: number | null;
+  search: string | null;
+  projectPath: string | null;
+  sort: SessionSort | null;
+  model: string | null;
+  modelUnknown: boolean | null;
+  projectUnknown: boolean | null;
+  requestTime: boolean | null;
+};
+/** Undefined means no grouping filter; null selects metadata the client did not record. */
+export type SessionFilters = {
+  client: ClientKey | null;
+  search: string;
+  sort: SessionSort;
+  model?: string | null;
+  projectPath?: string | null;
+  requestTime: boolean;
+};
+export type SessionBrowserState = SessionFilters & { offset: number; rangeScope: string };
+
 /** Request-time sums contain only recorded, non-estimated, timestamped requests. */
 export type RequestTotals = {
   sessions: number;
@@ -191,6 +229,10 @@ export type RequestDailyBucket = {
   totals: RequestTotals;
   clients: { client: ClientKey; totals: RequestTotals }[];
 };
+export type RequestHourlyBucket = {
+  hourStartMs: number;
+  totals: RequestTotals;
+};
 /** All imported records for the selected client, independent of the selected dates. */
 export type RequestCoverage = {
   recordedRequests: number;
@@ -204,6 +246,7 @@ export type RequestActivity = {
   range: RequestTotals;
   clients: RequestAnalysisGroup[];
   daily: RequestDailyBucket[];
+  hourly: RequestHourlyBucket[];
   coverage: RequestCoverage;
 };
 

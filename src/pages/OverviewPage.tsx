@@ -31,8 +31,8 @@ import {
   getSessions,
 } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
-import type { StatsBucket } from "@/lib/usage-types";
-import { rangeScope, type DateRange } from "@/lib/ranges";
+import type { SessionFilters, StatsBucket } from "@/lib/usage-types";
+import { createCustomRange, rangeScope, type DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
   "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
@@ -42,15 +42,22 @@ type OverviewPageProps = {
   nowMs: number;
   refreshToken: number;
   onNavigate: (page: PageKey) => void;
+  onOpenSessions: (filters?: Partial<SessionFilters>, range?: DateRange) => void;
+  basis: UsageBasis;
+  onBasisChange: (basis: UsageBasis) => void;
 };
 
 export function OverviewPage(props: OverviewPageProps) {
-  const [basis, setBasis] = useState<UsageBasis>("requests");
+  const { basis, onBasisChange } = props;
   return (
     <div className="space-y-4">
-      <UsageBasisSelect value={basis} onChange={setBasis} />
+      <UsageBasisSelect value={basis} onChange={onBasisChange} />
       {basis === "requests" ? (
-        <RequestActivityView range={props.range} refreshToken={props.refreshToken} />
+        <RequestActivityView
+          range={props.range}
+          refreshToken={props.refreshToken}
+          onOpenSessions={props.onOpenSessions}
+        />
       ) : (
         <SessionOverview {...props} />
       )}
@@ -58,7 +65,7 @@ export function OverviewPage(props: OverviewPageProps) {
   );
 }
 
-function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPageProps) {
+function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: OverviewPageProps) {
   const { formatTokensOrDash } = useTokenFormat();
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
@@ -200,6 +207,14 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
       />
 
       <CalendarHeatmap
+        onSelectDay={(day) => {
+          const from = Math.max(
+            day,
+            calendarPeriod === "year" ? calendarStart : (range.fromMs ?? day),
+          );
+          const to = Math.min(addDays(day, 1).getTime(), range.toMs);
+          onOpenSessions({}, createCustomRange(from, to));
+        }}
         selectedRange={
           calendarPeriod === "year" ? { fromMs: calendarStart, toMs: range.toMs } : range
         }
@@ -223,12 +238,14 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
 
       <div className="grid gap-4 lg:grid-cols-2">
         <ClientUsageCard
+          onOpenClient={(client) => onOpenSessions({ client })}
           usage={clients.data}
           loading={clients.loading}
           error={clients.error}
           onRetry={clients.reload}
         />
         <RankingCard
+          onOpenEntry={(model) => onOpenSessions({ model })}
           title="模型排行"
           description="会话主模型 · Top 5"
           entries={rankings.data?.models ?? null}
@@ -241,6 +258,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
       </div>
 
       <RankingCard
+        onOpenEntry={(projectPath) => onOpenSessions({ projectPath })}
         title="项目排行"
         description="项目目录 · Top 5"
         entries={rankings.data?.projects ?? null}
@@ -262,7 +280,7 @@ function SessionOverview({ range, nowMs, refreshToken, onNavigate }: OverviewPag
             loading={sessions.loading}
             error={sessions.error}
             onRetry={sessions.reload}
-            onOpenAll={() => onNavigate("sessions")}
+            onOpenAll={() => onOpenSessions()}
           />
         </CardContent>
       </DashboardCard>

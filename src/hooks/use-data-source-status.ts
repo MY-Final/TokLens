@@ -1,8 +1,8 @@
 /** 同步结束后刷新来源状态与统计；事件丢失时通过轮询恢复。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getDataSourceStatus, onSyncEvent, syncUsage, toErrorMessage } from "@/lib/api";
-import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
+import { getDataSourceStatus, onSyncEvent, syncClient, syncUsage, toErrorMessage } from "@/lib/api";
+import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 
 export type SyncController = {
   status: DataSourceStatus | null;
@@ -10,7 +10,7 @@ export type SyncController = {
   loading: boolean;
   refreshToken: number;
   syncBusy: boolean;
-  syncNow: (force?: boolean) => Promise<void>;
+  syncNow: (force?: boolean, client?: ClientKey) => Promise<void>;
   reload: () => Promise<void>;
 };
 
@@ -96,10 +96,11 @@ export function useDataSourceStatus(): SyncController {
   }, [syncBusy, reload]);
 
   const syncNow = useCallback(
-    async (force = false) => {
+    async (force = false, client?: ClientKey) => {
       setSyncBusy(true);
       try {
-        await syncUsage(force);
+        if (client) await syncClient(client, force);
+        else await syncUsage(force);
         // The command reply can be older than a fast completion event.
         await reload();
       } catch (cause: unknown) {

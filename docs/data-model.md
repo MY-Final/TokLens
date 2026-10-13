@@ -453,3 +453,7 @@ session.totalTokens 是会话client_reported；turnNumber 是轮级去重键。�
 请求按用量id、会话按session_id；同turn不同id保持独立。cache_read/write独立计入规范总量；reasoning=0且四必需桶完整才derived求和，非零/缺失reasoning标mcode.reasoning_relation_unverified、output与total NULL。会话按完整请求求和，坏行使完整总量未知，NULL模型不回填。
 复用collectors/sqlite_snapshot.rs校验主库/WAL已提交帧并在内存只读反序列化；不打开客户端SHM，不checkpoint，不落盘镜像。前后指纹一致才replace_client_snapshot；坏SQLite/schema报告files_failed，失败与源变化保留旧历史水位。无用量表的旧库保留unknown会话，partial，不造零。
 计入缓存写入的查询同时支持MCode会话和请求；客户端fresh/goal summary排除缓存，不能用作TokLens完整总量对账依据。无schema变化、依赖、权限、费用或网络新增。
+
+### 查询筛选与小时展示补充（2026-10-13）
+
+会话摘要查询增加 `SessionListOptions`，默认仍按开始时间；请求模式使用现有 `messages` 的非估算、有时间记录做 EXISTS 筛选，返回的 Token 保持整会话累计。元数据搜索、精确模型 / 项目筛选、NULL 组与排序不改写源字段或存储数据。请求时间统计新增可选小时边界与小时桶，沿用日桶的来源过滤、半开范围和未知值语义；无 schema、迁移、Token 公式或去重变更。来源诊断从现有表查询未知总量会话数及最近非估算记录时间，扫描结果只在应用内存保存。

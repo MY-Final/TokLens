@@ -75,8 +75,8 @@ export function SessionTable({
         <LoadingRows rows={6} />
       ) : rows.length === 0 ? (
         <EmptyBlock
-          title="所选区间没有会话"
-          description="调整时间范围，或在数据源管理里执行一次同步。"
+          title="没有匹配的会话"
+          description="调整时间范围或筛选条件，或在数据源管理里执行一次同步。"
         />
       ) : (
         <div className="overflow-x-auto">

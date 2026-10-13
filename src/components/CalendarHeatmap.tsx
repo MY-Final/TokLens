@@ -73,6 +73,7 @@ export function CalendarHeatmap({
   rangeLabel,
   controls,
   selectedRange,
+  onSelectDay,
 }: {
   buckets: DailyTokenBucket[] | null;
   loading: boolean;
@@ -81,6 +82,7 @@ export function CalendarHeatmap({
   rangeLabel: string;
   controls?: ReactNode;
   selectedRange?: DailyRange;
+  onSelectDay?: (dayStartMs: number) => void;
 }) {
   const [metric, setMetric] = useState<Metric>("tokens");
   const titleId = useId();
@@ -219,6 +221,7 @@ export function CalendarHeatmap({
                                   maxValue={maxValue}
                                   partial={partial}
                                   className="size-4"
+                                  onClick={onSelectDay ? () => onSelectDay(day.ms) : undefined}
                                   label={`${dateLabel(day.ms)}，${label}：${exact}。${basis}${coverage}`}
                                 >
                                   <UsageTooltip
@@ -255,6 +258,7 @@ export function CalendarHeatmap({
                         ? "按会话开始日期归属；会话数量不受 Token 是否已知影响。"
                         : "请求明细按所属会话开始日期归属，为已采集记录，可能不完整；不代表客户端的全部请求。"}
                     悬停或键盘聚焦日期查看精确值与口径。
+                    {onSelectDay ? "点击日期查看当天开始的会话。" : ""}
                   </p>
                 </DataExplanation>
               </>

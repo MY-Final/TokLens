@@ -104,6 +104,7 @@ import type {
   SessionDetail,
   Rankings,
   SessionSummary,
+  SessionQuery,
   SyncState,
 } from "@/lib/usage-types";
 export type {
@@ -152,7 +153,11 @@ export function getOverviewStats(
 }
 
 export function getRequestActivity(
-  args: RangeArgs & { dayBoundaries: number[]; client?: ClientKey | null },
+  args: RangeArgs & {
+    dayBoundaries: number[];
+    hourlyBoundaries?: number[];
+    client?: ClientKey | null;
+  },
 ): Promise<RequestActivity> {
   return invoke("get_request_activity", { ...args, client: args.client ?? null });
 }
@@ -208,15 +213,32 @@ export function getRankings(
 }
 
 export function getSessions(
-  args: RangeArgs & { client?: ClientKey | null; limit?: number; offset?: number },
+  args: RangeArgs & {
+    client?: ClientKey | null;
+    limit?: number;
+    offset?: number;
+    search?: string | null;
+    projectPath?: string | null;
+    sort?: "newest" | "oldest" | "tokens_desc" | "requests_desc";
+    model?: string | null;
+    requestTime?: boolean;
+  },
 ): Promise<SessionSummary[]> {
-  return invoke<SessionSummary[]>("get_sessions", {
+  const query: SessionQuery = {
     fromMs: args.fromMs,
     toMs: args.toMs,
     client: args.client ?? null,
     limit: args.limit ?? null,
     offset: args.offset ?? null,
-  });
+    search: args.search ?? null,
+    projectPath: args.projectPath ?? null,
+    sort: args.sort ?? "newest",
+    model: args.model ?? null,
+    modelUnknown: args.model === null,
+    projectUnknown: args.projectPath === null,
+    requestTime: args.requestTime ?? false,
+  };
+  return invoke<SessionSummary[]>("get_sessions", { args: query });
 }
 
 export function getDataSourceStatus(): Promise<DataSourceStatus> {
@@ -229,6 +251,10 @@ export function syncUsage(force = false): Promise<SyncState> {
 
 export function syncCodex(force = false): Promise<SyncState> {
   return invoke<SyncState>("sync_codex", { force });
+}
+
+export function syncClient(client: ClientKey, force = true): Promise<SyncState> {
+  return invoke<SyncState>("sync_client", { client, force });
 }
 
 /** 订阅同步状态变化（开始/结束）。返回取消订阅函数。 */

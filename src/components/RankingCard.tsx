@@ -7,6 +7,7 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { ModelIdentity } from "@/components/ModelIdentity";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -29,6 +30,7 @@ export function RankingCard({
   emptyTitle,
   emptyDescription,
   shortenKeys = false,
+  onOpenEntry,
 }: {
   title: string;
   description: string;
@@ -39,6 +41,7 @@ export function RankingCard({
   emptyTitle: string;
   emptyDescription: string;
   shortenKeys?: boolean;
+  onOpenEntry?: (key: string | null) => void;
 }) {
   const { formatTokens } = useTokenFormat();
   const rows = entries ?? [];
@@ -131,7 +134,19 @@ export function RankingCard({
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono text-xs text-muted-foreground">
-                      {formatNumber(entry.sessions)}
+                      {onOpenEntry ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-auto p-0 text-xs"
+                          aria-label={`查看 ${label} 会话`}
+                          onClick={() => onOpenEntry(entry.key)}
+                        >
+                          {formatNumber(entry.sessions)}
+                        </Button>
+                      ) : (
+                        formatNumber(entry.sessions)
+                      )}
                     </TableCell>
                     <TableCell
                       className="pr-0 text-right font-mono text-xs"

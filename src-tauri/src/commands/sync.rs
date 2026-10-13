@@ -26,6 +26,21 @@ pub(super) fn request_codex_sync(
     request_sync_for(app, force, &[Client::Codex])
 }
 
+pub(super) fn request_client_sync(
+    app: &AppHandle,
+    client: Client,
+    force: bool,
+) -> Result<SyncStateDto, CommandError> {
+    let preferences = app
+        .state::<crate::settings::SettingsStore>()
+        .snapshot()
+        .map_err(CommandError::new)?;
+    if !preferences.settings.clients().contains(&client) {
+        return Err(CommandError::new("此客户端采集已停用，请先开启后再重扫"));
+    }
+    request_sync_for(app, force, &[client])
+}
+
 fn request_sync_for(
     app: &AppHandle,
     force: bool,
@@ -93,6 +108,12 @@ fn spawn_sync(app: AppHandle, force: bool, clients: Vec<Client>) {
             };
             match outcome {
                 Ok(report) => {
+                    if let Some(finished_at_ms) = sync.finished_at_ms {
+                        for result in &report.clients {
+                            sync.client_checks
+                                .insert(result.client, (finished_at_ms, result.clone()));
+                        }
+                    }
                     sync.error = report.has_errors().then(|| {
                         "部分数据源同步失败，其他数据源已继续处理；请查看各客户端状态".to_string()
                     });

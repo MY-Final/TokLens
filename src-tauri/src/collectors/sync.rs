@@ -29,7 +29,69 @@ pub struct CollectorRoots {
     pub mcode: Option<PathBuf>,
 }
 
+/// Root readability only; checking a file never reads its contents.
+pub(crate) struct SourceLocation {
+    pub(crate) path: PathBuf,
+    pub(crate) state: &'static str,
+}
+
+impl SourceLocation {
+    fn inspect(path: PathBuf) -> Self {
+        let path = if path.is_absolute() {
+            path
+        } else {
+            std::env::current_dir()
+                .map(|directory| directory.join(&path))
+                .unwrap_or(path)
+        };
+        let state = match std::fs::metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
+            Err(_) => "inaccessible",
+            Ok(metadata) if metadata.is_dir() => {
+                if std::fs::read_dir(&path).is_ok() {
+                    "available"
+                } else {
+                    "inaccessible"
+                }
+            }
+            Ok(metadata) if metadata.is_file() => {
+                if std::fs::File::open(&path).is_ok() {
+                    "available"
+                } else {
+                    "inaccessible"
+                }
+            }
+            Ok(_) => "inaccessible",
+        };
+        Self { path, state }
+    }
+}
+
 impl CollectorRoots {
+    pub(crate) fn source_locations(&self, client: Client) -> Vec<SourceLocation> {
+        self.paths(client)
+            .into_iter()
+            .map(SourceLocation::inspect)
+            .collect()
+    }
+    /// All configured scan locations, including Copilot's independent metadata sources.
+    fn paths(&self, client: Client) -> Vec<PathBuf> {
+        let mut paths: Vec<PathBuf> = self
+            .path(client)
+            .map(|path| path.to_path_buf())
+            .into_iter()
+            .collect();
+        if client == Client::Copilot {
+            if let Some(root) = self.copilot.as_ref().and_then(|path| path.parent()) {
+                paths.push(root.join("session-state"));
+            }
+            if let Some(root) = &self.copilot_agent_host {
+                paths.push(root.clone());
+            }
+        }
+        paths
+    }
+
     pub fn path(&self, client: Client) -> Option<&std::path::Path> {
         match client {
             Client::Codex => &self.codex,
@@ -204,6 +266,70 @@ pub(crate) fn sync_clients_with_progress(
 mod tests {
     use super::*;
     use crate::collectors::test_support::TempDir;
+
+    #[test]
+    fn single_client_rescan_leaves_other_sources_unprocessed() {
+        let dir = TempDir::new();
+        let invalid = dir.0.join("invalid.sqlite");
+        std::fs::write(&invalid, b"invalid").expect("synthetic source");
+        let store = UsageStore::open_in_memory().expect("store");
+        let roots = CollectorRoots {
+            mcode: Some(invalid),
+            grok: Some(dir.0.join("missing-grok")),
+            ..Default::default()
+        };
+        let batch = sync_clients(
+            &store,
+            &roots,
+            &SyncOptions { force_rescan: true },
+            &[Client::Grok],
+        );
+        assert_eq!(batch.clients.len(), 1);
+        assert_eq!(batch.clients[0].client, Client::Grok);
+        assert!(
+            batch.clients[0]
+                .report
+                .as_ref()
+                .expect("report")
+                .root_missing
+        );
+        assert!(
+            !batch.has_errors(),
+            "the invalid non-selected database is not scanned"
+        );
+    }
+
+    #[test]
+    fn copilot_diagnostics_include_all_scan_roots() {
+        let roots = CollectorRoots {
+            copilot: Some(PathBuf::from("fixture/copilot/session-store.db")),
+            copilot_agent_host: Some(PathBuf::from("fixture/code/agentSessionData")),
+            ..Default::default()
+        };
+        assert_eq!(
+            roots.paths(Client::Copilot),
+            vec![
+                PathBuf::from("fixture/copilot/session-store.db"),
+                PathBuf::from("fixture/copilot/session-state"),
+                PathBuf::from("fixture/code/agentSessionData"),
+            ]
+        );
+        assert!(roots.paths(Client::Codex).is_empty());
+    }
+
+    #[test]
+    fn source_location_checks_only_readability_and_distinguishes_missing_roots() {
+        let dir = TempDir::new();
+        let file = dir.0.join("metadata.sqlite");
+        std::fs::write(&file, b"synthetic").expect("source fixture");
+        assert_eq!(SourceLocation::inspect(dir.0.clone()).state, "available");
+        assert_eq!(SourceLocation::inspect(file.clone()).state, "available");
+        assert_eq!(
+            SourceLocation::inspect(dir.0.join("missing")).state,
+            "missing"
+        );
+        assert_eq!(std::fs::read(file).expect("unchanged source"), b"synthetic");
+    }
 
     #[test]
     fn new_clients_report_independently_after_an_invalid_mcode_database() {

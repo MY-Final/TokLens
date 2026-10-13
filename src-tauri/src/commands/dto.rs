@@ -108,6 +108,24 @@ impl From<ClientParam> for Client {
     }
 }
 
+/// Metadata-only request object for session list search, sorting and drilldown.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionQuery {
+    pub from_ms: Option<i64>,
+    pub to_ms: Option<i64>,
+    pub client: Option<ClientParam>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+    pub search: Option<String>,
+    pub project_path: Option<String>,
+    pub sort: Option<String>,
+    pub model: Option<String>,
+    pub model_unknown: Option<bool>,
+    pub project_unknown: Option<bool>,
+    pub request_time: Option<bool>,
+}
+
 /// 已实现本地采集器的客户端；实际发现状态由逐客户端同步结果提供。
 pub fn is_supported(client: Client) -> bool {
     matches!(
@@ -336,26 +354,53 @@ impl From<SessionSummary> for SessionSummaryDto {
 #[serde(rename_all = "camelCase")]
 pub struct ClientSourceStatusDto {
     pub source_path: Option<String>,
+    pub source_paths: Vec<SourcePathDto>,
+    pub last_checked_ms: Option<i64>,
+    pub last_result: Option<ClientSyncResultDto>,
     pub client: String,
     pub supported: bool,
     pub sessions: i64,
+    pub sessions_without_usage: i64,
     pub messages: i64,
     pub files_tracked: i64,
     pub unparsed_records: i64,
     pub last_scan_ms: Option<i64>,
+    pub last_request_ms: Option<i64>,
+}
+
+/// Readability check only: it never parses a source file or includes error details.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourcePathDto {
+    pub path: String,
+    pub state: String,
+}
+
+impl From<crate::collectors::SourceLocation> for SourcePathDto {
+    fn from(location: crate::collectors::SourceLocation) -> Self {
+        Self {
+            path: location.path.to_string_lossy().into_owned(),
+            state: location.state.to_string(),
+        }
+    }
 }
 
 impl From<ClientSourceStatus> for ClientSourceStatusDto {
     fn from(status: ClientSourceStatus) -> Self {
         Self {
             source_path: None,
+            source_paths: Vec::new(),
+            last_checked_ms: None,
+            last_result: None,
             client: status.client.as_str().to_string(),
             supported: is_supported(status.client),
             sessions: status.sessions,
+            sessions_without_usage: status.sessions_without_usage,
             messages: status.messages,
             files_tracked: status.files_tracked,
             unparsed_records: status.unparsed_records,
             last_scan_ms: status.last_scan_ms,
+            last_request_ms: status.last_request_ms,
         }
     }
 }

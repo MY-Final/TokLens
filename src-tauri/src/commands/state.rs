@@ -1,8 +1,10 @@
 //! Application database and shared synchronization state.
 
 use super::{CommandError, SyncStateDto};
-use crate::collectors::{SyncBatch, SyncProgress};
+use crate::collectors::{ClientSyncResult, SyncBatch, SyncProgress};
+use crate::usage::client::Client;
 use crate::usage::store::{UsageError, UsageStore};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
@@ -16,6 +18,8 @@ pub struct SyncState {
     pub error: Option<String>,
     pub report: Option<SyncBatch>,
     pub progress: Option<SyncProgress>,
+    /// Last completed check for each client during this application run.
+    pub client_checks: BTreeMap<Client, (i64, ClientSyncResult)>,
 }
 
 /// 应用状态：本地库连接 + 库路径 + 同步状态。

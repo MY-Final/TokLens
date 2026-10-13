@@ -12,6 +12,27 @@ pub struct AnalyticsFilter<'a> {
     pub project_path: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionListOptions<'a> {
+    pub search: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub model_unknown: bool,
+    pub project_unknown: bool,
+    /// Include sessions with non-estimated, timestamped requests inside the exact range.
+    pub request_time: bool,
+    pub sort: SessionSort,
+}
+
+/// Stable, metadata-only ordering for the paginated session list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SessionSort {
+    #[default]
+    Newest,
+    Oldest,
+    TotalTokens,
+    Requests,
+}
+
 /// 聚合结果（token 分桶之和）。缺失值不参与求和，单独由 `sessions_without_usage` 统计。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TokenSums {
@@ -101,8 +122,10 @@ pub struct SessionSummary {
 pub struct ClientSourceStatus {
     pub client: Client,
     pub sessions: i64,
+    pub sessions_without_usage: i64,
     pub messages: i64,
     pub files_tracked: i64,
     pub unparsed_records: i64,
     pub last_scan_ms: Option<i64>,
+    pub last_request_ms: Option<i64>,
 }

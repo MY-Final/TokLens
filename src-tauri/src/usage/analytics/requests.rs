@@ -29,6 +29,12 @@ pub struct RequestDailyBucket {
     pub clients: Vec<RequestDailyClient>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequestHourlyBucket {
+    pub hour_start_ms: i64,
+    pub totals: RequestTotals,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RequestCoverage {
     pub recorded_requests: i64,
@@ -44,6 +50,7 @@ pub struct RequestActivity {
     pub range: RequestTotals,
     pub clients: Vec<RequestAnalysisGroup>,
     pub daily: Vec<RequestDailyBucket>,
+    pub hourly: Vec<RequestHourlyBucket>,
     pub coverage: RequestCoverage,
 }
 
@@ -252,13 +259,28 @@ impl UsageStore {
         filter: &AnalyticsFilter<'_>,
         day_boundaries: &[i64],
     ) -> Result<RequestActivity, UsageError> {
+        self.request_activity_with_hourly(filter, day_boundaries, &[])
+    }
+
+    pub fn request_activity_with_hourly(
+        &self,
+        filter: &AnalyticsFilter<'_>,
+        day_boundaries: &[i64],
+        hourly_boundaries: &[i64],
+    ) -> Result<RequestActivity, UsageError> {
         if day_boundaries.len() == 1
             || day_boundaries.len() > 401
             || day_boundaries.windows(2).any(|pair| pair[0] >= pair[1])
+            || hourly_boundaries.len() == 1
+            || hourly_boundaries.len() > 27
+            || hourly_boundaries.windows(2).any(|pair| pair[0] >= pair[1])
+            || (!hourly_boundaries.is_empty()
+                && (hourly_boundaries.first().copied() != filter.from_ms
+                    || hourly_boundaries.last().copied() != filter.to_ms))
             || matches!((filter.from_ms, filter.to_ms), (Some(from), Some(to)) if from >= to)
         {
             return Err(UsageError::InvalidInput(
-                "request range and daily boundaries must be increasing; at most 400 days".into(),
+                "request range and boundaries must be increasing; at most 400 days and 26 hours; hours must match the range".into(),
             ));
         }
         let transaction = self.conn.unchecked_transaction()?;
@@ -322,13 +344,67 @@ impl UsageStore {
                 }
             }
         }
+        let hourly = if hourly_boundaries.len() >= 2 {
+            let current = self.request_totals_by_boundaries(filter, hourly_boundaries)?;
+            hourly_boundaries
+                .windows(2)
+                .enumerate()
+                .map(|(index, pair)| RequestHourlyBucket {
+                    hour_start_ms: pair[0],
+                    totals: current.get(index).copied().unwrap_or_default(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         transaction.commit()?;
         Ok(RequestActivity {
             range,
             clients,
             daily,
+            hourly,
             coverage,
         })
+    }
+
+    fn request_totals_by_boundaries(
+        &self,
+        filter: &AnalyticsFilter<'_>,
+        boundaries: &[i64],
+    ) -> Result<Vec<RequestTotals>, UsageError> {
+        if boundaries.len() < 2 {
+            return Ok(Vec::new());
+        }
+        let values = boundaries
+            .windows(2)
+            .enumerate()
+            .map(|(index, pair)| format!("({index},{},{})", pair[0], pair[1]))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "WITH hours(idx,start_ms,end_ms) AS (VALUES {values})
+             SELECT h.idx, {REQUEST_COLUMNS} {REQUEST_FROM}
+             JOIN hours h ON m.created_at_ms >= h.start_ms AND m.created_at_ms < h.end_ms
+             {REQUEST_WHERE} GROUP BY h.idx ORDER BY h.idx"
+        );
+        let mut totals = vec![RequestTotals::default(); boundaries.len() - 1];
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(
+            rusqlite::params![
+                filter.from_ms,
+                filter.to_ms,
+                filter.client.map(Client::as_str),
+                filter.project_path
+            ],
+            |row| Ok((row.get::<_, u32>(0)? as usize, read_totals(row, 1)?)),
+        )?;
+        for row in rows {
+            let (index, value) = row?;
+            if let Some(slot) = totals.get_mut(index) {
+                *slot = value;
+            }
+        }
+        Ok(totals)
     }
 
     fn request_coverage(

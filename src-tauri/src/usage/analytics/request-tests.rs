@@ -121,6 +121,111 @@ fn request_time_range_is_half_open_and_independent_of_session_start_and_totals()
 }
 
 #[test]
+fn hourly_request_activity_preserves_cutoff_unknown_zero_and_source_filters() {
+    let store = UsageStore::open_in_memory().expect("store");
+    session(&store, "a", Client::Codex, "alpha", -1, true);
+    let hour = 3_600_000;
+    let cutoff = 3 * hour + 60_000;
+    request(&store, "unknown", "a", Some(0), None, "measured");
+    request(&store, "zero", "a", Some(hour), Some(0), "derived");
+    request(&store, "known", "a", Some(3 * hour), Some(25), "measured");
+    request(
+        &store,
+        "mixed-unknown",
+        "a",
+        Some(3 * hour),
+        None,
+        "derived",
+    );
+    request(&store, "at-cutoff", "a", Some(cutoff), Some(99), "measured");
+    request(&store, "untimed", "a", None, Some(99), "measured");
+    request(&store, "estimated", "a", Some(hour), Some(99), "estimated");
+    let filter = AnalyticsFilter {
+        from_ms: Some(0),
+        to_ms: Some(cutoff),
+        ..Default::default()
+    };
+    let result = store
+        .request_activity_with_hourly(
+            &filter,
+            &[0, 24 * hour],
+            &[0, hour, 2 * hour, 3 * hour, cutoff],
+        )
+        .expect("hourly");
+    assert_eq!(result.range.requests, 4);
+    assert_eq!(result.hourly.len(), 4);
+    assert_eq!(result.hourly[0].totals.requests_without_usage, 1);
+    assert_eq!(result.hourly[1].totals.requests_with_usage, 1);
+    assert_eq!(result.hourly[1].totals.sums.total_tokens, 0);
+    assert_eq!(result.hourly[2].totals.requests, 0);
+    assert_eq!(result.hourly[3].totals.requests, 2);
+    assert_eq!(result.hourly[3].totals.requests_without_usage, 1);
+    assert_eq!(result.hourly[3].totals.sums.total_tokens, 25);
+    assert_eq!(
+        result
+            .hourly
+            .iter()
+            .map(|bucket| bucket.totals.sums.total_tokens)
+            .sum::<i64>(),
+        result.range.sums.total_tokens
+    );
+    assert_eq!(result.coverage.untimed_requests, 1);
+    assert_eq!(result.coverage.estimated_requests, 1);
+    assert_eq!(result.coverage.sessions_partial, 1);
+    assert!(
+        store
+            .request_activity_with_hourly(&filter, &[0, 24 * hour], &[0])
+            .is_err()
+    );
+    assert!(
+        store
+            .request_activity_with_hourly(&filter, &[0, 24 * hour], &[0, cutoff - 1])
+            .is_err()
+    );
+    assert!(
+        store
+            .request_activity_with_hourly(&filter, &[0, 24 * hour], &[0, 0, cutoff])
+            .is_err()
+    );
+}
+
+#[test]
+fn hourly_boundaries_keep_client_project_filters_and_variable_bucket_lengths() {
+    let store = UsageStore::open_in_memory().expect("store");
+    session(&store, "a", Client::Codex, "alpha", 0, false);
+    session(&store, "b", Client::ClaudeCode, "alpha", 0, false);
+    session(&store, "c", Client::Codex, "beta", 0, false);
+    for id in ["a", "b", "c"] {
+        request(&store, id, id, Some(15), Some(5), "measured");
+    }
+    request(&store, "boundary", "a", Some(20), Some(10), "measured");
+    let filter = AnalyticsFilter {
+        from_ms: Some(0),
+        to_ms: Some(25),
+        client: Some(Client::Codex),
+        project_path: Some("alpha"),
+    };
+    let result = store
+        .request_activity_with_hourly(&filter, &[0, 25], &[0, 10, 20, 25])
+        .expect("variable hours");
+    assert_eq!(
+        result
+            .hourly
+            .iter()
+            .map(|bucket| bucket.totals.requests)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 1]
+    );
+    assert_eq!(result.hourly[2].hour_start_ms, 20);
+    assert_eq!(result.range.sums.total_tokens, 15);
+    assert!(
+        store
+            .request_activity_with_hourly(&filter, &[0, 25], &(0..28).collect::<Vec<_>>())
+            .is_err()
+    );
+}
+
+#[test]
 fn coverage_retains_untimed_and_estimated_requests_and_unknown_usage_is_not_zero() {
     let store = UsageStore::open_in_memory().expect("store");
     session(&store, "a", Client::Codex, "alpha", 0, true);

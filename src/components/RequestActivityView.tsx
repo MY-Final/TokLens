@@ -2,19 +2,21 @@ import { RequestActivityPanel } from "@/components/RequestActivityPanel";
 import { ClientUsageCard } from "@/components/ClientUsageCard";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getRequestActivity } from "@/lib/api";
-import { localDayBoundaries } from "@/lib/ranges";
+import { localDayBoundaries, localHourBoundaries } from "@/lib/ranges";
 import { rangeScope, type DateRange } from "@/lib/ranges";
-import type { ClientKey } from "@/lib/usage-types";
+import type { ClientKey, SessionFilters } from "@/lib/usage-types";
 import { GROK_USAGE_NOTE } from "@/lib/client-labels";
 
 export function RequestActivityView({
   range,
   refreshToken,
   client = null,
+  onOpenSessions,
 }: {
   range: DateRange;
   refreshToken: number;
   client?: ClientKey | null;
+  onOpenSessions?: (filters: Partial<SessionFilters>) => void;
 }) {
   const activity = useAsyncData(
     () =>
@@ -22,6 +24,7 @@ export function RequestActivityView({
         fromMs: range.fromMs,
         toMs: range.toMs,
         dayBoundaries: localDayBoundaries(range),
+        hourlyBoundaries: localHourBoundaries(range),
         client,
       }),
     `requests:${client ?? "all"}:${range.fromMs ?? "all"}:${range.toMs}:${range.dayStartMs}:${range.dayCount}:${refreshToken}`,
@@ -50,6 +53,11 @@ export function RequestActivityView({
         selectedRange={range}
       />
       <ClientUsageCard
+        onOpenClient={
+          onOpenSessions
+            ? (selectedClient) => onOpenSessions({ client: selectedClient, requestTime: true })
+            : undefined
+        }
         basis="requests"
         usage={activity.data?.clients ?? null}
         loading={activity.loading}

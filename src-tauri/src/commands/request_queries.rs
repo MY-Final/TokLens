@@ -31,6 +31,7 @@ pub fn get_request_activity(
     to_ms: Option<i64>,
     client: Option<ClientParam>,
     day_boundaries: Vec<i64>,
+    hourly_boundaries: Option<Vec<i64>>,
 ) -> Result<RequestActivityDto, CommandError> {
     if matches!((from_ms, to_ms), (Some(from), Some(to)) if from >= to)
         || day_boundaries.len() < 2
@@ -47,7 +48,11 @@ pub fn get_request_activity(
     };
     Ok(state
         .store()?
-        .request_activity(&filter, &day_boundaries)?
+        .request_activity_with_hourly(
+            &filter,
+            &day_boundaries,
+            &hourly_boundaries.unwrap_or_default(),
+        )?
         .into())
 }
 

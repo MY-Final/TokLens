@@ -20,10 +20,25 @@ import { useLocalClock } from "@/hooks/use-local-clock";
 import { useTrayUsage } from "@/hooks/use-tray-usage";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { resolveRange, type DateRange } from "@/lib/ranges";
+import { rangeScope, resolveRange, type DateRange } from "@/lib/ranges";
+import type { ClientKey, SessionBrowserState, SessionFilters } from "@/lib/usage-types";
+import type { UsageBasis } from "@/components/UsageBasisSelect";
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
+  const [overviewBasis, setOverviewBasis] = useState<UsageBasis>("requests");
+  const [analyticsClient, setAnalyticsClient] = useState<ClientKey | null>(null);
+  const [sessionOrigin, setSessionOrigin] = useState<{ page: PageKey; range: DateRange } | null>(
+    null,
+  );
+  const [sessionState, setSessionState] = useState<SessionBrowserState>({
+    client: null,
+    search: "",
+    sort: "newest",
+    requestTime: false,
+    offset: 0,
+    rangeScope: "",
+  });
   const [updateFocusToken, setUpdateFocusToken] = useState(0);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<DateRange | null>(null);
@@ -61,6 +76,21 @@ export default function App() {
     },
     [syncNow],
   );
+
+  const openSessions = (filters: Partial<SessionFilters> = {}, nextRange = range) => {
+    setSessionOrigin({ page, range });
+    if (nextRange !== range) setSelectedRange(nextRange);
+    setSessionState({
+      client: null,
+      search: "",
+      sort: "newest",
+      requestTime: false,
+      ...filters,
+      offset: 0,
+      rangeScope: rangeScope(nextRange),
+    });
+    handleNavigate("sessions");
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -133,7 +163,14 @@ export default function App() {
             void Promise.all([reload(), settings.reload()]);
           }}
           onNavigate={handleNavigate}
-          onRangeChange={setSelectedRange}
+          onRangeChange={(nextRange) => {
+            setSelectedRange(nextRange);
+            setSessionState((current) => ({
+              ...current,
+              offset: 0,
+              rangeScope: rangeScope(nextRange),
+            }));
+          }}
           updateControl={
             <Button
               variant="ghost"
@@ -164,12 +201,37 @@ export default function App() {
               nowMs={nowMs}
               refreshToken={refreshToken}
               onNavigate={handleNavigate}
+              onOpenSessions={openSessions}
+              basis={overviewBasis}
+              onBasisChange={setOverviewBasis}
             />
           ) : null}
           {page === "analytics" ? (
-            <AnalyticsPage range={range} refreshToken={refreshToken} />
+            <AnalyticsPage
+              range={range}
+              refreshToken={refreshToken}
+              client={analyticsClient}
+              onClientChange={setAnalyticsClient}
+              onOpenSessions={openSessions}
+            />
           ) : null}
-          {page === "sessions" ? <SessionsPage range={range} refreshToken={refreshToken} /> : null}
+          {page === "sessions" ? (
+            <SessionsPage
+              range={range}
+              refreshToken={refreshToken}
+              state={sessionState}
+              onChange={setSessionState}
+              returnLabel={sessionOrigin?.page === "analytics" ? "返回用量分析" : "返回总览"}
+              onReturn={
+                sessionOrigin
+                  ? () => {
+                      setSelectedRange(sessionOrigin.range);
+                      handleNavigate(sessionOrigin.page);
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
           {page === "sources" ? (
             <SourcesPage
               settingsController={settings}
@@ -181,6 +243,9 @@ export default function App() {
                 void reload();
               }}
               onSync={handleSync}
+              onSyncClient={(client) => {
+                void syncNow(true, client);
+              }}
             />
           ) : null}
           {page === "settings" ? (

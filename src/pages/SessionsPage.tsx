@@ -7,13 +7,20 @@ import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 import { useState } from "react";
+import { Input } from "@/components/ui/input";
 
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SessionTable } from "@/components/SessionTable";
 import { SessionDetailPanel } from "@/components/SessionDetailPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getSessionDetail, getSessions } from "@/lib/api";
-import type { ClientKey, SessionSummary } from "@/lib/usage-types";
+import type {
+  SessionBrowserState,
+  SessionFilters,
+  SessionSort,
+  SessionSummary,
+} from "@/lib/usage-types";
+import { CLIENT_LABELS, clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
 import { rangeScope, type DateRange } from "@/lib/ranges";
 
@@ -51,15 +58,30 @@ function SelectedSessionDetail({
   );
 }
 
-export function SessionsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
-  const [clientValue, setClientValue] = useState("all");
+export function SessionsPage({
+  range,
+  refreshToken,
+  state,
+  onChange,
+  onReturn,
+  returnLabel,
+}: {
+  range: DateRange;
+  refreshToken: number;
+  state: SessionBrowserState;
+  onChange: (state: SessionBrowserState) => void;
+  onReturn?: () => void;
+  returnLabel?: string;
+}) {
   return (
     <SessionBrowser
       key={rangeScope(range)}
       range={range}
       refreshToken={refreshToken}
-      clientValue={clientValue}
-      onClientChange={setClientValue}
+      state={state}
+      onChange={onChange}
+      onReturn={onReturn}
+      returnLabel={returnLabel}
     />
   );
 }
@@ -67,18 +89,30 @@ export function SessionsPage({ range, refreshToken }: { range: DateRange; refres
 function SessionBrowser({
   range,
   refreshToken,
-  clientValue,
-  onClientChange,
+  state,
+  onChange,
+  onReturn,
+  returnLabel,
 }: {
   range: DateRange;
   refreshToken: number;
-  clientValue: string;
-  onClientChange: (value: string) => void;
+  state: SessionBrowserState;
+  onChange: (state: SessionBrowserState) => void;
+  onReturn?: () => void;
+  returnLabel?: string;
 }) {
-  const [offset, setOffset] = useState(0);
   const [selectedSession, setSelectedSession] = useState<SessionSummary | null>(null);
-  const client: ClientKey | null = clientValue === "all" ? null : (clientValue as ClientKey);
-  const keySuffix = `${range.key}:${clientValue}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
+  const { client, search, sort } = state;
+  const clientValue = client ?? "all";
+  const scope = rangeScope(range);
+  const offset = state.rangeScope === scope ? state.offset : 0;
+  const setOffset = (value: number) => onChange({ ...state, offset: value, rangeScope: scope });
+  const changeFilters = (patch: Partial<SessionFilters>) => {
+    setSelectedSession(null);
+    onChange({ ...state, ...patch, offset: 0, rangeScope: scope });
+  };
+  const normalizedSearch = search.trim();
+  const keySuffix = `${range.key}:${JSON.stringify(state)}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
 
   const sessions = useAsyncData(
     () =>
@@ -86,11 +120,16 @@ function SessionBrowser({
         fromMs: range.fromMs,
         toMs: range.toMs,
         client,
+        model: state.model,
+        projectPath: state.projectPath,
+        requestTime: state.requestTime,
+        search: normalizedSearch || null,
+        sort,
         limit: SESSION_LIMIT + 1,
         offset,
       }),
     `session-list:${keySuffix}:${offset}`,
-    `${rangeScope(range)}:${clientValue}:${offset}`,
+    `${scope}:${JSON.stringify(state)}:${offset}`,
   );
 
   const rows = sessions.data?.slice(0, SESSION_LIMIT) ?? [];
@@ -100,12 +139,37 @@ function SessionBrowser({
 
   return (
     <div className="space-y-4">
+      {onReturn ? (
+        <Button size="sm" variant="outline" onClick={onReturn}>
+          {returnLabel ?? "返回统计"}
+        </Button>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <Input
+          value={search}
+          onChange={(event) => changeFilters({ search: event.target.value })}
+          placeholder="搜索项目、模型或会话 ID"
+          aria-label="搜索项目、模型或会话 ID"
+          className="w-72"
+        />
+        <Select
+          value={sort}
+          onValueChange={(value) => changeFilters({ sort: value as SessionSort })}
+        >
+          <SelectTrigger size="sm" className="w-40" aria-label="会话排序">
+            <SelectValue />
+          </SelectTrigger>
+          <FilterSelectContent>
+            <SelectItem value="newest">最近开始</SelectItem>
+            <SelectItem value="oldest">最早开始</SelectItem>
+            <SelectItem value="tokens_desc">Token 最高</SelectItem>
+            <SelectItem value="requests_desc">请求最多</SelectItem>
+          </FilterSelectContent>
+        </Select>
         <Select
           value={clientValue}
           onValueChange={(value) => {
-            onClientChange(value);
-            setOffset(0);
+            changeFilters({ client: isClientKey(value) ? value : null });
             setSelectedSession(null);
           }}
         >
@@ -114,18 +178,13 @@ function SessionBrowser({
           </SelectTrigger>
           <FilterSelectContent>
             <SelectItem value="all">全部客户端</SelectItem>
-            <SelectItem value="codex">Codex</SelectItem>
-            <SelectItem value="claude_code">Claude Code</SelectItem>
-            <SelectItem value="opencode">OpenCode</SelectItem>
-            <SelectItem value="dsh">DSH</SelectItem>
-            <SelectItem value="kimi_code">Kimi Code</SelectItem>
-            <SelectItem value="mimocode">MiMoCode</SelectItem>
-            <SelectItem value="pi_desktop">Pi Desktop</SelectItem>
-            <SelectItem value="workbuddy">WorkBuddy</SelectItem>
-            <SelectItem value="copilot">GitHub Copilot</SelectItem>
-            <SelectItem value="gemini_cli">Gemini CLI</SelectItem>
-            <SelectItem value="grok">Grok CLI</SelectItem>
-            <SelectItem value="mcode">MCode</SelectItem>
+            {Object.keys(CLIENT_LABELS)
+              .filter(isClientKey)
+              .map((entry) => (
+                <SelectItem key={entry} value={entry}>
+                  {clientLabel(entry)}
+                </SelectItem>
+              ))}
           </FilterSelectContent>
         </Select>
         <p className="text-xs text-muted-foreground tabular-nums">
@@ -134,6 +193,32 @@ function SessionBrowser({
           {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
           {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
         </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>{state.requestTime ? "区间内有已记录请求的会话" : "按会话开始时间"}</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => changeFilters({ requestTime: !state.requestTime })}
+        >
+          切换为{state.requestTime ? "会话开始时间" : "请求发生时间"}
+        </Button>
+        {state.model !== undefined ? (
+          <Button size="sm" variant="outline" onClick={() => changeFilters({ model: undefined })}>
+            模型：{state.model ?? "未记录"} ×
+          </Button>
+        ) : null}
+        {state.projectPath !== undefined ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="max-w-sm"
+            onClick={() => changeFilters({ projectPath: undefined })}
+            title={state.projectPath ?? "未记录项目"}
+          >
+            <span className="truncate">项目：{state.projectPath ?? "未记录"}</span> ×
+          </Button>
+        ) : null}
       </div>
 
       <DashboardCard>
@@ -174,8 +259,19 @@ function SessionBrowser({
         </Button>
       </nav>
 
-      <DataExplanation summary="按会话开始时间 · 会话累计">
-        <p>按开始时间筛选并倒序排列。Token 为会话累计，重叠子集已扣除。</p>
+      <DataExplanation
+        summary={`${state.requestTime ? "区间内有已记录请求" : "按会话开始时间"} · 会话累计`}
+      >
+        <p>
+          {state.requestTime
+            ? "筛选区间内有非估算、有时间请求记录的会话，包含区间前开始的会话。"
+            : "按会话开始时间筛选。"}
+          表中 Token 始终为整个会话累计，不等于区间内请求用量。
+        </p>
+        <p>
+          搜索仅匹配项目路径、会话主模型和会话 ID
+          的文字片段；模型与项目下钻为精确匹配，未知组仅匹配缺失字段。排序保持稳定，未知值置于已知值之后。
+        </p>
         <p>— 表示尚未导入可用总量，可在数据源管理检查读取路径和采集状态。</p>
       </DataExplanation>
       {selectedSession ? (

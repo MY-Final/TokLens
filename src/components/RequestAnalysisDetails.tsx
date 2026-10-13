@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { ModelIdentity } from "@/components/ModelIdentity";
 import { EmptyBlock } from "@/components/StateBlocks";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -14,7 +15,7 @@ import {
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { formatNumber, shortenPath } from "@/lib/format";
 import { formatBasisPoints, knownRequestTokens } from "@/lib/request-analysis";
-import type { RequestAnalysis, RequestAnalysisMetrics } from "@/lib/usage-types";
+import type { RequestAnalysis, RequestAnalysisMetrics, SessionFilters } from "@/lib/usage-types";
 
 function TokenBreakdown({ metrics }: { metrics: RequestAnalysisMetrics }) {
   const { formatTokensOrDash } = useTokenFormat();
@@ -98,7 +99,15 @@ function TokenBreakdown({ metrics }: { metrics: RequestAnalysisMetrics }) {
   );
 }
 
-export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis; scope: string }) {
+export function RequestAnalysisDetails({
+  data,
+  scope,
+  onOpenSessions,
+}: {
+  data: RequestAnalysis;
+  scope: string;
+  onOpenSessions?: (filters: Partial<SessionFilters>) => void;
+}) {
   const { formatTokensOrDash } = useTokenFormat();
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const detailId = useId();
@@ -194,7 +203,21 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
                 </TableRow>
                 <TableRow id={rowId} hidden={!isExpanded} className="bg-muted/20 hover:bg-muted/20">
                   <TableCell colSpan={4} className="p-4">
-                    {isExpanded ? <TokenBreakdown metrics={metrics} /> : null}
+                    {isExpanded ? (
+                      <>
+                        <TokenBreakdown metrics={metrics} />
+                        {onOpenSessions ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3"
+                            onClick={() => onOpenSessions({ model: entry.key })}
+                          >
+                            查看此模型会话
+                          </Button>
+                        ) : null}
+                      </>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               </Fragment>
@@ -227,9 +250,21 @@ export function RequestAnalysisDetails({ data, scope }: { data: RequestAnalysis;
               return (
                 <TableRow key={JSON.stringify(entry.key)}>
                   <TableCell>
-                    <span className="block truncate font-mono" title={entry.key ?? label}>
-                      {label}
-                    </span>
+                    {onOpenSessions ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-auto max-w-full p-0 font-mono text-xs"
+                        title={entry.key ?? label}
+                        onClick={() => onOpenSessions({ projectPath: entry.key })}
+                      >
+                        <span className="truncate">{label}</span>
+                      </Button>
+                    ) : (
+                      <span className="block truncate font-mono" title={entry.key ?? label}>
+                        {label}
+                      </span>
+                    )}
                     {entry.metrics.totals.requestsWithoutUsage > 0 ? (
                       <span className="text-muted-foreground">
                         {formatNumber(entry.metrics.totals.requestsWithoutUsage)} 条用量未知

@@ -27,6 +27,7 @@ export function HeatmapCell({
   partial = false,
   className,
   children,
+  onClick,
 }: {
   value: number | null;
   maxValue: number;
@@ -34,12 +35,14 @@ export function HeatmapCell({
   partial?: boolean;
   className?: string;
   children?: ReactNode;
+  onClick?: () => void;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
+          onClick={onClick}
           aria-label={label}
           className={cn(
             "relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-border/60 text-xs text-muted-foreground transition-[outline-color] hover:outline-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",

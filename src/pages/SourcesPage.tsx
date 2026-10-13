@@ -3,7 +3,8 @@
 import { DashboardCard } from "@/components/DashboardCard";
 import { DataExplanation } from "@/components/DataExplanation";
 
-import { Database, FolderSearch, ShieldCheck } from "lucide-react";
+import { Copy, Database, FolderSearch, RefreshCw, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,10 @@ import type { SettingsController } from "@/hooks/use-settings";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import type { DataSourceStatus, SyncState } from "@/lib/usage-types";
+import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { GROK_USAGE_NOTE } from "@/lib/client-labels";
+import { sourceDiagnosticSummary, sourceStatusLabel } from "@/lib/source-diagnostics";
 
 const CLIENT_HINTS: Record<string, string> = {
   codex: "Codex：CODEX_HOME（VS Code 与 TokLens 需使用相同用户和环境）",
@@ -40,6 +42,7 @@ export function SourcesPage({
   syncBusy,
   onRetry,
   onSync,
+  onSyncClient,
   settingsController,
 }: {
   status: DataSourceStatus | null;
@@ -48,6 +51,7 @@ export function SourcesPage({
   syncBusy: boolean;
   onRetry: () => void;
   onSync: (force?: boolean) => void;
+  onSyncClient: (client: ClientKey) => void;
   settingsController: SettingsController;
 }) {
   const sync: SyncState | null = status?.sync ?? null;
@@ -153,8 +157,14 @@ export function SourcesPage({
 
       <div className="grid gap-4 lg:grid-cols-2">
         {(status?.clients ?? []).map((client) => {
-          const result = report?.clients.find((entry) => entry.client === client.client);
+          const result = client.lastResult;
           const scan = result?.report;
+          const enabled =
+            settingsController.settings?.enabledClients.includes(client.client) ?? false;
+          const diagnosticSummary = sourceDiagnosticSummary(
+            client,
+            settingsController.appInfo?.version ?? null,
+          );
           return (
             <DashboardCard
               key={client.client}
@@ -184,15 +194,7 @@ export function SourcesPage({
                       {settingsController.settings &&
                       !settingsController.settings.enabledClients.includes(client.client)
                         ? "已停用"
-                        : result?.error
-                          ? "同步异常"
-                          : scan?.rootMissing
-                            ? "未发现数据源"
-                            : (scan?.filesFailed ?? 0) + (scan?.directoriesFailed ?? 0) > 0
-                              ? "部分采集失败"
-                              : scan
-                                ? "已检查"
-                                : "等待检查"}
+                        : sourceStatusLabel(client)}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="font-normal text-muted-foreground">
@@ -214,12 +216,25 @@ export function SourcesPage({
                     工具用量关系尚未确认，分项可能不等于客户端自报总量。
                   </p>
                 ) : null}
-                <code className="block text-xs break-all select-text">
-                  {client.sourcePath ?? "无法确定用户目录"}
-                </code>
-                {scan ? (
+                {client.sourcePaths.length > 0 ? (
+                  client.sourcePaths.map((source) => (
+                    <div key={source.path} className="space-y-1">
+                      <code className="block text-xs break-all select-text">{source.path}</code>
+                      <p className="text-xs text-muted-foreground">
+                        {source.state === "available"
+                          ? "根路径可访问（不代表全部文件可读）"
+                          : source.state === "missing"
+                            ? "来源不存在"
+                            : "无法读取，请检查权限或文件占用"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">无法确定用户目录</p>
+                )}
+                {client.lastCheckedMs !== null ? (
                   <p className="text-xs text-muted-foreground">
-                    最近检查：{formatDateTime(sync?.finishedAtMs ?? null)}
+                    最近检查（本次运行）：{formatDateTime(client.lastCheckedMs)}
                   </p>
                 ) : null}
                 {result?.error ? <p className="text-xs text-destructive">{result?.error}</p> : null}
@@ -236,6 +251,11 @@ export function SourcesPage({
                 ) : null}
                 {(scan?.filesFailed ?? 0) + (scan?.directoriesFailed ?? 0) > 0 ? (
                   <p className="text-xs text-destructive">读取失败，保留历史，下次同步重试。</p>
+                ) : null}
+                {(scan?.unparsedLines ?? 0) + (scan?.filesWithoutIdentity ?? 0) > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    部分记录无法解析或缺少会话标识；已知数据仍可查看，缺失部分不补零。
+                  </p>
                 ) : null}
                 {client.supported ? (
                   <>
@@ -256,7 +276,57 @@ export function SourcesPage({
                       <dd className="text-right tabular-nums">
                         {formatRelative(client.lastScanMs)}
                       </dd>
+                      <dt className="text-muted-foreground">最近用量记录</dt>
+                      <dd className="text-right tabular-nums">
+                        {formatDateTime(client.lastRequestMs)}
+                      </dd>
+                      <dt className="text-muted-foreground">Token 总量未知的会话</dt>
+                      <dd className="text-right tabular-nums">
+                        {formatNumber(client.sessionsWithoutUsage)}
+                      </dd>
                     </dl>
+                    {client.sessionsWithoutUsage > 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {client.sessionsWithoutUsage === client.sessions
+                          ? "已有会话，但未记录可确认的 Token 总量。"
+                          : "部分会话 Token 总量未知，只统计已知子集。"}
+                        未知不代表 0；重扫不会估算缺失用量。
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          syncBusy ||
+                          !enabled ||
+                          (settingsController.settings?.collectionPaused ?? false)
+                        }
+                        onClick={() => onSyncClient(client.client)}
+                      >
+                        <RefreshCw aria-hidden="true" />
+                        重扫此客户端
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          void navigator.clipboard.writeText(diagnosticSummary).then(
+                            () => toast.success("已复制脱敏诊断摘要"),
+                            () => toast.error("复制失败，请检查剪贴板权限"),
+                          );
+                        }}
+                      >
+                        <Copy aria-hidden="true" />
+                        复制脱敏诊断
+                      </Button>
+                    </div>
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer py-1">预览脱敏诊断摘要</summary>
+                      <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted/60 p-3 text-xs break-all whitespace-pre-wrap select-text">
+                        {diagnosticSummary}
+                      </pre>
+                    </details>
                     {client.sessions === 0 && !loading ? (
                       <p className="flex items-center gap-2 text-xs text-muted-foreground">
                         <FolderSearch className="size-3.5" aria-hidden="true" />
@@ -287,6 +357,13 @@ export function SourcesPage({
 
       <DataExplanation summary="只读采集">
         <p>暂停或停用客户端保留已有统计。自定义目录配置：</p>
+        <p>
+          最近用量记录仅使用已导入的非估算请求原生时间；Grok
+          为轮结束时间，无时间记录不补造。最近导入来自成功解析水位，未变化跳过和失败检查不会推进；每客户端检查结果仅保留在本次应用运行中。
+        </p>
+        <p>
+          根路径可访问不代表所有会话文件可读。脱敏诊断不含路径、会话标识和错误原文，仅在点击复制时写入本机剪贴板。
+        </p>
         {Object.entries(CLIENT_HINTS).map(([client, hint]) => (
           <p key={client}>{hint}</p>
         ))}

@@ -4,8 +4,8 @@ use serde::Serialize;
 use super::dto::{SessionSummaryDto, TokenTotalsDto};
 use crate::usage::analytics::{
     RequestActivity, RequestAnalysis, RequestAnalysisGroup, RequestAnalysisMetrics,
-    RequestCoverage, RequestCoverageDetail, RequestDailyBucket, RequestDetail, RequestTotals,
-    SessionDetail,
+    RequestCoverage, RequestCoverageDetail, RequestDailyBucket, RequestDetail, RequestHourlyBucket,
+    RequestTotals, SessionDetail,
 };
 
 #[derive(Debug, Serialize)]
@@ -150,7 +150,22 @@ pub struct RequestActivityDto {
     pub range: RequestTotalsDto,
     pub clients: Vec<RequestAnalysisGroupDto>,
     pub daily: Vec<RequestDailyBucketDto>,
+    pub hourly: Vec<RequestHourlyBucketDto>,
     pub coverage: RequestCoverageDto,
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RequestHourlyBucketDto {
+    pub hour_start_ms: i64,
+    pub totals: RequestTotalsDto,
+}
+impl From<RequestHourlyBucket> for RequestHourlyBucketDto {
+    fn from(value: RequestHourlyBucket) -> Self {
+        Self {
+            hour_start_ms: value.hour_start_ms,
+            totals: value.totals.into(),
+        }
+    }
 }
 impl From<RequestActivity> for RequestActivityDto {
     fn from(value: RequestActivity) -> Self {
@@ -158,6 +173,7 @@ impl From<RequestActivity> for RequestActivityDto {
             range: value.range.into(),
             clients: value.clients.into_iter().map(Into::into).collect(),
             daily: value.daily.into_iter().map(Into::into).collect(),
+            hourly: value.hourly.into_iter().map(Into::into).collect(),
             coverage: value.coverage.into(),
         }
     }

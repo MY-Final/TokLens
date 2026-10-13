@@ -17,12 +17,12 @@ mod types;
 
 pub use requests::{
     RequestActivity, RequestAnalysis, RequestAnalysisGroup, RequestAnalysisMetrics,
-    RequestCoverage, RequestDailyBucket, RequestDailyClient, RequestTotals,
+    RequestCoverage, RequestDailyBucket, RequestDailyClient, RequestHourlyBucket, RequestTotals,
 };
 pub use session_detail::{RequestCoverageDetail, RequestDetail, SessionDetail};
 pub use types::{
     AnalyticsFilter, ClientSourceStatus, ClientUsage, DailyBucket, GroupUsage, RangeTotals,
-    SessionSummary, TokenSums,
+    SessionListOptions, SessionSort, SessionSummary, TokenSums,
 };
 
 #[cfg(test)]

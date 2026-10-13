@@ -1,13 +1,23 @@
 /** 用量分析：按客户端浏览完整模型用量与请求分项。 */
-import { useState } from "react";
 import { RequestAnalysisPanel } from "@/components/RequestAnalysisPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getRequestAnalysis } from "@/lib/api";
 import { rangeScope, type DateRange } from "@/lib/ranges";
-import type { ClientKey } from "@/lib/usage-types";
+import type { ClientKey, SessionFilters } from "@/lib/usage-types";
 
-export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refreshToken: number }) {
-  const [client, setClient] = useState<ClientKey | null>(null);
+export function AnalyticsPage({
+  range,
+  refreshToken,
+  client,
+  onClientChange,
+  onOpenSessions,
+}: {
+  range: DateRange;
+  refreshToken: number;
+  client: ClientKey | null;
+  onClientChange: (client: ClientKey | null) => void;
+  onOpenSessions: (filters: Partial<SessionFilters>) => void;
+}) {
   const analysis = useAsyncData(
     async () => ({
       result: await getRequestAnalysis({ fromMs: range.fromMs, toMs: range.toMs, client }),
@@ -24,7 +34,8 @@ export function AnalyticsPage({ range, refreshToken }: { range: DateRange; refre
       loading={analysis.loading}
       error={analysis.error}
       onRetry={analysis.reload}
-      onSelectClient={setClient}
+      onSelectClient={onClientChange}
+      onOpenSessions={(filters) => onOpenSessions({ ...filters, client, requestTime: true })}
     />
   );
 }

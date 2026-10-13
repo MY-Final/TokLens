@@ -4,7 +4,12 @@ use super::*;
 fn session_summaries_are_newest_first_with_coverage_metadata() {
     let store = seeded_store();
     let sessions = store
-        .session_summaries(&AnalyticsFilter::default(), 2, 0)
+        .session_summaries(
+            &AnalyticsFilter::default(),
+            &SessionListOptions::default(),
+            2,
+            0,
+        )
         .expect("sessions");
     assert_eq!(sessions.len(), 2);
     assert_eq!(sessions[0].client_session_id, "thread-c");
@@ -13,7 +18,12 @@ fn session_summaries_are_newest_first_with_coverage_metadata() {
     assert_eq!(sessions[1].client_session_id, "thread-b");
 
     let page_two = store
-        .session_summaries(&AnalyticsFilter::default(), 2, 2)
+        .session_summaries(
+            &AnalyticsFilter::default(),
+            &SessionListOptions::default(),
+            2,
+            2,
+        )
         .expect("sessions page 2");
     assert_eq!(page_two.len(), 2);
     let codex_a = page_two
@@ -42,16 +52,195 @@ fn source_status_and_bounds_reflect_imported_files() {
     assert_eq!(codex.files_tracked, 3);
     assert_eq!(codex.unparsed_records, 0);
     assert_eq!(codex.last_scan_ms, Some(1_791_000_000_500));
+    assert_eq!(codex.sessions_without_usage, 1);
+    assert_eq!(
+        codex.last_request_ms,
+        Some(ms(D1)),
+        "不得借用较新的无请求会话时间"
+    );
     let opencode = status
         .iter()
         .find(|entry| entry.client == Client::OpenCode)
         .expect("opencode");
     assert_eq!(opencode.sessions, 0);
     assert_eq!(opencode.files_tracked, 0);
+    assert_eq!(opencode.sessions_without_usage, 0);
+    assert_eq!(opencode.last_request_ms, None);
 
     let (first, last) = store.data_bounds().expect("bounds");
     assert_eq!(first, Some(ms(D0)));
     assert_eq!(last, Some(ms(D2)));
+}
+
+#[test]
+fn session_search_matches_literal_metadata_and_exact_groups() {
+    let store = seeded_store();
+    let filter = AnalyticsFilter::default();
+    for (value, expected) in [("THREAD-B", 1), ("ASTRA", 1), ("alpha", 2), ("%", 0)] {
+        let options = SessionListOptions {
+            search: Some(value),
+            ..Default::default()
+        };
+        assert_eq!(
+            store
+                .session_summaries(&filter, &options, 50, 0)
+                .expect("search")
+                .len(),
+            expected
+        );
+    }
+    let unknown = SessionListOptions {
+        model_unknown: true,
+        project_unknown: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        store
+            .session_summaries(&filter, &unknown, 50, 0)
+            .expect("unknown")[0]
+            .client_session_id,
+        "thread-c"
+    );
+    let model = SessionListOptions {
+        model: Some("gpt-5.6-luna"),
+        ..Default::default()
+    };
+    assert_eq!(
+        store
+            .session_summaries(
+                &AnalyticsFilter {
+                    project_path: Some(PROJECT_ALPHA),
+                    ..filter
+                },
+                &model,
+                50,
+                0
+            )
+            .expect("combined exact")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn session_sort_preserves_unknowns_and_stable_pages() {
+    let store = seeded_store();
+    let filter = AnalyticsFilter::default();
+    let tokens = SessionListOptions {
+        sort: SessionSort::TotalTokens,
+        ..Default::default()
+    };
+    let rows = store
+        .session_summaries(&filter, &tokens, 50, 0)
+        .expect("tokens");
+    assert_eq!(rows[0].client_session_id, "thread-b");
+    assert_eq!(rows.last().expect("last").client_session_id, "thread-c");
+    for sort in [SessionSort::Oldest, SessionSort::Requests] {
+        assert_eq!(
+            store
+                .session_summaries(
+                    &filter,
+                    &SessionListOptions {
+                        sort,
+                        ..Default::default()
+                    },
+                    1,
+                    0
+                )
+                .expect("sort")[0]
+                .client_session_id,
+            "thread-a"
+        );
+    }
+    let first = store
+        .session_summaries(&filter, &tokens, 2, 0)
+        .expect("first page");
+    let second = store
+        .session_summaries(&filter, &tokens, 2, 2)
+        .expect("second page");
+    assert_eq!([first, second].concat(), rows);
+}
+
+#[test]
+fn request_drilldown_includes_sessions_started_before_range() {
+    let store = seeded_store();
+    store
+        .conn
+        .execute(
+            "UPDATE messages SET created_at_ms = ?1 WHERE dedup_key = 'resp-a1'",
+            [ms(D2)],
+        )
+        .expect("cross-day fixture");
+    let filter = AnalyticsFilter {
+        from_ms: Some(ms(D2)),
+        to_ms: Some(ms(D2) + 1),
+        ..Default::default()
+    };
+    let options = SessionListOptions {
+        request_time: true,
+        ..Default::default()
+    };
+    let sessions = store
+        .session_summaries(&filter, &options, 50, 0)
+        .expect("request range");
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].client_session_id, "thread-a");
+    assert_eq!(
+        sessions[0].total_tokens,
+        Some(1_100),
+        "full session cumulative values remain unchanged"
+    );
+    store
+        .conn
+        .execute(
+            "UPDATE messages SET source_kind = 'estimated' WHERE dedup_key = 'resp-a1'",
+            [],
+        )
+        .expect("estimated fixture");
+    assert!(
+        store
+            .session_summaries(&filter, &options, 50, 0)
+            .expect("estimated excluded")
+            .is_empty()
+    );
+}
+
+#[test]
+fn source_diagnostics_keep_zero_usage_known_and_exclude_estimated_or_untimed_requests() {
+    use crate::usage::model::SourceKind;
+    let store = UsageStore::open_in_memory().expect("store");
+    let session = codex_record(
+        "zero",
+        D0,
+        D2,
+        None,
+        None,
+        counts(Some(0), Some(0), Some(0), Some(0), Some(0), Some(0)),
+    );
+    let known = message("zero", "known", 1, D1);
+    let mut estimated = message("zero", "estimated", 2, D2);
+    estimated.source_kind = SourceKind::Estimated;
+    let mut untimed = message("zero", "untimed", 3, D2);
+    untimed.created_at_ms = None;
+    store
+        .import_session(
+            &source(Client::Codex, "synthetic.jsonl"),
+            &session,
+            &[known, estimated, untimed],
+        )
+        .expect("synthetic records");
+    let status = store.client_source_status().expect("status");
+    let codex = status
+        .iter()
+        .find(|entry| entry.client == Client::Codex)
+        .expect("codex");
+    assert_eq!(codex.sessions, 1);
+    assert_eq!(codex.sessions_without_usage, 0, "known zero is not unknown");
+    assert_eq!(codex.last_request_ms, Some(ms(D1)));
+    assert_eq!(
+        codex.messages, 3,
+        "diagnostic counts retain all imported requests"
+    );
 }
 
 #[test]
@@ -75,7 +264,7 @@ fn session_pagination_reaches_beyond_two_hundred_with_stable_ties() {
     let mut ids = std::collections::BTreeSet::new();
     for page in 0..5 {
         let rows = store
-            .session_summaries(&filter, 50, page * 50)
+            .session_summaries(&filter, &SessionListOptions::default(), 50, page * 50)
             .expect("page");
         assert_eq!(rows.len(), if page == 4 { 6 } else { 50 });
         for row in rows {
@@ -89,6 +278,7 @@ fn session_pagination_reaches_beyond_two_hundred_with_stable_ties() {
                 client: Some(Client::Codex),
                 ..filter
             },
+            &SessionListOptions::default(),
             51,
             200,
         )
@@ -96,7 +286,7 @@ fn session_pagination_reaches_beyond_two_hundred_with_stable_ties() {
     assert_eq!(filtered.len(), 5);
     assert!(
         store
-            .session_summaries(&filter, 51, 206)
+            .session_summaries(&filter, &SessionListOptions::default(), 51, 206)
             .expect("end")
             .is_empty()
     );

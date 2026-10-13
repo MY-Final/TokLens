@@ -167,6 +167,17 @@ export function RequestActivityPanel({
   const [metric, setMetric] = useState<Metric>("tokens");
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const days = data?.daily ?? [];
+  const hours = data?.hourly ?? [];
+  const hasHourly = hours.length > 0;
+  const trendBuckets = hasHourly
+    ? hours.map((hour) => ({ startMs: hour.hourStartMs, totals: hour.totals, clients: [] }))
+    : days.map((day) => ({ startMs: day.dayStartMs, totals: day.totals, clients: day.clients }));
+  const trendLabel = (ms: number) =>
+    hasHourly ? (formatDateTime(ms).split(" ")[1] ?? "—") : dateLabel(ms);
+  const trendScope = (ms: number) =>
+    hasHourly
+      ? `${formatDateTime(ms)} · ${new Date(ms).toLocaleTimeString("zh-CN", { timeZoneName: "short" })} 起 · 本地小时`
+      : `${dateLabel(ms)} · ${dailyScope(ms, selectedRange)}`;
   const clients = (client ? [client] : CLIENTS).filter((key) =>
     days.some((day) =>
       day.clients.some((entry) => entry.client === key && entry.totals.requests > 0),
@@ -243,7 +254,7 @@ export function RequestActivityPanel({
               <Tabs defaultValue="trend" className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <TabsList aria-label="请求时间视图">
-                    <TabsTrigger value="trend">趋势</TabsTrigger>
+                    <TabsTrigger value="trend">{hasHourly ? "小时趋势" : "趋势"}</TabsTrigger>
                     <TabsTrigger value="calendar">日历</TabsTrigger>
                     <TabsTrigger value="clients">客户端</TabsTrigger>
                   </TabsList>
@@ -271,15 +282,17 @@ export function RequestActivityPanel({
                     ref={setChartElement}
                     config={CHART_CONFIG}
                     className={
-                      days.length === 1 ? "aspect-auto h-40 w-full" : "aspect-auto h-56 w-full"
+                      trendBuckets.length === 1
+                        ? "aspect-auto h-40 w-full"
+                        : "aspect-auto h-56 w-full"
                     }
-                    aria-label={`${rangeLabel} 按请求发生日期的${unit}趋势，精确值见下方日期列表`}
+                    aria-label={`${rangeLabel} 按请求发生${hasHourly ? "小时" : "日期"}的${unit}趋势，精确值见下方列表`}
                   >
                     <LineChart
                       accessibilityLayer
-                      data={days.map((day) => ({
-                        label: dateLabel(day.dayStartMs),
-                        value: metricValue(day.totals, metric),
+                      data={trendBuckets.map((bucket) => ({
+                        startMs: bucket.startMs,
+                        value: metricValue(bucket.totals, metric),
                       }))}
                     >
                       <CartesianGrid
@@ -288,8 +301,10 @@ export function RequestActivityPanel({
                         strokeDasharray="4 4"
                       />
                       <XAxis
-                        dataKey="label"
-                        tickFormatter={(label: string) => label.slice(5)}
+                        dataKey="startMs"
+                        tickFormatter={(ms: number) =>
+                          hasHourly ? trendLabel(ms) : trendLabel(ms).slice(5)
+                        }
                         axisLine={false}
                         tickLine={false}
                         minTickGap={24}
@@ -313,13 +328,14 @@ export function RequestActivityPanel({
                         }}
                         content={({ active, label, coordinate }) => {
                           if (!active) return null;
-                          const bucket = days.find(
-                            (day) => dateLabel(day.dayStartMs) === String(label),
+                          const bucket = trendBuckets.find(
+                            (entry) => entry.startMs === Number(label),
                           );
                           return (
                             <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
                               <UsageTooltip
-                                title={`${String(label)} · ${bucket ? dailyScope(bucket.dayStartMs, selectedRange) : "本地日期"}`}
+                                title={bucket ? trendScope(bucket.startMs) : "本地时间"}
+                                totalLabel={hasHourly ? "本时段已知 Token" : undefined}
                                 total={metricValue(bucket?.totals, "tokens")}
                                 requests={bucket?.totals.requests}
                                 sessions={bucket?.totals.sessions}
@@ -347,25 +363,70 @@ export function RequestActivityPanel({
                         stroke="var(--chart-1)"
                         strokeWidth={2}
                         connectNulls={false}
-                        dot={days.length === 1 ? { r: 6 } : false}
+                        dot={trendBuckets.length === 1 ? { r: 6 } : false}
                         isAnimationActive={false}
                       />
                     </LineChart>
                   </ChartContainer>
-                  <p className="text-xs text-muted-foreground">单位：{unit}</p>
-                  <div className="flex gap-1 overflow-x-auto py-2">
-                    {days.map((day) => (
-                      <ActivityCell
-                        selectedRange={selectedRange}
-                        key={day.dayStartMs}
-                        ms={day.dayStartMs}
-                        totals={day.totals}
-                        metric={metric}
-                        maxValue={maxValue}
-                      />
-                    ))}
-                  </div>
-                  <HeatmapLegend maxValue={maxValue} unit={unit} />
+                  <p className="text-xs text-muted-foreground">
+                    单位：{unit}
+                    {hasHourly
+                      ? ` · 统计截至 ${selectedRange ? formatDateTime(selectedRange.toMs - 1) : "查询截止时间"}，未结束小时仅含截止前记录`
+                      : ""}
+                  </p>
+                  {hasHourly ? (
+                    <div
+                      className="flex gap-4 overflow-x-auto py-2"
+                      aria-label="每小时统计，精确值可聚焦查看"
+                    >
+                      {hours.map((hour) => (
+                        <div
+                          key={hour.hourStartMs}
+                          className="shrink-0 space-y-1 text-xs"
+                          tabIndex={0}
+                          aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                          title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                        >
+                          <p className="text-muted-foreground">{trendLabel(hour.hourStartMs)}</p>
+                          <p className="font-mono tabular-nums">
+                            {metric === "tokens"
+                              ? formatTokensOrDash(metricValue(hour.totals, metric))
+                              : formatExactOrDash(metricValue(hour.totals, metric))}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {hour.totals.requests === 0
+                              ? "未记录"
+                              : hour.totals.requestsWithUsage === 0
+                                ? "Token 未知"
+                                : hour.totals.requestsWithoutUsage > 0
+                                  ? "已知子集"
+                                  : "已知记录"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex gap-1 overflow-x-auto py-2">
+                      {days.map((day) => (
+                        <ActivityCell
+                          selectedRange={selectedRange}
+                          key={day.dayStartMs}
+                          ms={day.dayStartMs}
+                          totals={day.totals}
+                          metric={metric}
+                          maxValue={maxValue}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {hasHourly ? (
+                    <p className="text-xs text-muted-foreground">
+                      未记录不代表没有活动；未知 Token
+                      不补零，混合记录只展示已知子集。采集覆盖无法确认完整，不计算昨日同期增减。
+                    </p>
+                  ) : (
+                    <HeatmapLegend maxValue={maxValue} unit={unit} />
+                  )}
                 </TabsContent>
                 <TabsContent value="calendar" className="space-y-3">
                   <div className="flex gap-2 overflow-x-auto py-2">

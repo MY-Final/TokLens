@@ -4,6 +4,7 @@ import { useTokenFormat } from "@/hooks/use-token-format";
 import { DashboardCard } from "@/components/DashboardCard";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { ClientKey, ClientUsage, RequestAnalysisGroup } from "@/lib/usage-types";
@@ -29,6 +30,7 @@ type ClientUsageCardProps = {
   loading: boolean;
   error: string | null;
   onRetry: () => void;
+  onOpenClient?: (client: ClientKey) => void;
 } & (
   | { basis?: "sessions"; usage: ClientUsage[] | null }
   | { basis: "requests"; usage: RequestAnalysisGroup[] | null }
@@ -89,7 +91,19 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
             {rows.map((row) => (
               <div key={row.client} className="space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <ClientIdentity client={row.client} compact />
+                  {props.onOpenClient ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto p-0"
+                      onClick={() => props.onOpenClient?.(row.client)}
+                      aria-label={`查看 ${clientLabel(row.client)} 会话`}
+                    >
+                      <ClientIdentity client={row.client} compact />
+                    </Button>
+                  ) : (
+                    <ClientIdentity client={row.client} compact />
+                  )}
                   <span className="font-mono text-xs text-muted-foreground">
                     {row.shareBps === null ? "—" : `${(row.shareBps / 100).toFixed(1)}%`}
                   </span>

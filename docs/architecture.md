@@ -5,6 +5,27 @@
 
 ## 1. 现状
 
+### 会话检索与页面下钻（2026-10-13）
+
+`get_sessions` 接收与 TypeScript 同名的 `SessionQuery`（通过 `{ args }` 调用），复用现有分页查询，新增元数据文字检索、模型 / 项目精确筛选（支持未记录组）和稳定排序；参数进入 `usage/analytics` 的 `SessionListOptions`，SQL 只读取本地已导入元数据。搜索按文字片段匹配项目、会话主模型与会话 ID，ASCII 大小写忽略，`%` / `_` 为普通文字。
+`App` 使用现有 React 状态保存总览统计模式、分析客户端和会话筛选 / 页码；切页返回保留，日期范围变化使页码回到首页。状态只在进程内，不新增持久化或状态库。
+会话累计总览的客户端、模型、项目与日期入口携带筛选进入会话列表；请求总览客户端和分析模型 / 项目入口使用“区间内有非估算、有时间请求”的会话查询，包含区间前开始的会话。列表 Token 和详情仍明确为完整会话累计，不将其冒充区间请求合计。
+下钻保存来源页与原日期范围，会话页提供返回入口恢复；预设范围继续随本地时钟滚动。未覆盖：请求趋势 / 日历日期入口、图表标签 / 展开行 / 滚动位置保留、URL / 重启恢复、正文搜索。无依赖、目录、schema、权限或网络能力变更。
+
+### 数据源诊断与单客户端重扫（2026-10-13）
+
+`collectors/sync` 提供每个客户端的实际扫描根路径与根路径可访问检查；Copilot 同时展示 CLI SQLite、SDK session-state 与 VS Code Agent Host 路径。检查只验证根目录枚举 / 文件只读打开，不读取文件内容、不承诺所有会话文件可读。
+`usage/analytics` 从现有表返回 Token 总量未知会话数与最近非估算请求原生时间；command 组装同名 DTO，前端仅格式化呈现。`sync_client` 复用现有后台线程、同步互斥、启用 / 暂停设置、进度事件和强制重扫选项，仅处理指定客户端。
+`SyncState.client_checks` 在内存保留本次运行各客户端最后一次完成检查的时间与独立报告，单客户端重扫不抹除其他客户端结果，清除统计同时清除此状态；重启后检查状态未知，成功解析水位仍来自原表。
+数据源页提供可预览、显式复制的脱敏摘要（应用版本、客户端、状态、时间、计数），不包含路径、会话 / 项目标识、错误原文或正文。剪贴板由现有 Web API 在用户点击时写入，不增加依赖、权限、目录、迁移或联网能力；Token 公式与去重不变。
+
+### 今日小时请求趋势（2026-10-13）
+
+扩展现有 `get_request_activity` 的可选 `hourlyBoundaries` 参数与 `RequestActivity.hourly` DTO，旧日桶调用保持兼容。
+`lib/ranges.ts` 只负责本地小时边界，`usage/analytics/requests` 在同一只读事务内复用请求时间、来源过滤和 Token 求和规则；
+小时返回开始时间及 `RequestTotals`，不将会话累计值补入请求桶。`RequestActivityPanel` 复用既有 Recharts 趋势与指标切换，今天显示小时，其余范围仍按日。
+采集覆盖无法证明昨日同期完整，暂不返回同比或涨跌。无新目录、command、架构组件、依赖、权限、迁移或联网能力。
+
 ### 同步进度（2026-10-13）
 
 `collectors/sync` 通过回调报告实际处理的数据源数、总数与当前客户端；command 存入现有同步状态并复用 `usage-sync` 广播，查询状态也携带同一进度用于轮询兜底。仅统计本轮启用的客户端；缺失与失败来源仍算已处理，失败继续沿用独立报告。前端复用 shadcn Progress，在主工具栏与数据源页显示进度；进度事件只更新内存状态，结束后重读来源与统计，不在每次进度变化时查询数据库。无新依赖、目录、权限、网络能力、迁移或统计口径变更。
@@ -176,20 +197,21 @@ usage/tokens ────────→ usage/client
 
 ### 3.1 命令清单（2026-10-11）
 
-| 命令                     | 参数                                                       | 返回                                                             |
-| ------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------- |
-| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`               | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数          |
-| `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client` | 每日分桶（缺失日期补 0）                                         |
-| `get_client_usage`       | `fromMs` / `toMs`                                          | 十二个客户端的会话/明细/token 与后端占比（支持不等于已发现数据） |
-| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                     | 模型与项目排行                                                   |
-| `get_sessions`           | `fromMs` / `toMs` / `client` / `limit` / `offset`          | 会话摘要列表（只含元数据与用量）                                 |
-| `get_request_analysis`   | `fromMs` / `toMs` / `client`                               | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因      |
-| `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries`             | 完整范围请求汇总、最多 400 日本地日桶与全已导入日期覆盖计数      |
-| `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`          | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）     |
-| `get_data_source_status` | —                                                          | 客户端接入状态、同步状态、库路径、数据时间范围                   |
-| `sync_usage`             | `force`                                                    | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败               |
-| `sync_codex`             | `force`                                                    | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件              |
-| `app_info`               | —                                                          | 应用名与版本（连通性检查）                                       |
+| 命令                     | 参数                                                                 | 返回                                                                    |
+| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`                         | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数                 |
+| `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client`           | 每日分桶（缺失日期补 0）                                                |
+| `get_client_usage`       | `fromMs` / `toMs`                                                    | 十二个客户端的会话/明细/token 与后端占比（支持不等于已发现数据）        |
+| `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                               | 模型与项目排行                                                          |
+| `get_sessions`           | `args: SessionQuery`                                                 | 会话元数据搜索、精确模型 / 项目筛选、开始 / 请求时间筛选与稳定分页排序  |
+| `get_request_analysis`   | `fromMs` / `toMs` / `client`                                         | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因             |
+| `get_request_activity`   | `fromMs` / `toMs` / `client` / `dayBoundaries` / `hourlyBoundaries?` | 完整范围请求汇总、最多 400 日本地日桶、今日小时桶与全已导入日期覆盖计数 |
+| `get_session_detail`     | `client` / `clientSessionId` / `limit` / `offset`                    | 全会话摘要、请求元数据页与全会话覆盖计数（不受全局日期筛选）            |
+| `get_data_source_status` | —                                                                    | 客户端接入状态、同步状态、库路径、数据时间范围                          |
+| `sync_usage`             | `force`                                                              | 同步全部客户端，独立报告各数据源成功 / 缺失 / 失败                      |
+| `sync_client`            | `client` / `force?`                                                  | 仅重扫指定的启用客户端，沿用后台同步互斥和进度事件                      |
+| `sync_codex`             | `force`                                                              | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件                     |
+| `app_info`               | —                                                                    | 应用名与版本（连通性检查）                                              |
 
 桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
@@ -371,8 +393,6 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-13 | 模型标识采用 `ModelIdentity` + 纯函数模型家族匹配，不新增 JSON 配置或后端字段     | 已采纳 | 复用已登记 `@lobehub/icons` 的本地品牌 SVG；按 provider / family 匹配版本变化，未知模型回退 `Cpu`，原始模型字符串保持不变 |
 | 2026-10-11 | 日期时间选择器复用 shadcn Popover 与原生分钟输入，根级 Hook 统一滚动预设时间      | 已采纳 | 无新依赖；自定义确认后固定，精确范围与每日显示桶独立                                                                      |
 | 2026-10-12 | Token 展示偏好复用原生设置，通过 React 内置 Context 传递给展示组件                | 已采纳 | 默认自动单位，支持用户选择；仅改变格式，无新增状态库或统计计算                                                            |
-
-待登记（引入前补一行）：前端状态管理、前端测试框架、错误类型库（当前 `UsageError` 为模块内自定义枚举）、价格表来源。
 
 ### Token 显示偏好（2026-10-12）
 

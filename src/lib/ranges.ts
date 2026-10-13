@@ -45,6 +45,23 @@ export function localDayBoundaries(range: DateRange): number[] {
     addDays(range.dayStartMs, index).getTime(),
   );
 }
+/** Hour boundaries preserve repeated/skipped local hours across DST; the last bucket ends at the query cutoff. */
+export function localHourBoundaries(range: DateRange): number[] {
+  if (range.key !== "today" || range.fromMs === null) return [];
+  const boundaries = [range.fromMs];
+  const nextDay = addDays(startOfDay(range.fromMs), 1).getTime();
+  const endMs = Math.min(range.toMs, nextDay);
+  let offset = new Date(range.fromMs).getTimezoneOffset();
+  // A transition can be a half hour; split at both local hour starts and offset changes.
+  for (let at = range.fromMs + MS_PER_MINUTE; at < endMs; at += MS_PER_MINUTE) {
+    const date = new Date(at);
+    const nextOffset = date.getTimezoneOffset();
+    if (date.getMinutes() === 0 || nextOffset !== offset) boundaries.push(at);
+    offset = nextOffset;
+  }
+  if (endMs > range.fromMs) boundaries.push(endMs);
+  return boundaries;
+}
 function displayDays(fromMs: number, toMs: number): Pick<DateRange, "dayStartMs" | "dayCount"> {
   const firstDay = startOfDay(fromMs);
   const lastDay = startOfDay(toMs - 1);

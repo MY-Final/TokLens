@@ -4,6 +4,7 @@ import { useTokenFormat } from "@/hooks/use-token-format";
 
 export function UsageTooltip({
   title,
+  totalLabel,
   total,
   requests,
   sessions,
@@ -15,6 +16,7 @@ export function UsageTooltip({
   breakdownUnit = "Token",
 }: {
   title: string;
+  totalLabel?: string;
   total: number | null;
   requests?: number;
   sessions?: number;
@@ -34,7 +36,7 @@ export function UsageTooltip({
       <p className="font-medium">{title}</p>
       <div className="border-b pb-2">
         <p className="text-muted-foreground">
-          {title.includes("所选时段") ? "所选时段已知 Token" : "当日已知 Token"}
+          {totalLabel ?? (title.includes("所选时段") ? "所选时段已知 Token" : "当日已知 Token")}
           {unknown > 0 && total !== null ? " · 已知子集" : ""}
         </p>
         <p className="font-mono text-lg font-semibold tabular-nums">

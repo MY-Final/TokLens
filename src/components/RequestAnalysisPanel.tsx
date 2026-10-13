@@ -2,11 +2,12 @@ import { DataExplanation } from "@/components/DataExplanation";
 import { RequestAnalysisDetails } from "@/components/RequestAnalysisDetails";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { CLIENT_LABELS, GROK_USAGE_NOTE, clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
 import { knownRequestTokens } from "@/lib/request-analysis";
-import type { ClientKey, RequestAnalysis } from "@/lib/usage-types";
+import type { ClientKey, RequestAnalysis, SessionFilters } from "@/lib/usage-types";
 
 const CLIENTS = Object.keys(CLIENT_LABELS).filter(isClientKey);
 
@@ -18,6 +19,7 @@ export function RequestAnalysisPanel({
   onRetry,
   onSelectClient,
   detailScope,
+  onOpenSessions,
 }: {
   data: RequestAnalysis | null;
   selectedClient: ClientKey | null;
@@ -26,6 +28,7 @@ export function RequestAnalysisPanel({
   onRetry: () => void;
   onSelectClient: (client: ClientKey | null) => void;
   detailScope: string;
+  onOpenSessions?: (filters: Partial<SessionFilters>) => void;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
   const scope = selectedClient ? clientLabel(selectedClient) : "全部客户端";
@@ -71,6 +74,11 @@ export function RequestAnalysisPanel({
               {formatNumber(data.models.length)} 个模型分组
             </span>
           ) : null}
+          {onOpenSessions ? (
+            <Button size="sm" variant="outline" onClick={() => onOpenSessions({})}>
+              查看区间会话
+            </Button>
+          ) : null}
         </div>
         {error ? <ErrorBlock message={error} onRetry={onRetry} /> : null}
         {selectedClient === "grok" ||
@@ -111,7 +119,12 @@ export function RequestAnalysisPanel({
                 </div>
               ) : null}
             </dl>
-            <RequestAnalysisDetails key={detailScope} data={data} scope={scope} />
+            <RequestAnalysisDetails
+              key={detailScope}
+              data={data}
+              scope={scope}
+              onOpenSessions={onOpenSessions}
+            />
           </>
         ) : null}
 

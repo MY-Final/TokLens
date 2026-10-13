@@ -96,6 +96,7 @@ pub fn run() {
             commands::request_queries::get_session_detail,
             commands::queries::get_data_source_status,
             commands::queries::sync_codex,
+            commands::queries::sync_client,
             commands::queries::sync_usage,
         ])
         .build(context)
