@@ -6,6 +6,7 @@ struct Activity {
     syncing: bool,
     clearing: bool,
     exiting: bool,
+    exports: usize,
 }
 #[derive(Default)]
 pub struct ActivityGate {
@@ -20,7 +21,7 @@ impl ActivityGate {
     pub fn start_sync(&self) -> Result<bool, String> {
         let mut state = self.lock();
         if state.exiting || state.clearing {
-            return Err("应用正在退出或清除统计，请稍后重试".into());
+            return Err("应用正在退出或维护存储，请稍后重试".into());
         }
         if state.syncing {
             return Ok(false);
@@ -35,7 +36,7 @@ impl ActivityGate {
     pub fn shutdown(&self) {
         let mut state = self.lock();
         state.exiting = true;
-        while state.syncing || state.clearing {
+        while state.syncing || state.clearing || state.exports > 0 {
             state = self
                 .changed
                 .wait(state)
@@ -44,6 +45,14 @@ impl ActivityGate {
     }
     pub fn is_clearing(&self) -> bool {
         self.lock().clearing
+    }
+    pub fn begin_export(&self) -> Result<ExportGuard<'_>, String> {
+        let mut state = self.lock();
+        if state.exiting {
+            return Err("应用正在退出，请稍后重试导出".into());
+        }
+        state.exports += 1;
+        Ok(ExportGuard(self))
     }
     pub fn resume_after_failed_install(&self) {
         self.lock().exiting = false;
@@ -66,6 +75,13 @@ impl ActivityGate {
 }
 
 pub struct ClearGuard<'a>(&'a ActivityGate);
+pub struct ExportGuard<'a>(&'a ActivityGate);
+impl Drop for ExportGuard<'_> {
+    fn drop(&mut self) {
+        self.0.lock().exports -= 1;
+        self.0.changed.notify_all();
+    }
+}
 impl Drop for ClearGuard<'_> {
     fn drop(&mut self) {
         self.0.lock().clearing = false;
@@ -77,6 +93,16 @@ impl Drop for ClearGuard<'_> {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    #[test]
+    fn shutdown_waits_for_export_and_rejects_new_exports() {
+        let gate = Arc::new(ActivityGate::default());
+        let guard = gate.begin_export().expect("export");
+        let worker = gate.clone();
+        let thread = std::thread::spawn(move || worker.shutdown());
+        drop(guard);
+        thread.join().expect("shutdown");
+        assert!(gate.begin_export().is_err());
+    }
     #[test]
     fn overlapping_scans_and_shutdown_are_serialized() {
         let gate = Arc::new(ActivityGate::default());

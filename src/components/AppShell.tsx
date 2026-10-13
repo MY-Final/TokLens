@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import { SyncControl } from "@/components/SyncControl";
 import { DateRangePicker } from "@/components/DateRangePicker";
+import { ExportReportDialog } from "@/components/ExportReportDialog";
 import { ErrorBlock } from "@/components/StateBlocks";
 import type { DataSourceStatus } from "@/lib/usage-types";
 import type { DateRange } from "@/lib/ranges";
@@ -151,6 +152,13 @@ export function AppShell({
             <div />
           )}
           <div className="flex shrink-0 items-center gap-2">
+            {page !== "settings" && page !== "sources" && (
+              <ExportReportDialog
+                range={range}
+                nowMs={nowMs}
+                firstEventMs={status?.firstEventMs ?? null}
+              />
+            )}
             <SyncControl
               sync={sync}
               busy={syncBusy}

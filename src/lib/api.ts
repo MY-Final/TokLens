@@ -9,6 +9,11 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { StorageStatus, UpdateState } from "@/lib/settings-types";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import type { ExportArgs, ExportResult } from "@/lib/report-types";
+
+export function exportStatistics(args: ExportArgs): Promise<ExportResult> {
+  return invoke("export_statistics", { args });
+}
 
 export function getUpdateState(): Promise<UpdateState> {
   return invoke("get_update_state");

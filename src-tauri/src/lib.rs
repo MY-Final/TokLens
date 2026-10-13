@@ -78,6 +78,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            commands::export::export_statistics,
             updates::check::get_update_state,
             updates::check::check_updates,
             updates::download::download_update,

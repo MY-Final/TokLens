@@ -8,6 +8,7 @@
 mod activity;
 pub mod dto;
 mod error;
+pub mod export;
 pub mod maintenance;
 pub mod queries;
 mod request_dto;

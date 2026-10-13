@@ -17,6 +17,7 @@ pub mod analytics;
 pub mod client;
 pub mod model;
 pub mod normalize;
+pub mod report;
 pub mod store;
 pub mod time;
 pub mod tokens;

@@ -10,6 +10,7 @@
 mod aggregates;
 mod rankings;
 mod records;
+mod report;
 mod requests;
 mod session_detail;
 mod sql;
