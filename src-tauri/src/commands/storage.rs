@@ -477,7 +477,11 @@ mod tests {
         std::fs::create_dir(system.join(LOCATOR)).expect("force rename failure");
         let target = root.0.join("target");
         assert!(relocate(&state, &settings, &target, &CollectorRoots::default()).is_err());
-        assert!(state.database_path().starts_with(&system));
+        assert!(
+            std::fs::canonicalize(state.database_path())
+                .expect("active database path")
+                .starts_with(std::fs::canonicalize(&system).expect("original storage directory"))
+        );
         assert!(!target.join(DATABASE).exists());
         assert!(!target.join("settings.json").exists());
         settings

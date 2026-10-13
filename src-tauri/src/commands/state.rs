@@ -89,7 +89,11 @@ mod tests {
         let state =
             AppState::initialize_with_roots(&dir, &crate::collectors::CollectorRoots::default())
                 .expect("initialize state");
-        assert_eq!(state.database_path(), dir.join("toklens-usage.sqlite3"));
+        assert_eq!(
+            std::fs::canonicalize(state.database_path()).expect("actual database path"),
+            std::fs::canonicalize(dir.join("toklens-usage.sqlite3"))
+                .expect("expected database path")
+        );
         assert!(state.database_path().exists());
         assert_eq!(
             state
