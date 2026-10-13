@@ -1,10 +1,10 @@
 # TokLens 0.1.8
 
-- Add local model-family icons to rankings, analytics, sessions, and request details.
-- Keep unknown models visible with a neutral fallback icon and preserve the original model name.
-- Simplify the README and document the local-first development and release workflow.
+- 模型排行、用量分析、会话列表和请求详情新增本地模型家族图标。
+- 无法识别的模型使用通用图标，保留原始模型名称与未知状态。
+- 精简 README，保留本地优先、开发和发布流程说明。
 
-Database structure and existing usage definitions are unchanged.
+数据库结构与已有统计口径保持不变。
 
-Supports Windows x64, macOS Intel, and Apple Silicon. macOS packages are not notarized.
-Updates are not checked automatically unless enabled by the user.
+支持 Windows x64、macOS Intel 与 Apple Silicon。macOS 安装包尚未经过 Apple 公证。
+默认不联网，自动检查更新默认关闭；下载和安装均由用户触发。
