@@ -7,9 +7,11 @@ TokLens is a local-first desktop app for analyzing usage metadata from AI coding
 - Overview, trends, model rankings, session metadata, and data source status.
 - Read-only collectors for Codex, Claude Code, OpenCode, DSH, Kimi Code, MiMoCode, Pi Desktop, WorkBuddy, GitHub Copilot, Gemini CLI, Grok CLI, and MCode.
 - Explicit separation of measured, derived, estimated, unknown, and partial data.
-- Local data clearing and configurable source collection.
+- Local data clearing, configurable source collection, and statistics/settings storage relocation to another drive.
 
 Model icons are bundled locally and matched by model family. Unknown models keep their original names and use a neutral fallback icon.
+
+Change the storage directory in Settings → Data and Privacy. Existing statistics and preferences move together; resetting preferences keeps the selected directory. A small location file remains in the system application directory. Window state and OS/WebView caches remain managed by the desktop runtime.
 
 ## Requirements
 

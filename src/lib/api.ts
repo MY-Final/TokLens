@@ -7,7 +7,7 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { UpdateState } from "@/lib/settings-types";
+import type { StorageStatus, UpdateState } from "@/lib/settings-types";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 export function getUpdateState(): Promise<UpdateState> {
@@ -86,6 +86,12 @@ export function resetSettings(): Promise<SettingsSnapshot> {
 }
 export function openAppDataDir(): Promise<void> {
   return invoke("open_app_data_dir");
+}
+export function getStorageStatus(): Promise<StorageStatus> {
+  return invoke("get_storage_status");
+}
+export function relocateStorage(directory: string): Promise<StorageStatus> {
+  return invoke("relocate_storage", { directory });
 }
 
 export function updateSettings(patch: SettingsPatch): Promise<SettingsSnapshot> {

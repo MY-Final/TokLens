@@ -100,8 +100,9 @@
 
 ## 4. SQLite 表结构（v1）
 
-库位置：`<应用数据目录>/toklens-usage.sqlite3`（Windows：`%APPDATA%\com.toklens.app\`）。与客户端自身的数据库分离：
-只读客户端库、只写 TokLens 库，且不写项目目录。
+库位置：`<当前存储目录>/toklens-usage.sqlite3`，初始默认在 Windows 为 `%APPDATA%\com.toklens.app\`，可从设置迁移到用户指定目录。
+系统应用目录保留小型 `storage-location.json`，统计数据库与 `settings.json` 迁移后在新目录使用。位置迁移不改变 schema、统计口径、去重键或采集水位。
+与客户端自身的数据库分离：只读客户端库、只写 TokLens 自有文件，不向客户端来源目录写入。
 迁移由 `schema_migrations` 记录，`PRAGMA user_version` 同步冗余。连接统一设置
 `foreign_keys=ON`、`journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout=5000`。
 

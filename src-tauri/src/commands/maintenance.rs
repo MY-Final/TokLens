@@ -37,11 +37,11 @@ pub fn reset_settings(app: AppHandle) -> Result<SettingsSnapshot, CommandError> 
 
 #[tauri::command]
 pub fn open_app_data_dir(app: AppHandle) -> Result<(), CommandError> {
-    let directory = app
-        .path()
-        .app_data_dir()
-        .map_err(|_| CommandError::new("无法定位应用数据目录"))?;
+    let path = app.state::<AppState>().database_path();
+    let directory = path
+        .parent()
+        .ok_or_else(|| CommandError::new("无法定位应用数据目录"))?;
     app.opener()
-        .open_path(directory.to_string_lossy(), None::<&str>)
+        .open_path(super::storage::display_path(directory), None::<&str>)
         .map_err(|_| CommandError::new("无法打开应用数据目录"))
 }

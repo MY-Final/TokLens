@@ -1,6 +1,35 @@
 use super::{UsageError, UsageStore};
 
 impl UsageStore {
+    pub fn database_path(&self) -> std::path::PathBuf {
+        self.conn
+            .path()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default()
+    }
+
+    /// SQLite creates a consistent snapshot including committed WAL records.
+    pub fn snapshot_to(&self, path: &std::path::Path) -> Result<(), UsageError> {
+        let path = path
+            .to_str()
+            .ok_or_else(|| UsageError::InvalidInput("Storage path must be valid Unicode".into()))?;
+        self.conn.execute("VACUUM INTO ?1", [path])?;
+        let snapshot = rusqlite::Connection::open(path)?;
+        let result: String = snapshot.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+        if result != "ok" {
+            return Err(UsageError::InvalidInput(
+                "Database snapshot failed integrity validation".into(),
+            ));
+        }
+        drop(snapshot);
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)?
+            .sync_all()?;
+        Ok(())
+    }
+
     /// Clear only TokLens metadata and import watermarks, retaining schema and migrations.
     pub fn clear_statistics(&self) -> Result<(), UsageError> {
         let transaction = self.conn.unchecked_transaction()?;

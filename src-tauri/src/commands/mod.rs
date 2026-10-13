@@ -15,6 +15,7 @@ pub mod request_queries;
 pub mod scheduler;
 pub mod settings;
 mod state;
+pub mod storage;
 mod sync;
 pub mod tray_usage;
 

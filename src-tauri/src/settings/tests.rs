@@ -219,3 +219,46 @@ fn patches_and_update_timestamp_do_not_overwrite_each_other() {
             .is_empty()
     );
 }
+
+#[test]
+fn relocation_serializes_concurrent_preference_updates_and_keeps_new_path() {
+    use std::sync::{Arc, mpsc};
+    let directory = Directory::new();
+    let target = directory.0.join("moved");
+    std::fs::create_dir(&target).expect("target");
+    let store = Arc::new(SettingsStore::load(&directory.0));
+    let worker_store = store.clone();
+    let worker_target = target.clone();
+    let (locked_sender, locked_receiver) = mpsc::channel();
+    let (commit_sender, commit_receiver) = mpsc::channel();
+    let relocation = std::thread::spawn(move || {
+        worker_store
+            .relocate(&worker_target, || {
+                locked_sender.send(()).expect("locked");
+                commit_receiver.recv().expect("commit");
+                Ok(())
+            })
+            .expect("relocation");
+    });
+    locked_receiver.recv().expect("lock held");
+    let updating_store = store.clone();
+    let update = std::thread::spawn(move || {
+        updating_store
+            .update(SettingsPatch {
+                collection_paused: Some(true),
+                ..Default::default()
+            })
+            .expect("update")
+    });
+    commit_sender.send(()).expect("release");
+    relocation.join().expect("relocation thread");
+    update.join().expect("update thread");
+    assert!(
+        SettingsStore::load(&target)
+            .snapshot()
+            .expect("reload moved settings")
+            .settings
+            .collection_paused
+    );
+    assert!(!directory.0.join("settings.json").exists());
+}

@@ -35,12 +35,12 @@ pub struct SettingsSnapshot {
 }
 
 struct Preferences {
+    path: PathBuf,
     document: Document,
     warning: Option<String>,
 }
 
 pub struct SettingsStore {
-    path: PathBuf,
     inner: Mutex<Preferences>,
 }
 
@@ -66,8 +66,11 @@ impl SettingsStore {
             ),
         };
         Self {
-            path,
-            inner: Mutex::new(Preferences { document, warning }),
+            inner: Mutex::new(Preferences {
+                path,
+                document,
+                warning,
+            }),
         }
     }
 
@@ -97,7 +100,7 @@ impl SettingsStore {
         let mut document = inner.document.clone();
         document.settings = change(&document.settings)?;
         document.settings.validate()?;
-        self.save(&document)?;
+        Self::save(&inner.path, &document)?;
         inner.document = document;
         inner.warning = None;
         Ok(SettingsSnapshot {
@@ -114,20 +117,34 @@ impl SettingsStore {
         let mut inner = self.lock()?;
         let mut document = inner.document.clone();
         document.last_update_check_ms = Some(now_ms);
-        self.save(&document)?;
+        Self::save(&inner.path, &document)?;
         inner.document = document;
         Ok(())
     }
 
-    fn save(&self, document: &Document) -> Result<(), String> {
+    pub(crate) fn relocate<T>(
+        &self,
+        directory: &Path,
+        commit: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut inner = self.lock()?;
+        let path = directory.join("settings.json");
+        Self::save(&path, &inner.document)?;
+        let result = commit()?;
+        inner.path = path;
+        inner.warning = None;
+        Ok(result)
+    }
+
+    fn save(path: &Path, document: &Document) -> Result<(), String> {
         let result = (|| -> Result<(), Box<dyn std::error::Error>> {
             let bytes = serde_json::to_vec_pretty(document)?;
-            let temporary = self.path.with_extension("json.tmp");
+            let temporary = path.with_extension("json.tmp");
             let mut file = std::fs::File::create(&temporary)?;
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);
-            std::fs::rename(temporary, &self.path)?;
+            std::fs::rename(temporary, path)?;
             Ok(())
         })();
         result.map_err(|_| "无法保存设置，请检查应用数据目录是否可写".into())

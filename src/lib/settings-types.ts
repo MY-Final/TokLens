@@ -22,6 +22,12 @@ export type AppSettings = {
 export type SettingsSnapshot = { settings: AppSettings; warning: string | null };
 export type SettingsPatch = Partial<AppSettings>;
 export type AppInfo = { name: string; version: string };
+export type StorageStatus = {
+  directory: string;
+  databasePath: string;
+  locatorPath: string;
+  warning: string | null;
+};
 
 export type UpdatePhase =
   | "disabled"

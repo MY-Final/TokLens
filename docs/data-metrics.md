@@ -8,6 +8,9 @@
 
 ## 1. 范围
 
+存储位置迁移（2026-10-13）只移动 TokLens 自有统计数据库与设置，不重新计算数据，不改变 Token 等级、来源记录、去重键或成功采集水位。
+迁移由用户显式触发；等待采集完成后使用包含已提交 WAL 的一致快照，验证成功再切换，失败保留原数据与位置。系统应用目录只保留小型位置记录及运行时管理的窗口状态等文件。
+
 统计对象（客户端）当前为：**Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode**，后续可扩展。
 统计维度：会话、请求、token、模型、成本、时间分布、客户端与项目维度。
 统计范围限于**本机会话/日志文件**，不涉及任何远端数据或账号数据。

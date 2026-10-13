@@ -23,6 +23,7 @@ TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、
 
 当前仓库状态：已有本地 SQLite 用量库、Codex 只读采集器、Tauri 查询与同步命令，以及总览 / 用量分析 /
 会话明细 / 数据源管理页面。Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI 与 MCode 采集器已接入，费用换算尚未实现。
+统计数据库与设置可在“数据与隐私”中迁移到用户指定目录；系统应用目录保留小型位置记录，恢复默认设置不改变存储位置。
 新增架构组件（持久化、状态管理、测试框架、错误处理库等）前，必须先在 `docs/architecture.md` 的决策记录中登记。
 
 明确不做的事：云端账号体系、远程同步、修改或删除客户端的原始会话数据、绕过客户端自身配置读取数据、采集与统计无关的正文内容。

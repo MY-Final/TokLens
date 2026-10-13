@@ -237,7 +237,7 @@ pub fn get_data_source_status(
             })
             .collect(),
         sync,
-        database_path: state.database_path().to_string_lossy().to_string(),
+        database_path: super::storage::display_path(&state.database_path()),
         first_event_ms,
         last_event_ms,
         // 费用没有可靠来源：不展示任何金额。

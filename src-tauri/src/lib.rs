@@ -55,8 +55,13 @@ pub fn run() {
             // 本地库放在 TokLens 专属应用数据目录（客户端数据目录只读，绝不写入）。
             let data_dir = app.path().app_data_dir()?;
             let state = commands::AppState::initialize(&data_dir)?;
+            let storage_directory = state
+                .database_path()
+                .parent()
+                .ok_or_else(|| std::io::Error::other("Invalid database directory"))?
+                .to_path_buf();
             app.manage(state);
-            app.manage(settings::SettingsStore::load(&data_dir));
+            app.manage(settings::SettingsStore::load(&storage_directory));
             app.manage(updates::UpdateManager::default());
             desktop::initialize(app.handle())?;
             // 启动即做一次增量同步：首次运行导入历史，之后只处理变化的文件。
@@ -79,6 +84,8 @@ pub fn run() {
             updates::install::install_update,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::storage::get_storage_status,
+            commands::storage::relocate_storage,
             commands::maintenance::clear_statistics,
             commands::maintenance::reset_settings,
             commands::maintenance::open_app_data_dir,

@@ -216,7 +216,8 @@ usage/tokens ────────→ usage/client
 桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
 处理原生关闭流程。`clear_statistics` 在后台维护边界中暂停并清除统计；`reset_settings` 仅重置偏好；
-`open_app_data_dir` 只打开固定 TokLens 目录。`settings-changed` 通知前端重读；统计清除复用 `usage-sync` 刷新事件。
+`get_storage_status` 返回当前目录、数据库路径、位置记录路径与清理警告；`relocate_storage(directory)` 在后台迁移统计与设置，位置独立于普通偏好。
+`open_app_data_dir` 只打开当前 TokLens 存储目录。`settings-changed` 通知前端重读；统计清除与位置迁移复用 `usage-sync` 刷新事件。
 手动与后台同步结束均重新读取完整数据源状态并更新页面查询版本；同一筛选刷新保留已成功数据，切换日期 / 客户端 / 页码时隐藏旧范围数据。订阅先于初始读取，进行中每两秒、空闲每三十秒与窗口聚焦时本地轮询兜底；请求代次丢弃过期响应。
 
 更新命令：`get_update_state`（无网络）、`check_updates`（显式或已开启自动检查）、`download_update`
@@ -262,8 +263,8 @@ usage/tokens ────────→ usage/client
 - 提供一键清除应用数据的能力（不影响客户端原始数据）。
 
 前端状态管理仍待定：优先使用 React 内置能力；引入状态管理库或数据请求库前先登记决策。
-本地库路径：`<应用数据目录>/toklens-usage.sqlite3`（Windows 为 `%APPDATA%\com.toklens.app\`），
-由 `AppState::initialize` 在启动时创建并迁移；客户端数据目录只读。
+本地库路径：`<当前存储目录>/toklens-usage.sqlite3`，初始默认目录在 Windows 为 `%APPDATA%\com.toklens.app\`。
+启动先读取系统应用目录的 `storage-location.json`，再由 `AppState::initialize` 打开当前库；客户端数据目录只读。
 
 ## 6. 错误处理与日志
 
@@ -393,6 +394,21 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-13 | 模型标识采用 `ModelIdentity` + 纯函数模型家族匹配，不新增 JSON 配置或后端字段     | 已采纳 | 复用已登记 `@lobehub/icons` 的本地品牌 SVG；按 provider / family 匹配版本变化，未知模型回退 `Cpu`，原始模型字符串保持不变 |
 | 2026-10-11 | 日期时间选择器复用 shadcn Popover 与原生分钟输入，根级 Hook 统一滚动预设时间      | 已采纳 | 无新依赖；自定义确认后固定，精确范围与每日显示桶独立                                                                      |
 | 2026-10-12 | Token 展示偏好复用原生设置，通过 React 内置 Context 传递给展示组件                | 已采纳 | 默认自动单位，支持用户选择；仅改变格式，无新增状态库或统计计算                                                            |
+
+### 可配置本地存储（2026-10-13）
+
+新增 `commands/storage.rs` 管理版本化存储位置记录并协调应用自有数据库与设置迁移；SQLite 快照由 `usage/store/maintenance.rs` 提供，设置路径切换由 `settings/mod.rs` 在偏好锁中完成。
+系统应用目录仅保留小型 `storage-location.json` 启动定位文件；用户可以将统计数据库和 `settings.json` 移到其他磁盘。
+窗口状态及操作系统/WebView 缓存仍由桌面运行时管理，不承诺完全消除系统盘写入。
+迁移复用现有维护互斥门，等待当前采集完成，阻止并发采集、清除与退出越过迁移；使用包含 WAL 已提交数据的一致 SQLite 快照，验证后才切换位置。
+目标仅允许绝对目录，拒绝覆盖已有同名文件及写入客户端数据根目录；失败保留原位置和原数据，成功后仅清理旧目录中 TokLens 自有数据库与设置文件。
+位置独立于普通偏好，恢复默认设置不改变存储位置。启动时已配置位置不可用须明确报错，不静默在系统盘建立空库。无新增依赖、插件权限或联网能力。
+
+| 日期       | 决策                                                             | 状态   | 理由 / 影响                                                                        |
+| ---------- | ---------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
+| 2026-10-13 | 本地数据库和设置支持用户指定目录，系统应用目录保留版本化位置文件 | 已采纳 | 可跨磁盘迁移，保持来源只读、WAL 数据完整及重启定位；复用现有 JSON、SQLite 和维护锁 |
+
+待登记（引入前补一行）：前端状态管理、前端测试框架、错误类型库（当前 `UsageError` 为模块内自定义枚举）、价格表来源。
 
 ### Token 显示偏好（2026-10-12）
 

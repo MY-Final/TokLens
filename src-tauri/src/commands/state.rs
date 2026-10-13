@@ -26,29 +26,41 @@ pub struct SyncState {
 pub struct AppState {
     pub(crate) activity: super::activity::ActivityGate,
     pub(crate) store: Mutex<UsageStore>,
-    pub(crate) db_path: PathBuf,
+    pub(crate) system_directory: PathBuf,
     pub(crate) sync: Mutex<SyncState>,
 }
 
 impl AppState {
-    /// 在 TokLens 专属应用数据目录下初始化本地库（不存在则创建），并执行迁移。
-    ///
-    /// 数据库路径：`<应用数据目录>/toklens-usage.sqlite3`（Windows 为
-    /// `%APPDATA%\com.toklens.app\`）。客户端自己的数据目录只读，绝不写入。
+    /// 从系统应用目录的定位文件解析统计存储位置，再打开数据库并执行迁移。
+    /// 未配置位置时使用系统应用目录；已配置但不可用时拒绝回退创建空库。
     pub fn initialize(app_data_dir: &Path) -> Result<Self, UsageError> {
+        Self::initialize_with_roots(
+            app_data_dir,
+            &crate::collectors::CollectorRoots::from_environment(),
+        )
+    }
+
+    pub(crate) fn initialize_with_roots(
+        app_data_dir: &Path,
+        roots: &crate::collectors::CollectorRoots,
+    ) -> Result<Self, UsageError> {
         std::fs::create_dir_all(app_data_dir)?;
-        let db_path = app_data_dir.join("toklens-usage.sqlite3");
+        let directory = super::storage::resolve_directory(app_data_dir, roots)?;
+        let db_path = directory.join("toklens-usage.sqlite3");
         let store = UsageStore::open(&db_path)?;
         Ok(Self {
             activity: super::activity::ActivityGate::default(),
             store: Mutex::new(store),
-            db_path,
+            system_directory: app_data_dir.to_path_buf(),
             sync: Mutex::new(SyncState::default()),
         })
     }
 
-    pub fn database_path(&self) -> &Path {
-        &self.db_path
+    pub fn database_path(&self) -> PathBuf {
+        self.store
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .database_path()
     }
 
     /// 获取本地库连接（互斥保护）。锁中毒说明此前有线程 panic，这里继续可用并提示。
@@ -74,7 +86,9 @@ mod tests {
     fn initializes_database_in_given_directory() {
         let dir = std::env::temp_dir().join(format!("toklens-state-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let state = AppState::initialize(&dir).expect("initialize state");
+        let state =
+            AppState::initialize_with_roots(&dir, &crate::collectors::CollectorRoots::default())
+                .expect("initialize state");
         assert_eq!(state.database_path(), dir.join("toklens-usage.sqlite3"));
         assert!(state.database_path().exists());
         assert_eq!(
