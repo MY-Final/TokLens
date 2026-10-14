@@ -12,7 +12,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, TableSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { ModelIdentity } from "@/components/ModelIdentity";
 import type { SessionSummary } from "@/lib/usage-types";
@@ -69,13 +70,14 @@ export function SessionTable({
   ariaLabel?: string;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
+  const syncing = useSyncing();
   const rows = sessions ?? [];
   return (
     <div className="space-y-3">
       {error ? (
         <ErrorBlock message={error} onRetry={onRetry} />
-      ) : loading ? (
-        <LoadingRows rows={6} />
+      ) : rows.length === 0 && (loading || syncing) ? (
+        <TableSkeleton rows={6} columns={onOpenSession ? 8 : 7} />
       ) : rows.length === 0 ? (
         <EmptyBlock
           title="没有匹配的会话"

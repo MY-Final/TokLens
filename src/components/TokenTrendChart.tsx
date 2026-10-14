@@ -10,7 +10,8 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, ChartSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { CLIENT_KEYS, clientLabel } from "@/lib/client-labels";
 import { dayTotalLabel, formatDateTime } from "@/lib/format";
 import type { ClientKey, DailyTokenBucket } from "@/lib/usage-types";
@@ -76,6 +77,7 @@ export function TokenTrendChart({
   selectedRange?: DailyRange;
 }) {
   const { formatTokens } = useTokenFormat();
+  const syncing = useSyncing();
   const [mode, setMode] = useState("client");
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const gradientId = useId().replace(/:/g, "");
@@ -136,8 +138,8 @@ export function TokenTrendChart({
         <div className={data.length === 1 ? "min-h-40" : "min-h-56"}>
           {error ? (
             <ErrorBlock message={error} onRetry={onRetry} />
-          ) : loading ? (
-            <LoadingRows rows={5} />
+          ) : !hasData && (loading || syncing) ? (
+            <ChartSkeleton blockClassName={data.length === 1 ? "h-40" : "h-56 xl:h-64"} />
           ) : !hasData ? (
             <EmptyBlock
               title="所选区间没有 Token 记录"

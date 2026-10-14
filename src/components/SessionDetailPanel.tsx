@@ -1,7 +1,8 @@
 /** 会话详情仅呈现本地统计元数据，不读取或展示正文。 */
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { ModelIdentity } from "@/components/ModelIdentity";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, DetailSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,6 +116,7 @@ export function SessionDetailPanel({
   onOffsetChange: (offset: number) => void;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
+  const syncing = useSyncing();
   const session = detail.data?.session ?? selectedSession;
   const coverage = detail.data?.requestCoverage;
   return (
@@ -196,8 +198,8 @@ export function SessionDetailPanel({
             <h3 className="text-sm font-medium">请求元数据</h3>
             {detail.error ? (
               <ErrorBlock message={`无法加载会话详情：${detail.error}`} onRetry={detail.reload} />
-            ) : detail.loading ? (
-              <LoadingRows rows={5} />
+            ) : !detail.data && (detail.loading || syncing) ? (
+              <DetailSkeleton />
             ) : detail.data ? (
               <>
                 {coverage ? (

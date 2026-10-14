@@ -16,7 +16,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, RankingSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import type { RankingEntry } from "@/lib/usage-types";
 import { formatNumber, shortenPath } from "@/lib/format";
 
@@ -44,6 +45,7 @@ export function RankingCard({
   onOpenEntry?: (key: string | null) => void;
 }) {
   const { formatTokens } = useTokenFormat();
+  const syncing = useSyncing();
   const rows = entries ?? [];
   const max = rows[0]?.totalTokens ?? 0;
   return (
@@ -55,8 +57,8 @@ export function RankingCard({
       <CardContent className="px-5">
         {error ? (
           <ErrorBlock message={error} onRetry={onRetry} />
-        ) : loading ? (
-          <LoadingRows rows={5} />
+        ) : rows.length === 0 && (loading || syncing) ? (
+          <RankingSkeleton rows={5} />
         ) : rows.length === 0 ? (
           <EmptyBlock title={emptyTitle} description={emptyDescription} />
         ) : (

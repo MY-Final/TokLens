@@ -1,7 +1,8 @@
 import { Fragment, useId, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ModelIdentity } from "@/components/ModelIdentity";
-import { EmptyBlock } from "@/components/StateBlocks";
+import { EmptyBlock, DetailSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,8 +111,13 @@ export function RequestAnalysisDetails({
   onOpenSessions?: (filters: Partial<SessionFilters>) => void;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
+  const syncing = useSyncing();
   const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const detailId = useId();
+
+  if (data.models.length === 0 && syncing) {
+    return <DetailSkeleton rows={4} />;
+  }
 
   if (data.models.length === 0) {
     return (

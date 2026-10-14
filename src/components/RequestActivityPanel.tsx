@@ -9,7 +9,8 @@ import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, ChartSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer } from "@/components/ui/chart";
@@ -164,6 +165,7 @@ export function RequestActivityPanel({
   const { formatTokens, formatTokensOrDash } = useTokenFormat();
   const [metric, setMetric] = useState<Metric>("tokens");
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
+  const syncing = useSyncing();
   const days = data?.daily ?? [];
   const hours = data?.hourly ?? [];
   const hasHourly = hours.length > 0;
@@ -199,8 +201,8 @@ export function RequestActivityPanel({
       <CardContent className="space-y-4 px-5">
         {error ? (
           <ErrorBlock message={error} onRetry={onRetry} />
-        ) : loading ? (
-          <LoadingRows rows={5} />
+        ) : (!data || !hasData) && (loading || syncing) ? (
+          <ChartSkeleton />
         ) : data ? (
           <>
             <dl className="grid grid-cols-3 gap-4 text-xs">

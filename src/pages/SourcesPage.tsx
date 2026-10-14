@@ -15,6 +15,7 @@ import type { SettingsController } from "@/hooks/use-settings";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import { GROK_USAGE_NOTE, clientLabel } from "@/lib/client-labels";
@@ -56,6 +57,7 @@ export function SourcesPage({
 }) {
   const sync: SyncState | null = status?.sync ?? null;
   const report = sync?.report ?? null;
+  const syncing = useSyncing();
 
   return (
     <div className="space-y-4">
@@ -125,7 +127,7 @@ export function SourcesPage({
             <CardTitle>本地数据库</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {loading && !status ? (
+            {(loading || syncing) && !status ? (
               <LoadingRows rows={3} />
             ) : (
               <>
@@ -343,7 +345,7 @@ export function SourcesPage({
             </DashboardCard>
           );
         })}
-        {!status && !loading ? (
+        {!status && !loading && !syncing ? (
           <DashboardCard>
             <CardContent className="py-4">
               <p className="text-xs text-muted-foreground">数据源状态不可用。</p>

@@ -19,7 +19,8 @@ import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/
 import { RankingCard } from "@/components/RankingCard";
 import { SessionTable } from "@/components/SessionTable";
 import { StatCard } from "@/components/StatCard";
-import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { ErrorBlock, StatCardsSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { TokenTrendChart } from "@/components/TokenTrendChart";
 import { useAsyncData } from "@/hooks/use-async-data";
 import {
@@ -64,6 +65,7 @@ export function OverviewPage(props: OverviewPageProps) {
 
 function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: OverviewPageProps) {
   const { formatTokensOrDash } = useTokenFormat();
+  const syncing = useSyncing();
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
   const todayStart = startOfDay(nowMs).getTime();
@@ -136,14 +138,8 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
     <div className="space-y-4">
       {overview.error ? (
         <ErrorBlock message={overview.error} onRetry={overview.reload} />
-      ) : overview.loading ? (
-        <div className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => (
-            <DashboardCard key={index} className="px-5">
-              <LoadingRows rows={2} />
-            </DashboardCard>
-          ))}
-        </div>
+      ) : !stats && (overview.loading || syncing) ? (
+        <StatCardsSkeleton />
       ) : (
         <div className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4">
           <StatCard

@@ -5,7 +5,8 @@ import { UsageTooltip } from "@/components/UsageTooltip";
 import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, HeatmapSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { dayTotalLabel, formatNumber } from "@/lib/format";
@@ -85,6 +86,7 @@ export function CalendarHeatmap({
   onSelectDay?: (dayStartMs: number) => void;
 }) {
   const [metric, setMetric] = useState<Metric>("tokens");
+  const syncing = useSyncing();
   const titleId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const weeks = calendarWeeks(buckets ?? []);
@@ -135,10 +137,10 @@ export function CalendarHeatmap({
         </CardHeader>
         <CardContent className="min-w-0 px-5 pt-4">
           <TabsContent value={metric} className="space-y-4">
-            {loading ? (
-              <LoadingRows rows={4} />
-            ) : error ? (
+            {error ? (
               <ErrorBlock message={error} onRetry={onRetry} />
+            ) : !hasData && (loading || syncing) ? (
+              <HeatmapSkeleton />
             ) : !hasData ? (
               <EmptyBlock
                 title="此时间范围暂无会话"

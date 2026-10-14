@@ -15,6 +15,7 @@ import { SourcesPage } from "@/pages/SourcesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useSettings } from "@/hooks/use-settings";
 import { TokenDisplayContext } from "@/hooks/use-token-format";
+import { SyncStatusContext } from "@/hooks/use-sync-status";
 import { useUpdates } from "@/hooks/use-updates";
 import { useLocalClock } from "@/hooks/use-local-clock";
 import { useTrayUsage } from "@/hooks/use-tray-usage";
@@ -51,6 +52,7 @@ export default function App() {
   const updates = useUpdates();
   const latestUpdates = useRef(updates);
   const { status, error, loading, refreshToken, syncBusy, syncNow, reload } = useDataSourceStatus();
+  const syncing = syncBusy || (status?.sync?.running ?? false);
   useTrayUsage(nowMs, refreshToken);
 
   const handleNavigate = useCallback((nextPage: PageKey) => {
@@ -170,126 +172,128 @@ export default function App() {
 
   return (
     <TokenDisplayContext value={settings.settings?.tokenDisplay ?? "auto"}>
-      <TooltipProvider delayDuration={200}>
-        <Tabs
-          value={analyticsClient ?? "all"}
-          onValueChange={(value) => setAnalyticsClient(isClientKey(value) ? value : null)}
-          className="block"
-        >
-          <AppShell
-            page={page}
-            collectionPaused={settings.settings?.collectionPaused ?? false}
-            range={range}
-            nowMs={nowMs}
-            status={status}
-            syncBusy={syncBusy}
-            error={error ?? settings.error}
-            onRetry={() => {
-              void Promise.all([reload(), settings.reload()]);
-            }}
-            onNavigate={handleNavigate}
-            onRangeChange={(nextRange) => {
-              setSelectedRange(nextRange);
-              setSessionState((current) => ({
-                ...current,
-                offset: 0,
-                rangeScope: rangeScope(nextRange),
-              }));
-            }}
-            updateControl={
-              <Button
-                variant="ghost"
-                className="h-10 w-full justify-start gap-3 px-3 text-primary"
-                aria-label={updateLabel}
-                title={updateLabel}
-                onClick={() => {
-                  setUpdateDialogOpen(true);
-                  if (
-                    updates.state &&
-                    !knownUpdate &&
-                    !updates.busy &&
-                    updates.state?.phase !== "disabled" &&
-                    updates.state?.phase !== "checking"
-                  )
-                    void updates.act("check");
-                }}
-              >
-                <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
-                <span className="truncate">{updateLabel}</span>
-              </Button>
-            }
-            secondaryToolbar={secondaryToolbar}
-            onSync={handleSync}
+      <SyncStatusContext value={syncing}>
+        <TooltipProvider delayDuration={200}>
+          <Tabs
+            value={analyticsClient ?? "all"}
+            onValueChange={(value) => setAnalyticsClient(isClientKey(value) ? value : null)}
+            className="block"
           >
-            {page === "overview" ? (
-              <OverviewPage
-                range={range}
-                nowMs={nowMs}
-                refreshToken={refreshToken}
-                onNavigate={handleNavigate}
-                onOpenSessions={openSessions}
-                basis={overviewBasis}
-              />
-            ) : null}
-            {page === "analytics" ? (
-              <AnalyticsPage
-                range={range}
-                refreshToken={refreshToken}
-                client={analyticsClient}
-                onOpenSessions={openSessions}
-              />
-            ) : null}
-            {page === "sessions" ? (
-              <SessionsPage
-                range={range}
-                refreshToken={refreshToken}
-                state={sessionState}
-                onChange={setSessionState}
-                returnLabel={sessionOrigin?.page === "analytics" ? "返回用量分析" : "返回总览"}
-                onReturn={
-                  sessionOrigin
-                    ? () => {
-                        setSelectedRange(sessionOrigin.range);
-                        handleNavigate(sessionOrigin.page);
-                      }
-                    : undefined
-                }
-              />
-            ) : null}
-            {page === "sources" ? (
-              <SourcesPage
-                settingsController={settings}
-                status={status}
-                loading={loading}
-                error={error}
-                syncBusy={syncBusy}
-                onRetry={() => {
-                  void reload();
-                }}
-                onSync={handleSync}
-                onSyncClient={(client) => {
-                  void syncNow(true, client);
-                }}
-              />
-            ) : null}
-            {page === "settings" ? (
-              <SettingsPage
-                controller={settings}
-                updates={updates}
-                updateFocusToken={updateFocusToken}
-              />
-            ) : null}
-          </AppShell>
-        </Tabs>
-        <UpdateAnnouncement
-          updates={updates}
-          currentVersion={settings.appInfo?.version ?? null}
-          open={updateDialogOpen}
-          onOpenChange={setUpdateDialogOpen}
-        />
-        <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
-        <CloseWindowDialog />
-      </TooltipProvider>
+            <AppShell
+              page={page}
+              collectionPaused={settings.settings?.collectionPaused ?? false}
+              range={range}
+              nowMs={nowMs}
+              status={status}
+              syncBusy={syncBusy}
+              error={error ?? settings.error}
+              onRetry={() => {
+                void Promise.all([reload(), settings.reload()]);
+              }}
+              onNavigate={handleNavigate}
+              onRangeChange={(nextRange) => {
+                setSelectedRange(nextRange);
+                setSessionState((current) => ({
+                  ...current,
+                  offset: 0,
+                  rangeScope: rangeScope(nextRange),
+                }));
+              }}
+              updateControl={
+                <Button
+                  variant="ghost"
+                  className="h-10 w-full justify-start gap-3 px-3 text-primary"
+                  aria-label={updateLabel}
+                  title={updateLabel}
+                  onClick={() => {
+                    setUpdateDialogOpen(true);
+                    if (
+                      updates.state &&
+                      !knownUpdate &&
+                      !updates.busy &&
+                      updates.state?.phase !== "disabled" &&
+                      updates.state?.phase !== "checking"
+                    )
+                      void updates.act("check");
+                  }}
+                >
+                  <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{updateLabel}</span>
+                </Button>
+              }
+              secondaryToolbar={secondaryToolbar}
+              onSync={handleSync}
+            >
+              {page === "overview" ? (
+                <OverviewPage
+                  range={range}
+                  nowMs={nowMs}
+                  refreshToken={refreshToken}
+                  onNavigate={handleNavigate}
+                  onOpenSessions={openSessions}
+                  basis={overviewBasis}
+                />
+              ) : null}
+              {page === "analytics" ? (
+                <AnalyticsPage
+                  range={range}
+                  refreshToken={refreshToken}
+                  client={analyticsClient}
+                  onOpenSessions={openSessions}
+                />
+              ) : null}
+              {page === "sessions" ? (
+                <SessionsPage
+                  range={range}
+                  refreshToken={refreshToken}
+                  state={sessionState}
+                  onChange={setSessionState}
+                  returnLabel={sessionOrigin?.page === "analytics" ? "返回用量分析" : "返回总览"}
+                  onReturn={
+                    sessionOrigin
+                      ? () => {
+                          setSelectedRange(sessionOrigin.range);
+                          handleNavigate(sessionOrigin.page);
+                        }
+                      : undefined
+                  }
+                />
+              ) : null}
+              {page === "sources" ? (
+                <SourcesPage
+                  settingsController={settings}
+                  status={status}
+                  loading={loading}
+                  error={error}
+                  syncBusy={syncBusy}
+                  onRetry={() => {
+                    void reload();
+                  }}
+                  onSync={handleSync}
+                  onSyncClient={(client) => {
+                    void syncNow(true, client);
+                  }}
+                />
+              ) : null}
+              {page === "settings" ? (
+                <SettingsPage
+                  controller={settings}
+                  updates={updates}
+                  updateFocusToken={updateFocusToken}
+                />
+              ) : null}
+            </AppShell>
+          </Tabs>
+          <UpdateAnnouncement
+            updates={updates}
+            currentVersion={settings.appInfo?.version ?? null}
+            open={updateDialogOpen}
+            onOpenChange={setUpdateDialogOpen}
+          />
+          <Toaster position="bottom-right" theme={settings.settings?.theme ?? "system"} />
+          <CloseWindowDialog />
+        </TooltipProvider>
+      </SyncStatusContext>
     </TokenDisplayContext>
   );
 }

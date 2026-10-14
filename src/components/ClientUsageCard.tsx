@@ -6,7 +6,8 @@ import { ClientIdentity } from "@/components/ClientIdentity";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { EmptyBlock, ErrorBlock, ClientListSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import type { ClientKey, ClientUsage, RequestAnalysisGroup } from "@/lib/usage-types";
 import { clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
@@ -38,6 +39,7 @@ type ClientUsageCardProps = {
 
 export function ClientUsageCard(props: ClientUsageCardProps) {
   const { loading, error, onRetry } = props;
+  const syncing = useSyncing();
   const { formatTokens } = useTokenFormat();
   const rows =
     props.basis === "requests"
@@ -78,8 +80,8 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
       <CardContent className="space-y-4 px-5">
         {error ? (
           <ErrorBlock message={error} onRetry={onRetry} />
-        ) : loading ? (
-          <LoadingRows rows={4} />
+        ) : rows.length === 0 && (loading || syncing) ? (
+          <ClientListSkeleton rows={4} />
         ) : (
           <>
             {rows.length === 0 ? (

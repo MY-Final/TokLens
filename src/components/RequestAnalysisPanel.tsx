@@ -1,6 +1,7 @@
 import { DataExplanation } from "@/components/DataExplanation";
 import { RequestAnalysisDetails } from "@/components/RequestAnalysisDetails";
-import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
+import { ErrorBlock, DetailSkeleton } from "@/components/StateBlocks";
+import { useSyncing } from "@/hooks/use-sync-status";
 import { TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useTokenFormat } from "@/hooks/use-token-format";
@@ -27,6 +28,7 @@ export function RequestAnalysisPanel({
   onOpenSessions?: (filters: Partial<SessionFilters>) => void;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
+  const syncing = useSyncing();
   const scope = selectedClient ? clientLabel(selectedClient) : "全部客户端";
   const selectedTab = selectedClient ?? "all";
   const totals = data?.summary.totals;
@@ -55,8 +57,8 @@ export function RequestAnalysisPanel({
         )) ? (
         <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
       ) : null}
-      {loading ? (
-        <LoadingRows rows={6} />
+      {!data && (loading || syncing) ? (
+        <DetailSkeleton />
       ) : data ? (
         <>
           <dl className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground">
