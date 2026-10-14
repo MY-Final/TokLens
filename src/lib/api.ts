@@ -36,7 +36,12 @@ export function openProjectPage(): Promise<void> {
 }
 import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
 import type { DesktopStatus } from "@/lib/usage-types";
-import type { PanelCatalog, PanelQueryArgs, PanelSpec } from "@/lib/panel-spec";
+import {
+  adaptPanelCatalog,
+  type PanelCatalog,
+  type PanelQueryArgs,
+  type PanelSpec,
+} from "@/lib/panel-spec";
 
 export function getDesktopStatus(): Promise<DesktopStatus> {
   return invoke<DesktopStatus>("get_desktop_status");
@@ -261,8 +266,8 @@ export function getDataSourceStatus(): Promise<DataSourceStatus> {
 }
 
 /** 生成式面板：目录为白名单单一事实来源；查询只读、无状态；定义存于版本化设置。 */
-export function getPanelCatalog(): Promise<PanelCatalog> {
-  return invoke<PanelCatalog>("get_panel_catalog");
+export async function getPanelCatalog(): Promise<PanelCatalog> {
+  return adaptPanelCatalog(await invoke("get_panel_catalog"));
 }
 
 /**
@@ -285,6 +290,10 @@ export function deletePanelSpec(id: string): Promise<unknown> {
 }
 export function reorderPanels(ids: string[]): Promise<unknown> {
   return invoke("reorder_panels", { ids });
+}
+/** 独立「重置面板」入口：清空用户面板，不影响统计与其它偏好。 */
+export function resetPanelSpecs(): Promise<unknown> {
+  return invoke("reset_panel_specs");
 }
 
 export function syncUsage(force = false): Promise<SyncState> {

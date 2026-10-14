@@ -6,6 +6,7 @@ import {
   deletePanelSpec,
   getPanelSpecs,
   reorderPanels,
+  resetPanelSpecs,
   savePanelSpec,
   toErrorMessage,
 } from "@/lib/api";
@@ -27,6 +28,7 @@ export type PanelsController = {
   save: (spec: PanelSpec) => Promise<void>;
   remove: (id: string) => Promise<void>;
   reorder: (ids: string[]) => Promise<void>;
+  reset: () => Promise<void>;
 };
 
 type PanelsState = {
@@ -35,8 +37,38 @@ type PanelsState = {
   invalidCount: number;
 };
 
-function toUnsupported(value: unknown, specVersion: number): UnsupportedPanel {
-  const record = (value ?? {}) as Record<string, unknown>;
+/**
+ * 解包 Rust `StoredPanelDto { specVersion, readable, spec }`。
+ * `readable=false` 表示高版本，仅保留原始 `spec` 供只读展示。
+ */
+function unwrapStored(item: unknown): {
+  spec: unknown;
+  readable: boolean;
+  specVersion: number;
+} {
+  const record = (item ?? {}) as Record<string, unknown>;
+  if ("spec" in record && typeof record.spec === "object" && record.spec !== null) {
+    const spec = record.spec;
+    const rawVersion = record.specVersion;
+    const version =
+      typeof rawVersion === "number" && Number.isInteger(rawVersion) && rawVersion > 0
+        ? rawVersion
+        : readPanelSpecVersion(spec);
+    const readable =
+      record.readable !== false && (version === null || version <= PANEL_SPEC_VERSION);
+    return { spec, readable, specVersion: version ?? PANEL_SPEC_VERSION };
+  }
+  // 容错：未包装的裸 spec（不应发生，Rust 一律返回包装数组）。
+  const version = readPanelSpecVersion(item);
+  return {
+    spec: item,
+    readable: version === null || version <= PANEL_SPEC_VERSION,
+    specVersion: version ?? PANEL_SPEC_VERSION,
+  };
+}
+
+function toUnsupported(spec: unknown, specVersion: number): UnsupportedPanel {
+  const record = (spec ?? {}) as Record<string, unknown>;
   const id = typeof record.id === "string" && record.id ? record.id : `v${specVersion}`;
   const title =
     typeof record.title === "string" && record.title.trim()
@@ -61,12 +93,12 @@ export function usePanels(): PanelsController {
     const unsupported: UnsupportedPanel[] = [];
     let invalidCount = 0;
     for (const item of list) {
-      const version = readPanelSpecVersion(item);
-      if (version !== null && version > PANEL_SPEC_VERSION) {
-        unsupported.push(toUnsupported(item, version));
+      const { spec, readable, specVersion } = unwrapStored(item);
+      if (!readable) {
+        unsupported.push(toUnsupported(spec, specVersion));
         continue;
       }
-      const result = validatePanelSpec(item);
+      const result = validatePanelSpec(spec);
       if (result.ok) panels.push(result.spec);
       else invalidCount += 1;
     }
@@ -120,6 +152,10 @@ export function usePanels(): PanelsController {
     [accept],
   );
 
+  const reset = useCallback(async () => {
+    accept(await resetPanelSpecs());
+  }, [accept]);
+
   return {
     panels: state.panels,
     unsupported: state.unsupported,
@@ -130,5 +166,6 @@ export function usePanels(): PanelsController {
     save,
     remove,
     reorder,
+    reset,
   };
 }

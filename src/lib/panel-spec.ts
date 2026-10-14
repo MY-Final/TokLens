@@ -23,11 +23,17 @@ import type { ClientKey, SessionFilters } from "@/lib/usage-types";
 export const PANEL_SPEC_VERSION = 1;
 export const PANEL_COL_SPANS = [3, 4, 6, 12] as const;
 export const PANEL_ROW_SPANS = [1, 2] as const;
-export const PANEL_MIN_LIMIT = 1;
-export const PANEL_MAX_LIMIT = 100;
 export const PANEL_MAX_ORDER = 63;
 export const PANEL_MAX_TITLE = 80;
+export const PANEL_MAX_ID = 64;
 export const PANEL_MAX_TEXT = 200;
+/** limit 边界按类型区分（与 Rust `panels::spec` 常量一致）。 */
+export const PANEL_RANKING_LIMIT_MIN = 1;
+export const PANEL_RANKING_LIMIT_MAX = 50;
+export const PANEL_RANKING_LIMIT_DEFAULT = 8;
+export const PANEL_SESSION_LIMIT_MIN = 1;
+export const PANEL_SESSION_LIMIT_MAX = 500;
+export const PANEL_SESSION_LIMIT_DEFAULT = 20;
 
 export const PANEL_TYPES = [
   "stat",
@@ -106,7 +112,55 @@ export type PanelValidationError = { path: string; message: string };
 export type PanelValidationResult =
   { ok: true; spec: PanelSpec } | { ok: false; errors: PanelValidationError[] };
 
-/** 目录 DTO（`get_panel_catalog`，单一事实来源）。 */
+/**
+ * 目录 DTO（`get_panel_catalog`，单一事实来源，Rust 原始形状）。
+ * `params` 同时包含查询级参数与 `typeOptions` 参数；`fields` 列出该类型接受的 `typeOptions` 键。
+ */
+export type PanelParamKindDto = "enum" | "int" | "intArray" | "bool" | "string";
+export type PanelCatalogParamDto = {
+  name: string;
+  kind: string;
+  required: boolean;
+  min: number | null;
+  max: number | null;
+  values: string[];
+};
+export type PanelCatalogTypeDto = {
+  type: PanelType;
+  timeBases: PanelTimeBasis[];
+  defaultTimeBasis: PanelTimeBasis;
+  params: PanelCatalogParamDto[];
+  fields: string[];
+  query: string;
+};
+export type PanelGlobalLimitsDto = {
+  titleMaxLen: number;
+  idMaxLen: number;
+  colSpans: number[];
+  rowSpans: number[];
+  orderMax: number;
+  stringMaxLen: number;
+  dayCountMin: number;
+  dayCountMax: number;
+  calendarDayCountMax: number;
+  dayBoundaryMin: number;
+  dayBoundaryMax: number;
+  hourlyBoundaryMax: number;
+  rankingLimitMin: number;
+  rankingLimitMax: number;
+  rankingLimitDefault: number;
+  sessionLimitMin: number;
+  sessionLimitMax: number;
+  sessionLimitDefault: number;
+  sessionOffsetMax: number;
+};
+export type PanelCatalogDto = {
+  catalogVersion: number;
+  panelTypes: PanelCatalogTypeDto[];
+  globalLimits: PanelGlobalLimitsDto;
+};
+
+/** 编辑器使用的目录形状：`params` 已收敛为可渲染的 `typeOptions` 控件。 */
 export type PanelParamKind = "number" | "select" | "boolean" | "string";
 export type PanelCatalogParam = {
   name: string;
@@ -119,44 +173,86 @@ export type PanelCatalogParam = {
 export type PanelCatalogType = {
   type: PanelType;
   timeBases: PanelTimeBasis[];
+  defaultTimeBasis: PanelTimeBasis;
   params: PanelCatalogParam[];
   fields: string[];
 };
-export type PanelGlobalLimits = {
-  colSpans: number[];
-  rowSpans: number[];
-  maxTitle: number;
-  minLimit: number;
-  maxLimit: number;
-  maxOrder: number;
-};
+export type PanelGlobalLimits = PanelGlobalLimitsDto;
 export type PanelCatalog = {
   catalogVersion: number;
   panelTypes: PanelCatalogType[];
   globalLimits: PanelGlobalLimits;
 };
 
-/** `run_panel_query` 派生参数（由前端按 `lib/ranges.ts` 计算，Rust 校验后分发）。 */
+const PARAM_KIND_MAP: Record<string, PanelParamKind | null> = {
+  enum: "select",
+  int: "number",
+  bool: "boolean",
+  string: "string",
+  intArray: null,
+};
+
+function adaptParam(dto: PanelCatalogParamDto): PanelCatalogParam | null {
+  const kind = PARAM_KIND_MAP[dto.kind] ?? null;
+  if (kind === null) return null;
+  return {
+    name: dto.name,
+    kind,
+    required: dto.required === true,
+    min: typeof dto.min === "number" ? dto.min : null,
+    max: typeof dto.max === "number" ? dto.max : null,
+    values: Array.isArray(dto.values) ? [...dto.values] : null,
+  };
+}
+
+function adaptCatalogType(dto: PanelCatalogTypeDto): PanelCatalogType {
+  const fields = Array.isArray(dto.fields) ? [...dto.fields] : [];
+  const params =
+    Array.isArray(dto.params) && fields.length > 0
+      ? dto.params
+          .filter((param) => fields.includes(param.name))
+          .map(adaptParam)
+          .filter((param): param is PanelCatalogParam => param !== null)
+      : [];
+  return {
+    type: dto.type,
+    timeBases: Array.isArray(dto.timeBases) ? [...dto.timeBases] : [],
+    defaultTimeBasis: dto.defaultTimeBasis,
+    params,
+    fields,
+  };
+}
+
+/**
+ * 目录适配层：把 Rust 原始 DTO 收敛为编辑器可用的形状。
+ * `enum→select`、`int→number`、`bool→boolean`、`intArray→跳过`；只保留属于 `fields`
+ * （即 `typeOptions`）的参数，避免把查询级参数写入规格而保存失败。
+ */
+export function adaptPanelCatalog(value: unknown): PanelCatalog {
+  if (typeof value !== "object" || value === null) return FALLBACK_CATALOG;
+  const dto = value as Partial<PanelCatalogDto>;
+  if (!Array.isArray(dto.panelTypes) || typeof dto.globalLimits !== "object") {
+    return FALLBACK_CATALOG;
+  }
+  return {
+    catalogVersion: typeof dto.catalogVersion === "number" ? dto.catalogVersion : 0,
+    panelTypes: dto.panelTypes.map(adaptCatalogType),
+    globalLimits: { ...FALLBACK_CATALOG.globalLimits, ...dto.globalLimits },
+  };
+}
+
+/** `run_panel_query` 派生参数（与 Rust `panels::query::PanelQueryArgs` 对应）。 */
 export type PanelQueryArgs = {
   fromMs: number | null;
   toMs: number | null;
+  todayFromMs?: number;
   dayStartMs?: number;
   dayCount?: number;
   dayBoundaries?: number[];
   hourlyBoundaries?: number[];
-  todayFromMs?: number;
   limit?: number;
   offset?: number;
-  groupBy?: PanelDimension;
-  sort?: PanelSort;
-  search?: string | null;
-  model?: string | null;
-  projectPath?: string | null;
-  requestTime?: boolean;
 };
-
-export const PANEL_DEFAULT_RANKING_LIMIT = 8;
-export const PANEL_DEFAULT_SESSION_LIMIT = 20;
 
 /** 查询数据的运行时输入（页面范围 + 当前时钟）。 */
 export type PanelRangeInput = {
@@ -219,6 +315,18 @@ const TYPE_OPTION_KEYS = new Set([
   "projectPath",
   "field",
 ]);
+/** 每个类型接受的 typeOptions 键（与 Rust `panels::spec::validate_options` 一致）。 */
+const TYPE_OPTION_FIELDS: Record<PanelType, ReadonlySet<string>> = {
+  stat: new Set(["field"]),
+  token_trend: new Set(["stack"]),
+  request_trend: new Set(["metric"]),
+  client_distribution: new Set(),
+  ranking: new Set(["dimension", "limit", "shortenKeys"]),
+  session_table: new Set(["limit", "sort", "requestTime", "search", "model", "projectPath"]),
+  activity_calendar: new Set(),
+};
+/** 保留字段：任意类型均可携带（规格 ② 声明，P1 未使用）。 */
+const RESERVED_OPTION_KEYS = new Set(["fields"]);
 
 export const DEFAULT_PANEL_TITLES: Record<PanelType, string> = {
   stat: "指标",
@@ -255,9 +363,9 @@ const DEFAULT_TYPE_OPTIONS: Record<PanelType, PanelTypeOptions> = {
   token_trend: { stack: "client" },
   request_trend: { metric: "tokens" },
   client_distribution: {},
-  ranking: { dimension: "model", limit: 8, shortenKeys: false },
+  ranking: { dimension: "model", limit: PANEL_RANKING_LIMIT_DEFAULT, shortenKeys: false },
   session_table: {
-    limit: 20,
+    limit: PANEL_SESSION_LIMIT_DEFAULT,
     sort: "newest",
     requestTime: false,
     search: null,
@@ -319,14 +427,15 @@ export function defaultTypeOptions(type: PanelType): PanelTypeOptions {
   return { ...DEFAULT_TYPE_OPTIONS[type] };
 }
 
-/** 目录不可用时使用的内置白名单，供编辑器渲染合法控件（与 ⑦ 校验一致）。 */
+/** 目录不可用时使用的内置白名单（与 Rust 目录同形），供编辑器渲染合法控件。 */
 export const FALLBACK_CATALOG: PanelCatalog = {
   catalogVersion: 0,
   panelTypes: [
     {
       type: "stat",
       timeBases: ["session", "request"],
-      fields: ["rangeTotal", "todayTotal", "sessions", "messages"],
+      defaultTimeBasis: "session",
+      fields: ["field"],
       params: [
         {
           name: "field",
@@ -341,7 +450,8 @@ export const FALLBACK_CATALOG: PanelCatalog = {
     {
       type: "token_trend",
       timeBases: ["session"],
-      fields: [],
+      defaultTimeBasis: "session",
+      fields: ["stack"],
       params: [
         {
           name: "stack",
@@ -349,14 +459,15 @@ export const FALLBACK_CATALOG: PanelCatalog = {
           required: false,
           min: null,
           max: null,
-          values: ["client", "tokens"],
+          values: ["tokens", "client"],
         },
       ],
     },
     {
       type: "request_trend",
       timeBases: ["request"],
-      fields: [],
+      defaultTimeBasis: "request",
+      fields: ["metric"],
       params: [
         {
           name: "metric",
@@ -368,11 +479,18 @@ export const FALLBACK_CATALOG: PanelCatalog = {
         },
       ],
     },
-    { type: "client_distribution", timeBases: ["session", "request"], fields: [], params: [] },
+    {
+      type: "client_distribution",
+      timeBases: ["session", "request"],
+      defaultTimeBasis: "session",
+      fields: [],
+      params: [],
+    },
     {
       type: "ranking",
       timeBases: ["session", "request"],
-      fields: [],
+      defaultTimeBasis: "session",
+      fields: ["dimension", "limit", "shortenKeys"],
       params: [
         {
           name: "dimension",
@@ -382,7 +500,14 @@ export const FALLBACK_CATALOG: PanelCatalog = {
           max: null,
           values: ["model", "project"],
         },
-        { name: "limit", kind: "number", required: false, min: 1, max: 100, values: null },
+        {
+          name: "limit",
+          kind: "number",
+          required: false,
+          min: PANEL_RANKING_LIMIT_MIN,
+          max: PANEL_RANKING_LIMIT_MAX,
+          values: null,
+        },
         {
           name: "shortenKeys",
           kind: "boolean",
@@ -396,9 +521,17 @@ export const FALLBACK_CATALOG: PanelCatalog = {
     {
       type: "session_table",
       timeBases: ["session", "request"],
-      fields: [],
+      defaultTimeBasis: "session",
+      fields: ["limit", "sort", "requestTime", "search", "model", "projectPath"],
       params: [
-        { name: "limit", kind: "number", required: false, min: 1, max: 100, values: null },
+        {
+          name: "limit",
+          kind: "number",
+          required: false,
+          min: PANEL_SESSION_LIMIT_MIN,
+          max: PANEL_SESSION_LIMIT_MAX,
+          values: null,
+        },
         {
           name: "sort",
           kind: "select",
@@ -420,15 +553,34 @@ export const FALLBACK_CATALOG: PanelCatalog = {
         { name: "projectPath", kind: "string", required: false, min: null, max: 200, values: null },
       ],
     },
-    { type: "activity_calendar", timeBases: ["session"], fields: [], params: [] },
+    {
+      type: "activity_calendar",
+      timeBases: ["session"],
+      defaultTimeBasis: "session",
+      fields: [],
+      params: [],
+    },
   ],
   globalLimits: {
+    titleMaxLen: PANEL_MAX_TITLE,
+    idMaxLen: PANEL_MAX_ID,
     colSpans: [3, 4, 6, 12],
     rowSpans: [1, 2],
-    maxTitle: PANEL_MAX_TITLE,
-    minLimit: PANEL_MIN_LIMIT,
-    maxLimit: PANEL_MAX_LIMIT,
-    maxOrder: PANEL_MAX_ORDER,
+    orderMax: PANEL_MAX_ORDER,
+    stringMaxLen: PANEL_MAX_TEXT,
+    dayCountMin: 1,
+    dayCountMax: 400,
+    calendarDayCountMax: 365,
+    dayBoundaryMin: 2,
+    dayBoundaryMax: 401,
+    hourlyBoundaryMax: 27,
+    rankingLimitMin: PANEL_RANKING_LIMIT_MIN,
+    rankingLimitMax: PANEL_RANKING_LIMIT_MAX,
+    rankingLimitDefault: PANEL_RANKING_LIMIT_DEFAULT,
+    sessionLimitMin: PANEL_SESSION_LIMIT_MIN,
+    sessionLimitMax: PANEL_SESSION_LIMIT_MAX,
+    sessionLimitDefault: PANEL_SESSION_LIMIT_DEFAULT,
+    sessionOffsetMax: 1_000_000,
   },
 };
 
@@ -498,17 +650,11 @@ export function buildPanelQueryArgs(spec: PanelSpec, input: PanelRangeInput): Pa
     args.todayFromMs = startOfDay(new Date(input.nowMs)).getTime();
   }
   if (spec.type === "ranking") {
-    args.limit = spec.typeOptions.limit ?? PANEL_DEFAULT_RANKING_LIMIT;
-    args.groupBy = spec.typeOptions.dimension ?? "model";
+    args.limit = spec.typeOptions.limit ?? PANEL_RANKING_LIMIT_DEFAULT;
   }
   if (spec.type === "session_table") {
-    args.limit = spec.typeOptions.limit ?? PANEL_DEFAULT_SESSION_LIMIT;
+    args.limit = spec.typeOptions.limit ?? PANEL_SESSION_LIMIT_DEFAULT;
     args.offset = 0;
-    args.sort = spec.typeOptions.sort ?? "newest";
-    args.search = spec.typeOptions.search ?? null;
-    args.model = spec.typeOptions.model ?? null;
-    args.projectPath = spec.typeOptions.projectPath ?? null;
-    args.requestTime = spec.typeOptions.requestTime ?? false;
   }
   return args;
 }
@@ -553,7 +699,15 @@ function validateRange(value: unknown, errors: PanelValidationError[]): PanelRan
   return { kind: "custom", fromMs, toMs };
 }
 
+function limitBounds(type: PanelType): { min: number; max: number } | null {
+  if (type === "ranking") return { min: PANEL_RANKING_LIMIT_MIN, max: PANEL_RANKING_LIMIT_MAX };
+  if (type === "session_table")
+    return { min: PANEL_SESSION_LIMIT_MIN, max: PANEL_SESSION_LIMIT_MAX };
+  return null;
+}
+
 function validateTypeOptions(
+  type: PanelType,
   value: unknown,
   errors: PanelValidationError[],
 ): PanelTypeOptions | null {
@@ -564,6 +718,12 @@ function validateTypeOptions(
   }
   for (const key of collectUnknownKeys(value, TYPE_OPTION_KEYS)) {
     errors.push({ path: `typeOptions.${key}`, message: "不支持的字段" });
+  }
+  const allowed = TYPE_OPTION_FIELDS[type];
+  for (const key of Object.keys(value)) {
+    if (TYPE_OPTION_KEYS.has(key) && !allowed.has(key) && !RESERVED_OPTION_KEYS.has(key)) {
+      errors.push({ path: `typeOptions.${key}`, message: "该面板类型不支持此参数" });
+    }
   }
   const options: PanelTypeOptions = {};
   const metric = value.metric;
@@ -584,10 +744,11 @@ function validateTypeOptions(
   }
   const limit = value.limit;
   if (limit !== undefined) {
-    if (!isInteger(limit) || limit < PANEL_MIN_LIMIT || limit > PANEL_MAX_LIMIT) {
+    const bounds = limitBounds(type) ?? { min: 1, max: PANEL_SESSION_LIMIT_MAX };
+    if (!isInteger(limit) || limit < bounds.min || limit > bounds.max) {
       errors.push({
         path: "typeOptions.limit",
-        message: `数量上限需在 ${PANEL_MIN_LIMIT}–${PANEL_MAX_LIMIT} 之间`,
+        message: `数量上限需在 ${bounds.min}–${bounds.max} 之间`,
       });
     } else {
       options.limit = limit;
@@ -668,8 +829,8 @@ export function validatePanelSpec(value: unknown): PanelValidationResult {
     errors.push({ path: "specVersion", message: `仅支持版本 ${PANEL_SPEC_VERSION}` });
   }
   const id = value.id;
-  if (typeof id !== "string" || id.length === 0) {
-    errors.push({ path: "id", message: "缺少面板标识" });
+  if (typeof id !== "string" || id.length === 0 || id.length > PANEL_MAX_ID) {
+    errors.push({ path: "id", message: "面板标识无效" });
   }
   const type = value.type;
   if (!isPanelType(type)) {
@@ -706,7 +867,11 @@ export function validatePanelSpec(value: unknown): PanelValidationResult {
       client = queryRaw.client as ClientKey;
     }
   }
-  const typeOptions = validateTypeOptions(value.typeOptions, errors);
+  const typeOptions = validateTypeOptions(
+    isPanelType(type) ? type : "stat",
+    value.typeOptions,
+    errors,
+  );
   const layoutRaw = value.layout;
   let colSpan: PanelColSpan | null = null;
   let rowSpan: PanelRowSpan | null = null;
@@ -786,7 +951,7 @@ export function createDefaultPanelSpec(
     type,
     query: {
       range: { kind: "followPage" },
-      timeBasis: info?.timeBases[0] ?? DEFAULT_TIME_BASIS[type],
+      timeBasis: info?.defaultTimeBasis ?? DEFAULT_TIME_BASIS[type],
       client: null,
     },
     typeOptions: { ...DEFAULT_TYPE_OPTIONS[type] },

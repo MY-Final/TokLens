@@ -182,7 +182,9 @@ export function PanelEditor({
   if (!open || !draft) return null;
 
   const typeInfo = effectiveCatalog.panelTypes.find((entry) => entry.type === draft.type);
-  const params = typeInfo?.params ?? [];
+  const fields = typeInfo?.fields ?? [];
+  // 只渲染属于 typeOptions 的参数（目录适配层已过滤，此处为纵深防御）。
+  const params = (typeInfo?.params ?? []).filter((param) => fields.includes(param.name));
   const timeBases = typeInfo?.timeBases ?? [defaultTimeBasis(draft.type)];
   const colSpans = effectiveCatalog.globalLimits.colSpans.filter((span): span is PanelColSpan =>
     (PANEL_COL_SPANS as readonly number[]).includes(span),
@@ -222,7 +224,10 @@ export function PanelEditor({
             ...current,
             type,
             typeOptions: defaultTypeOptions(type),
-            query: { ...current.query, timeBasis: info?.timeBases[0] ?? defaultTimeBasis(type) },
+            query: {
+              ...current.query,
+              timeBasis: info?.defaultTimeBasis ?? defaultTimeBasis(type),
+            },
           }
         : current,
     );
@@ -374,7 +379,7 @@ export function PanelEditor({
             <Input
               id="panel-title"
               type="text"
-              maxLength={effectiveCatalog.globalLimits.maxTitle}
+              maxLength={effectiveCatalog.globalLimits.titleMaxLen}
               value={draft.title ?? ""}
               placeholder="留空使用类型默认名"
               onChange={(event) => patchDraft({ title: event.target.value })}

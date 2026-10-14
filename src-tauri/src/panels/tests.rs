@@ -306,6 +306,33 @@ fn catalog_client_values_match_client_enum() {
     assert_eq!(catalog::CLIENT_VALUES, expected.as_slice());
 }
 
+#[test]
+fn stack_values_match_the_frontend_contract() {
+    // 目录只暴露 client / tokens（前端 TokenTrendChart 固定取值）。
+    let trend = catalog::entry(PanelType::TokenTrend).expect("trend");
+    assert_eq!(
+        param(trend, "stack").values.to_vec(),
+        vec!["tokens", "client"]
+    );
+
+    let enabled = Client::ALL.to_vec();
+    for value in ["client", "tokens"] {
+        let mut spec = base("token_trend");
+        spec["typeOptions"] = json!({ "stack": value });
+        let validated = spec::validate_spec(spec::parse_spec(spec).expect("parse"), &enabled)
+            .expect("validate");
+        assert_eq!(
+            serde_json::to_value(&validated.spec).expect("serialize")["typeOptions"]["stack"],
+            json!(value)
+        );
+    }
+
+    // 旧值 "total" 不再是合法取值。
+    let mut spec = base("token_trend");
+    spec["typeOptions"] = json!({ "stack": "total" });
+    assert!(spec::parse_spec(spec).is_err());
+}
+
 // ---------------------------------------------------------------------------------------------
 // 逐类型 round-trip 与边界
 // ---------------------------------------------------------------------------------------------
