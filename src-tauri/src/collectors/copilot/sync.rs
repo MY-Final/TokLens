@@ -90,12 +90,18 @@ impl CopilotCollector {
                 sessions.insert(entry.session.client_session_id.clone(), entry);
             }
         }
-        let mut sdk = BTreeMap::new();
+        let mut sdk: BTreeMap<String, events::SdkSession> = BTreeMap::new();
         for path in &event_paths {
             let entry = events::read(path)?;
             let id = entry.import.session.client_session_id.clone();
-            if sdk.insert(id, entry).is_some() {
-                return Err(SyncError::ChangedDuringScan);
+            // The same SDK session id may appear in mirror event directories. That is
+            // one snapshot, never two token streams: keep the newer event-time mirror,
+            // and on a tie keep the first path in sorted order for determinism.
+            let replace = sdk.get(&id).is_none_or(|existing| {
+                entry.import.session.ended_at_ms > existing.import.session.ended_at_ms
+            });
+            if replace {
+                sdk.insert(id, entry);
             }
             sources.push(source(path, SourceFileKind::Jsonl, 0)?);
         }
@@ -154,11 +160,10 @@ impl CopilotCollector {
                 sessions.insert(id, entry.import);
             }
         }
-        // Without SDK events the host cannot provide reliable call identities and
-        // timestamps. Retain history rather than manufacture requests or dates.
-        if !host.is_empty() {
-            return Err(SyncError::ChangedDuringScan);
-        }
+        // Host turns whose SDK events are gone cannot be reliably attributed, so they
+        // are skipped rather than fabricated. One or more orphan host sessions must not
+        // block the files that can be linked; record them as a diagnostic instead.
+        report.files_without_identity += host.len();
         if sources.is_empty() {
             report.root_missing = true;
             return Ok(report);

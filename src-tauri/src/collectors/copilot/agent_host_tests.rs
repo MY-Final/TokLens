@@ -29,12 +29,15 @@ fn sdk(dir: &TempDir) -> PathBuf {
             + "\n"),
     )
 }
-fn usage(api: &str, input: u64, last: u64) -> String {
+fn usage_for(sdk: &str, api: &str, input: u64, last: u64) -> String {
     json!({"inputTokens":last,"outputTokens":1,"cacheReadTokens":0,
-        "_meta":{"vscode.modelCall":{"schemaVersion":1,"sdkSessionId":"sdk","apiCallId":api},
+        "_meta":{"vscode.modelCall":{"schemaVersion":1,"sdkSessionId":sdk,"apiCallId":api},
         "turnTokenTotals":[{"model":"synthetic","inputTokens":input,"outputTokens":20,"cachedTokens":0}],
         "directTurnTokenTotals":[{"inputTokens":99999}],"cost":99999},
         "content":"PRIVATE_SENTINEL"}).to_string()
+}
+fn usage(api: &str, input: u64, last: u64) -> String {
+    usage_for("sdk", api, input, last)
 }
 fn host(dir: &TempDir, name: &str, primary: bool) -> (PathBuf, Connection) {
     let path = dir
@@ -290,4 +293,84 @@ fn unknown_cache_missing_turns_zero_and_invalid_counts_never_fabricate_tokens() 
         None
     );
     assert_private(&store);
+}
+
+fn orphan_host(dir: &TempDir, name: &str, sdk_id: &str) {
+    let path = dir
+        .0
+        .join(format!("Code/agentSessionData/{name}/session.db"));
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    let conn = Connection::open(&path).expect("synthetic db");
+    conn.execute_batch(
+        "CREATE TABLE session_metadata(key TEXT PRIMARY KEY,value TEXT);
+        CREATE TABLE turns(id TEXT PRIMARY KEY,event_id TEXT);
+        CREATE TABLE turn_usage(turn_id TEXT PRIMARY KEY,usage TEXT);
+        INSERT INTO turns VALUES('t1','lost-event');",
+    )
+    .expect("orphan schema");
+    conn.execute(
+        "INSERT INTO session_metadata VALUES('defaultChatProviderData',?1)",
+        [format!(r#"{{"sdkSessionId":"{sdk_id}"}}"#)],
+    )
+    .expect("orphan link");
+    conn.execute(
+        "INSERT INTO turn_usage VALUES('t1',?1)",
+        [usage_for(sdk_id, "a9", 50, 5)],
+    )
+    .expect("orphan usage");
+}
+
+#[test]
+fn orphan_host_sessions_are_skipped_without_blocking_other_sources() {
+    let dir = TempDir::new();
+    sdk(&dir);
+    let (_path, _conn) = host(&dir, "outer", true);
+    orphan_host(&dir, "orphan", "orphan-sdk");
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = collector(&dir)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert_eq!(report.files_failed, 0);
+    assert!(report.files_without_identity >= 1);
+    assert_eq!(store.session_count().expect("sessions"), 1);
+    assert_eq!(store.message_count().expect("requests"), 3);
+    assert_eq!(
+        store
+            .totals(&TotalsFilter::default())
+            .expect("totals")
+            .total_tokens,
+        540
+    );
+}
+
+#[test]
+fn duplicate_sdk_session_ids_select_the_newest_events_deterministically() {
+    let dir = TempDir::new();
+    sdk(&dir);
+    let mirror = [
+        json!({"type":"session.start","timestamp":"2026-10-13T00:00:00Z","data":{"sessionId":"sdk","selectedModel":"synthetic"}}),
+        json!({"type":"user.message","id":"u9","timestamp":"2026-10-13T00:00:01Z","data":{}}),
+        json!({"type":"assistant.message","timestamp":"2026-10-13T00:00:02Z","data":{"apiCallId":"a9","model":"synthetic"}}),
+    ];
+    dir.write(
+        "session-state/mirror/events.jsonl",
+        &(mirror
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"),
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = collector(&dir)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert_eq!(report.files_failed, 0);
+    assert_eq!(store.session_count().expect("sessions"), 1);
+    assert_eq!(store.message_count().expect("requests"), 1);
+    let key: String = store
+        .connection_for_tests()
+        .query_row("SELECT dedup_key FROM messages", [], |r| r.get(0))
+        .expect("mirror key");
+    assert_eq!(key, "api:a9");
 }

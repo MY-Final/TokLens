@@ -25,6 +25,29 @@ pub(super) struct Snapshot {
     pub unparsed: usize,
 }
 
+fn columns(conn: &Connection, table: &str) -> rusqlite::Result<BTreeSet<String>> {
+    // Static allowlisted identifiers only; never interpolate user input here.
+    conn.prepare(&format!("PRAGMA table_info({table})"))?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect()
+}
+
+/// Emit the whitelisted columns in a fixed order; absent columns become `NULL AS col`
+/// so older schema revisions stay readable instead of failing the whole source.
+fn project(columns: &BTreeSet<String>, whitelist: &[&str]) -> String {
+    whitelist
+        .iter()
+        .map(|column| {
+            if columns.contains(*column) {
+                (*column).to_string()
+            } else {
+                format!("NULL AS {column}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn time(value: Option<String>) -> Option<i64> {
     let value = value?;
     parse_iso8601_utc_ms(&value).or_else(|| {
@@ -40,7 +63,15 @@ fn time(value: Option<String>) -> Option<i64> {
 pub(super) fn snapshot(conn: &Connection, path: &str) -> rusqlite::Result<Snapshot> {
     let mut sessions = BTreeMap::new();
     let mut unparsed = 0;
-    let mut stmt = conn.prepare("SELECT id,cwd,created_at,updated_at FROM sessions ORDER BY id")?;
+    let session_columns = columns(conn, "sessions")?;
+    if !session_columns.contains("id") {
+        return Err(rusqlite::Error::InvalidColumnName("id".into()));
+    }
+    let session_sql = format!(
+        "SELECT {} FROM sessions ORDER BY id",
+        project(&session_columns, &["id", "cwd", "created_at", "updated_at"])
+    );
+    let mut stmt = conn.prepare(&session_sql)?;
     for row in stmt.query_map([], |row| {
         Ok(SessionMeta {
             id: row.get(0)?,
@@ -68,9 +99,32 @@ pub(super) fn snapshot(conn: &Connection, path: &str) -> rusqlite::Result<Snapsh
     let mut details: BTreeMap<String, Vec<(MessageRecord, RawTokenCounts)>> = BTreeMap::new();
     let mut partial = BTreeSet::new();
     if has_usage {
-        let mut stmt = conn.prepare("SELECT id,session_id,agent_id,parent_tool_call_id,model,
-            input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,reasoning_tokens,created_at
-            FROM assistant_usage_events ORDER BY id")?;
+        let usage_columns = columns(conn, "assistant_usage_events")?;
+        for required in ["id", "session_id"] {
+            if !usage_columns.contains(required) {
+                return Err(rusqlite::Error::InvalidColumnName(required.into()));
+            }
+        }
+        let usage_sql = format!(
+            "SELECT {} FROM assistant_usage_events ORDER BY id",
+            project(
+                &usage_columns,
+                &[
+                    "id",
+                    "session_id",
+                    "agent_id",
+                    "parent_tool_call_id",
+                    "model",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_write_tokens",
+                    "reasoning_tokens",
+                    "created_at",
+                ]
+            )
+        );
+        let mut stmt = conn.prepare(&usage_sql)?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let sid: String = row.get(1)?;

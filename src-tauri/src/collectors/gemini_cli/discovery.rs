@@ -33,11 +33,9 @@ pub(super) fn discover(root: &Path, report: &mut SyncReport) -> Result<Vec<PathB
             continue;
         }
         // Includes the installed CLI's chats/<parent-id>/<subagent-id>.jsonl.
-        paths.extend(discover_files(
-            &chats,
-            &mut SyncReport::default(),
-            |path| path.extension().is_some_and(|ext| ext == "jsonl"),
-        )?);
+        paths.extend(discover_files(&chats, report, |path| {
+            path.extension().is_some_and(|ext| ext == "jsonl")
+        })?);
     }
     paths.sort();
     report.files_seen = paths.len();

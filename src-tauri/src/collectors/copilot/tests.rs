@@ -145,7 +145,7 @@ fn unsupported_database_or_missing_source_preserves_history_and_watermark() {
         .expect("source")
         .expect("watermark");
     conn.execute_batch(
-        "ALTER TABLE assistant_usage_events RENAME COLUMN input_tokens TO unsupported_input",
+        "ALTER TABLE assistant_usage_events RENAME COLUMN session_id TO unsupported_session",
     )
     .expect("unsupported synthetic schema");
     assert!(collector.sync(&store, &SyncOptions::default()).is_err());
@@ -223,5 +223,30 @@ fn overlapping_counters_near_sqlite_limit_are_not_rejected_as_a_sum() {
             .expect("total")
             .total_tokens,
         i64::MAX
+    );
+}
+
+#[test]
+fn missing_optional_token_columns_are_read_as_unknown() {
+    let dir = TempDir::new();
+    let (path, conn) = fixture(&dir);
+    conn.execute_batch(
+        "ALTER TABLE assistant_usage_events RENAME COLUMN cache_write_tokens TO unsupported_cache;
+         ALTER TABLE assistant_usage_events RENAME COLUMN reasoning_tokens TO unsupported_reasoning;",
+    )
+    .expect("column variant");
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = CopilotCollector::new(path)
+        .sync(&store, &SyncOptions::default())
+        .expect("tolerated column variant");
+    assert_eq!(report.files_failed, 0);
+    assert_eq!(store.message_count().expect("requests"), 2);
+    // Absent caches stay unknown; input + output still yields the derived total.
+    assert_eq!(
+        store
+            .totals(&TotalsFilter::default())
+            .expect("totals")
+            .total_tokens,
+        240
     );
 }
