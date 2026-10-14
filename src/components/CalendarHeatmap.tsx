@@ -8,7 +8,7 @@ import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatNumber } from "@/lib/format";
+import { dayTotalLabel, formatNumber } from "@/lib/format";
 import type { DailyTokenBucket } from "@/lib/usage-types";
 
 type Metric = "tokens" | "sessions" | "messages";
@@ -214,6 +214,7 @@ export function CalendarHeatmap({
                                     : `${formatNumber(unknownSessions)} 个会话 Token 用量未知，会话与已采集请求明细数量仍可统计。`
                                   : "";
                               const coverage = `${unknownNote}${partialSessions > 0 ? `${formatNumber(partialSessions)} 个会话请求明细不完整；已知总量不一定缺失。` : ""}`;
+                              const scope = dailyScope(day.ms, selectedRange);
                               return (
                                 <HeatmapCell
                                   key={day.ms}
@@ -225,7 +226,8 @@ export function CalendarHeatmap({
                                   label={`${dateLabel(day.ms)}，${label}：${exact}。${basis}${coverage}`}
                                 >
                                   <UsageTooltip
-                                    title={`${dateLabel(day.ms)} · ${dailyScope(day.ms, selectedRange)}`}
+                                    title={`${dateLabel(day.ms)} · ${scope}`}
+                                    totalLabel={dayTotalLabel(scope)}
                                     total={metricValue(day.bucket, "tokens")}
                                     requests={day.bucket?.messages}
                                     sessions={day.bucket?.sessions}

@@ -301,3 +301,8 @@ export type SessionDetail = {
   requests: RequestDetail[];
   requestCoverage: RequestCoverageDetail;
 };
+
+/** Aligned with Rust `desktop::DesktopStatus` (`rename_all = "camelCase"`). */
+export type DesktopStatus = {
+  trayAvailable: boolean;
+};

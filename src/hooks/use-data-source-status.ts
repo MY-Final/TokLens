@@ -1,7 +1,13 @@
 /** 同步结束后刷新来源状态与统计；事件丢失时通过轮询恢复。 */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getDataSourceStatus, onSyncEvent, syncClient, syncUsage, toErrorMessage } from "@/lib/api";
+import {
+  getDataSourceStatus,
+  onSyncEvent,
+  syncClient,
+  syncUsage,
+  toErrorMessage,
+  type UnlistenFn,
+} from "@/lib/api";
 import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 
 export type SyncController = {
@@ -21,14 +27,17 @@ export function useDataSourceStatus(): SyncController {
   const [syncBusy, setSyncBusy] = useState(false);
   const generation = useRef(0);
   const mounted = useRef(false);
+  const previousRunning = useRef(false);
   const completion = useRef<string | null>(null);
 
   const applySync = useCallback((sync: SyncState, cleared = false) => {
+    const wasRunning = previousRunning.current;
+    previousRunning.current = sync.running;
     setSyncBusy(sync.running);
     setStatus((previous) => (previous ? { ...previous, sync } : previous));
-    if (!sync.running) {
+    if (!sync.running && (cleared || wasRunning)) {
       const key = `${sync.startedAtMs}:${sync.finishedAtMs}`;
-      if (cleared || completion.current !== key) {
+      if (completion.current !== key) {
         completion.current = key;
         setRefreshToken((value) => value + 1);
       }

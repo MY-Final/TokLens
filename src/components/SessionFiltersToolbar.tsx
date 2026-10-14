@@ -1,9 +1,13 @@
+import { useEffect, useRef, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { CLIENT_LABELS, clientLabel, isClientKey } from "@/lib/client-labels";
 import type { SessionBrowserState, SessionFilters, SessionSort } from "@/lib/usage-types";
+
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function SessionFiltersToolbar({
   state,
@@ -14,12 +18,41 @@ export function SessionFiltersToolbar({
 }) {
   const { client, search, sort } = state;
   const clientValue = client ?? "all";
+  const [searchDraft, setSearchDraft] = useState(search);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    if (debounceRef.current === undefined) setSearchDraft(search);
+  }, [search]);
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current !== undefined) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
+
+  const emitSearch = (value: string) => {
+    debounceRef.current = undefined;
+    onChange({ search: value });
+  };
+
+  const changeSearch = (value: string) => {
+    setSearchDraft(value);
+    if (debounceRef.current !== undefined) clearTimeout(debounceRef.current);
+    if (value.trim() === "") {
+      emitSearch(value);
+      return;
+    }
+    debounceRef.current = setTimeout(() => emitSearch(value), SEARCH_DEBOUNCE_MS);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <Input
-          value={search}
-          onChange={(event) => onChange({ search: event.target.value })}
+          value={searchDraft}
+          onChange={(event) => changeSearch(event.target.value)}
           placeholder="搜索项目、模型或会话 ID"
           aria-label="搜索项目、模型或会话 ID"
           className="h-9 w-72 max-w-full min-w-0 flex-1 basis-64"

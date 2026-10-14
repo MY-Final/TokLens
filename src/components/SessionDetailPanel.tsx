@@ -30,13 +30,21 @@ import {
 import type { RequestDetail, SessionDetail, SessionSummary } from "@/lib/usage-types";
 import { GROK_USAGE_NOTE } from "@/lib/client-labels";
 
-const TOTAL_BASIS_LABELS = {
+const TOTAL_BASIS_LABELS: Record<string, string> = {
   client_cumulative: "客户端累计值",
   client_reported: "客户端自报值",
   sum_of_messages: "请求明细求和",
 };
-const COVERAGE_LABELS = { complete: "明细完整", partial: "明细不完整", none: "无请求明细" };
-const SOURCE_LABELS = { measured: "实测", derived: "换算", estimated: "估算" };
+const COVERAGE_LABELS: Record<string, string> = {
+  complete: "明细完整",
+  partial: "明细不完整",
+  none: "无请求明细",
+};
+const SOURCE_LABELS: Record<string, string> = {
+  measured: "实测",
+  derived: "换算",
+  estimated: "估算",
+};
 const TOKEN_FIELDS = [
   ["inputTokens", "输入"],
   ["outputTokens", "输出"],
@@ -75,7 +83,7 @@ function RequestRow({ request }: { request: RequestDetail }) {
       ))}
       <TableCell className="space-y-1 whitespace-normal">
         <Badge variant={request.sourceKind === "estimated" ? "secondary" : "outline"}>
-          {SOURCE_LABELS[request.sourceKind]}
+          {SOURCE_LABELS[request.sourceKind] ?? request.sourceKind}
         </Badge>
         <div className="font-mono break-all text-muted-foreground">
           {request.sourceRef ?? "来源引用未记录"}
@@ -135,8 +143,10 @@ export function SessionDetailPanel({
         <div className="min-h-0 space-y-5 overflow-y-auto pr-1">
           <div className="flex flex-wrap items-center gap-2">
             <ClientIdentity client={session.client} />
-            <Badge variant="outline">{COVERAGE_LABELS[session.coverage]}</Badge>
-            <Badge variant="outline">{TOTAL_BASIS_LABELS[session.totalBasis]}</Badge>
+            <Badge variant="outline">{COVERAGE_LABELS[session.coverage] ?? session.coverage}</Badge>
+            <Badge variant="outline">
+              {TOTAL_BASIS_LABELS[session.totalBasis] ?? session.totalBasis}
+            </Badge>
           </div>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
             {[

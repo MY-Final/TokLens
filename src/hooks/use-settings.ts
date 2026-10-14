@@ -9,6 +9,7 @@ export function useSettings() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  const pendingPatch = useRef<SettingsPatch | null>(null);
   useAppTheme(snapshot?.settings.theme ?? "system");
 
   const accept = useCallback((next: SettingsSnapshot) => {
@@ -45,21 +46,32 @@ export function useSettings() {
     };
   }, [accept]);
 
+  const flushPatches = useCallback(async () => {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    try {
+      while (pendingPatch.current) {
+        const change = pendingPatch.current;
+        pendingPatch.current = null;
+        try {
+          accept(await updateSettings(change));
+        } catch (cause: unknown) {
+          setError(toErrorMessage(cause));
+        }
+      }
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }, [accept]);
+
   const patch = useCallback(
     async (change: SettingsPatch) => {
-      if (saving.current) return;
-      saving.current = true;
-      setBusy(true);
-      try {
-        accept(await updateSettings(change));
-      } catch (cause: unknown) {
-        setError(toErrorMessage(cause));
-      } finally {
-        saving.current = false;
-        setBusy(false);
-      }
+      pendingPatch.current = { ...pendingPatch.current, ...change };
+      await flushPatches();
     },
-    [accept],
+    [flushPatches],
   );
 
   useEffect(() => {

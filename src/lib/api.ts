@@ -7,6 +7,7 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+export type { UnlistenFn } from "@tauri-apps/api/event";
 import type { StorageStatus, UpdateState } from "@/lib/settings-types";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ExportArgs, ExportResult } from "@/lib/report-types";
@@ -34,9 +35,10 @@ export function openProjectPage(): Promise<void> {
   return openUrl("https://github.com/MY-Final/TokLens");
 }
 import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
+import type { DesktopStatus } from "@/lib/usage-types";
 
-export function getDesktopStatus(): Promise<{ trayAvailable: boolean }> {
-  return invoke("get_desktop_status");
+export function getDesktopStatus(): Promise<DesktopStatus> {
+  return invoke<DesktopStatus>("get_desktop_status");
 }
 export function getClosePending(): Promise<boolean> {
   return invoke("get_close_pending");
@@ -114,6 +116,7 @@ import type {
   RequestAnalysis,
   SessionDetail,
   Rankings,
+  SessionSort,
   SessionSummary,
   SessionQuery,
   SyncState,
@@ -230,7 +233,7 @@ export function getSessions(
     offset?: number;
     search?: string | null;
     projectPath?: string | null;
-    sort?: "newest" | "oldest" | "tokens_desc" | "requests_desc";
+    sort?: SessionSort;
     model?: string | null;
     requestTime?: boolean;
   },
