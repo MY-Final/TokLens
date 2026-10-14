@@ -153,6 +153,7 @@ export function RequestActivityPanel({
   rangeLabel,
   client,
   selectedRange,
+  defaultMetric = "tokens",
 }: {
   data: RequestActivity | null;
   loading: boolean;
@@ -161,9 +162,10 @@ export function RequestActivityPanel({
   rangeLabel: string;
   client?: ClientKey | null;
   selectedRange?: DailyRange;
+  defaultMetric?: Metric;
 }) {
   const { formatTokens, formatTokensOrDash } = useTokenFormat();
-  const [metric, setMetric] = useState<Metric>("tokens");
+  const [metric, setMetric] = useState<Metric>(defaultMetric);
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const syncing = useSyncing();
   const days = data?.daily ?? [];
