@@ -246,3 +246,67 @@ fn imported_session_continuations_keep_native_requests_only() {
         366
     );
 }
+
+#[test]
+fn sync_does_not_create_a_sqlite_shared_memory_sidecar() {
+    let dir = TempDir::new();
+    let (path, conn) = fixture(&dir);
+    // Release the writer so any checkpointed WAL/shm can be removed first.
+    drop(conn);
+    let shm = std::path::PathBuf::from(format!("{}-shm", path.to_string_lossy()));
+    let _ = std::fs::remove_file(&shm);
+    let store = UsageStore::open_in_memory().expect("store");
+    MiMoCodeCollector::new(&path)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert!(
+        !shm.exists(),
+        "collector must not create a client -shm sidecar"
+    );
+}
+
+#[test]
+fn database_resolution_prefers_an_absolute_override_without_a_data_root() {
+    use std::path::PathBuf;
+    let absolute = std::env::temp_dir().join("mimocode-override.db");
+    assert_eq!(
+        super::sync::resolve_database(Some(absolute.clone().into_os_string()), None, None),
+        Some(absolute)
+    );
+    assert_eq!(
+        super::sync::resolve_database(Some("relative.db".into()), None, None),
+        None
+    );
+    let home = PathBuf::from("home");
+    assert_eq!(
+        super::sync::resolve_database(
+            Some("relative.db".into()),
+            Some("xdg".into()),
+            Some(home.clone())
+        ),
+        Some(PathBuf::from("xdg").join("mimocode").join("relative.db"))
+    );
+    assert_eq!(
+        super::sync::resolve_database(None, Some("xdg".into()), Some(home.clone())),
+        Some(PathBuf::from("xdg").join("mimocode").join("mimocode.db"))
+    );
+    assert_eq!(
+        super::sync::resolve_database(None, None, Some(home.clone())),
+        Some(
+            home.join(".local")
+                .join("share")
+                .join("mimocode")
+                .join("mimocode.db")
+        )
+    );
+    assert_eq!(super::sync::resolve_database(None, None, None), None);
+    assert_eq!(
+        super::sync::resolve_database(Some("".into()), None, Some(home.clone())),
+        Some(
+            home.join(".local")
+                .join("share")
+                .join("mimocode")
+                .join("mimocode.db")
+        )
+    );
+}

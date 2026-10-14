@@ -1,12 +1,13 @@
-//! Always read metadata in a snapshot transaction: main-file mtime misses WAL writes.
+//! Read the committed main+WAL image in memory so the client's -wal/-shm are never opened.
 
 use super::{PARSER_VERSION, queries};
 use crate::collectors::files::{fingerprint, home_dir};
+use crate::collectors::sqlite_snapshot;
 use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
 use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
 use crate::usage::time::now_ms;
-use rusqlite::{Connection, OpenFlags};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 pub struct MiMoCodeCollector {
@@ -15,19 +16,11 @@ pub struct MiMoCodeCollector {
 
 impl MiMoCodeCollector {
     pub fn default_database() -> Option<PathBuf> {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .or_else(|| home_dir().map(|home| home.join(".local").join("share")))
-            .map(|data| {
-                let path = std::env::var_os("MIMOCODE_DB")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| PathBuf::from("mimocode.db"));
-                if path.is_absolute() {
-                    path
-                } else {
-                    data.join("mimocode").join(path)
-                }
-            })
+        resolve_database(
+            std::env::var_os("MIMOCODE_DB"),
+            std::env::var_os("XDG_DATA_HOME"),
+            home_dir(),
+        )
     }
 
     pub fn new(database: impl Into<PathBuf>) -> Self {
@@ -50,16 +43,11 @@ impl MiMoCodeCollector {
             return Ok(report);
         }
         report.files_seen = 1;
-        let mut conn = Connection::open_with_flags(
-            &self.database,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
-        conn.pragma_update(None, "query_only", true)?;
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        let transaction = conn.transaction()?;
         let path = self.database.to_string_lossy().to_string();
-        let snapshot = queries::snapshot(&transaction, &path)?;
-        transaction.commit()?;
+        // Read the main file plus committed WAL frames into memory. SQLite never opens
+        // the source, so no -wal/-shm is created or locked beside the client database.
+        let conn = sqlite_snapshot::open(&self.database)?;
+        let snapshot = queries::snapshot(&conn, &path)?;
         let (size, mtime) = fingerprint(&self.database)?;
         let source = SourceFile {
             client: Client::MimoCode,
@@ -81,4 +69,30 @@ impl MiMoCodeCollector {
         report.messages_pruned = imported.messages_pruned;
         Ok(report)
     }
+}
+
+/// `MIMOCODE_DB` wins outright when it is absolute, even without `XDG_DATA_HOME` or
+/// HOME. A relative value or the default is resolved under `<data root>/mimocode`.
+pub(super) fn resolve_database(
+    mimocode_db: Option<OsString>,
+    xdg_data_home: Option<OsString>,
+    home: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = mimocode_db
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    {
+        if path.is_absolute() {
+            return Some(path);
+        }
+        return data_root(xdg_data_home, home).map(|data| data.join("mimocode").join(path));
+    }
+    data_root(xdg_data_home, home).map(|data| data.join("mimocode").join("mimocode.db"))
+}
+
+fn data_root(xdg_data_home: Option<OsString>, home: Option<PathBuf>) -> Option<PathBuf> {
+    xdg_data_home
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| home.map(|home| home.join(".local").join("share")))
 }

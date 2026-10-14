@@ -107,3 +107,21 @@ fn missing_aggregate_fields_unknown_json_and_nested_models() {
     );
     assert_eq!(store.message_count().expect("count"), 1);
 }
+
+#[test]
+fn sync_does_not_create_a_sqlite_shared_memory_sidecar() {
+    let dir = TempDir::new();
+    let (path, source) = source(&dir);
+    // Release the writer so any checkpointed WAL/shm can be removed first.
+    drop(source);
+    let shm = std::path::PathBuf::from(format!("{}-shm", path.to_string_lossy()));
+    let _ = std::fs::remove_file(&shm);
+    let store = UsageStore::open_in_memory().expect("store");
+    OpenCodeCollector::new(&path)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert!(
+        !shm.exists(),
+        "collector must not create a client -shm sidecar"
+    );
+}

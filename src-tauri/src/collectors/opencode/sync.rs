@@ -1,12 +1,12 @@
-//! Always read metadata in a snapshot transaction: main-file mtime misses WAL writes.
+//! Read the committed main+WAL image in memory so the client's -wal/-shm are never opened.
 
 use super::{PARSER_VERSION, queries};
 use crate::collectors::files::{fingerprint, home_dir};
+use crate::collectors::sqlite_snapshot;
 use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
 use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
 use crate::usage::time::now_ms;
-use rusqlite::{Connection, OpenFlags};
 use std::path::{Path, PathBuf};
 
 pub struct OpenCodeCollector {
@@ -41,15 +41,11 @@ impl OpenCodeCollector {
             return Ok(report);
         }
         report.files_seen = 1;
-        let mut conn = Connection::open_with_flags(
-            &self.database,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
-        conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        let transaction = conn.transaction()?;
         let path = self.database.to_string_lossy().to_string();
-        let snapshot = queries::snapshot(&transaction, &path)?;
-        transaction.commit()?;
+        // Read the main file plus committed WAL frames into memory. SQLite never opens
+        // the source, so no -wal/-shm is created or locked beside the client database.
+        let conn = sqlite_snapshot::open(&self.database)?;
+        let snapshot = queries::snapshot(&conn, &path)?;
         let (size, mtime) = fingerprint(&self.database)?;
         let source = SourceFile {
             client: Client::OpenCode,
