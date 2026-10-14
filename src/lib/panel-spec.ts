@@ -403,19 +403,21 @@ export function isPanelType(value: unknown): value is PanelType {
 }
 
 /**
- * AI 面板生成是否已就绪：Base URL、模型与密钥三者齐备才算已配置；
+ * AI 面板生成是否已就绪：只要 Base URL 与模型均已设置即视为已配置。
+ *
+ * 不要求 `hasKey`：本地模型（Ollama 等 OpenAI 兼容端点）无需 API Key，后端在无 key 时
+ * 不发 Authorization；部分在线服务仍需 Key，由设置页提示，不作为启用门控。
  * 未配置时生成入口保持禁用并引导去设置页（默认离线，不配置不发请求）。
  */
 export function isPanelAiConfigured(
-  config: { baseUrl: string | null; model: string | null; hasKey: boolean } | null,
+  config: { baseUrl: string | null; model: string | null } | null,
 ): boolean {
   return (
     config !== null &&
     typeof config.baseUrl === "string" &&
     config.baseUrl.length > 0 &&
     typeof config.model === "string" &&
-    config.model.length > 0 &&
-    config.hasKey
+    config.model.length > 0
   );
 }
 
