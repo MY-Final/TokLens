@@ -23,6 +23,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { rangeScope, resolveRange, type DateRange } from "@/lib/ranges";
 import type { ClientKey, SessionBrowserState, SessionFilters } from "@/lib/usage-types";
 import { UsageBasisSelect, type UsageBasis } from "@/components/UsageBasisSelect";
+import { ClientAnalysisTabs } from "@/components/ClientAnalysisTabs";
+import { SessionFiltersToolbar } from "@/components/SessionFiltersToolbar";
+import { Tabs } from "@/components/ui/tabs";
+import { isClientKey } from "@/lib/client-labels";
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
@@ -148,118 +152,135 @@ export default function App() {
               ? `更新 v${updates.state?.version}`
               : "检查更新";
 
+  const changeSessionFilters = (filters: Partial<SessionFilters>) =>
+    setSessionState((current) => ({
+      ...current,
+      ...filters,
+      offset: 0,
+      rangeScope: rangeScope(range),
+    }));
+  const secondaryToolbar =
+    page === "overview" ? (
+      <UsageBasisSelect value={overviewBasis} onChange={setOverviewBasis} />
+    ) : page === "analytics" ? (
+      <ClientAnalysisTabs />
+    ) : page === "sessions" ? (
+      <SessionFiltersToolbar state={sessionState} onChange={changeSessionFilters} />
+    ) : undefined;
+
   return (
     <TokenDisplayContext value={settings.settings?.tokenDisplay ?? "auto"}>
       <TooltipProvider delayDuration={200}>
-        <AppShell
-          page={page}
-          collectionPaused={settings.settings?.collectionPaused ?? false}
-          range={range}
-          nowMs={nowMs}
-          status={status}
-          syncBusy={syncBusy}
-          error={error ?? settings.error}
-          onRetry={() => {
-            void Promise.all([reload(), settings.reload()]);
-          }}
-          onNavigate={handleNavigate}
-          onRangeChange={(nextRange) => {
-            setSelectedRange(nextRange);
-            setSessionState((current) => ({
-              ...current,
-              offset: 0,
-              rangeScope: rangeScope(nextRange),
-            }));
-          }}
-          updateControl={
-            <Button
-              variant="ghost"
-              className="h-10 w-full justify-start gap-3 px-3 text-primary"
-              aria-label={updateLabel}
-              title={updateLabel}
-              onClick={() => {
-                setUpdateDialogOpen(true);
-                if (
-                  updates.state &&
-                  !knownUpdate &&
-                  !updates.busy &&
-                  updates.state?.phase !== "disabled" &&
-                  updates.state?.phase !== "checking"
-                )
-                  void updates.act("check");
-              }}
-            >
-              <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
-              <span className="truncate">{updateLabel}</span>
-            </Button>
-          }
-          secondaryToolbar={
-            page === "overview" ? (
-              <UsageBasisSelect value={overviewBasis} onChange={setOverviewBasis} />
-            ) : undefined
-          }
-          onSync={handleSync}
+        <Tabs
+          value={analyticsClient ?? "all"}
+          onValueChange={(value) => setAnalyticsClient(isClientKey(value) ? value : null)}
+          className="block"
         >
-          {page === "overview" ? (
-            <OverviewPage
-              range={range}
-              nowMs={nowMs}
-              refreshToken={refreshToken}
-              onNavigate={handleNavigate}
-              onOpenSessions={openSessions}
-              basis={overviewBasis}
-            />
-          ) : null}
-          {page === "analytics" ? (
-            <AnalyticsPage
-              range={range}
-              refreshToken={refreshToken}
-              client={analyticsClient}
-              onClientChange={setAnalyticsClient}
-              onOpenSessions={openSessions}
-            />
-          ) : null}
-          {page === "sessions" ? (
-            <SessionsPage
-              range={range}
-              refreshToken={refreshToken}
-              state={sessionState}
-              onChange={setSessionState}
-              returnLabel={sessionOrigin?.page === "analytics" ? "返回用量分析" : "返回总览"}
-              onReturn={
-                sessionOrigin
-                  ? () => {
-                      setSelectedRange(sessionOrigin.range);
-                      handleNavigate(sessionOrigin.page);
-                    }
-                  : undefined
-              }
-            />
-          ) : null}
-          {page === "sources" ? (
-            <SourcesPage
-              settingsController={settings}
-              status={status}
-              loading={loading}
-              error={error}
-              syncBusy={syncBusy}
-              onRetry={() => {
-                void reload();
-              }}
-              onSync={handleSync}
-              onSyncClient={(client) => {
-                void syncNow(true, client);
-              }}
-            />
-          ) : null}
-          {page === "settings" ? (
-            <SettingsPage
-              controller={settings}
-              updates={updates}
-              updateFocusToken={updateFocusToken}
-            />
-          ) : null}
-        </AppShell>
+          <AppShell
+            page={page}
+            collectionPaused={settings.settings?.collectionPaused ?? false}
+            range={range}
+            nowMs={nowMs}
+            status={status}
+            syncBusy={syncBusy}
+            error={error ?? settings.error}
+            onRetry={() => {
+              void Promise.all([reload(), settings.reload()]);
+            }}
+            onNavigate={handleNavigate}
+            onRangeChange={(nextRange) => {
+              setSelectedRange(nextRange);
+              setSessionState((current) => ({
+                ...current,
+                offset: 0,
+                rangeScope: rangeScope(nextRange),
+              }));
+            }}
+            updateControl={
+              <Button
+                variant="ghost"
+                className="h-10 w-full justify-start gap-3 px-3 text-primary"
+                aria-label={updateLabel}
+                title={updateLabel}
+                onClick={() => {
+                  setUpdateDialogOpen(true);
+                  if (
+                    updates.state &&
+                    !knownUpdate &&
+                    !updates.busy &&
+                    updates.state?.phase !== "disabled" &&
+                    updates.state?.phase !== "checking"
+                  )
+                    void updates.act("check");
+                }}
+              >
+                <ArrowUpCircle className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{updateLabel}</span>
+              </Button>
+            }
+            secondaryToolbar={secondaryToolbar}
+            onSync={handleSync}
+          >
+            {page === "overview" ? (
+              <OverviewPage
+                range={range}
+                nowMs={nowMs}
+                refreshToken={refreshToken}
+                onNavigate={handleNavigate}
+                onOpenSessions={openSessions}
+                basis={overviewBasis}
+              />
+            ) : null}
+            {page === "analytics" ? (
+              <AnalyticsPage
+                range={range}
+                refreshToken={refreshToken}
+                client={analyticsClient}
+                onOpenSessions={openSessions}
+              />
+            ) : null}
+            {page === "sessions" ? (
+              <SessionsPage
+                range={range}
+                refreshToken={refreshToken}
+                state={sessionState}
+                onChange={setSessionState}
+                returnLabel={sessionOrigin?.page === "analytics" ? "返回用量分析" : "返回总览"}
+                onReturn={
+                  sessionOrigin
+                    ? () => {
+                        setSelectedRange(sessionOrigin.range);
+                        handleNavigate(sessionOrigin.page);
+                      }
+                    : undefined
+                }
+              />
+            ) : null}
+            {page === "sources" ? (
+              <SourcesPage
+                settingsController={settings}
+                status={status}
+                loading={loading}
+                error={error}
+                syncBusy={syncBusy}
+                onRetry={() => {
+                  void reload();
+                }}
+                onSync={handleSync}
+                onSyncClient={(client) => {
+                  void syncNow(true, client);
+                }}
+              />
+            ) : null}
+            {page === "settings" ? (
+              <SettingsPage
+                controller={settings}
+                updates={updates}
+                updateFocusToken={updateFocusToken}
+              />
+            ) : null}
+          </AppShell>
+        </Tabs>
         <UpdateAnnouncement
           updates={updates}
           currentVersion={settings.appInfo?.version ?? null}
