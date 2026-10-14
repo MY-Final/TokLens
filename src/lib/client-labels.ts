@@ -21,9 +21,12 @@ export function clientLabel(client: ClientKey): string {
   return CLIENT_LABELS[client];
 }
 
-export const GROK_USAGE_NOTE =
-  "Grok CLI 按轮记录用量：请求数表示轮数，均量为每轮 Token，按轮结束时间归属，无法拆分为独立模型调用。";
-
 export function isClientKey(value: string | null): value is ClientKey {
   return value !== null && Object.prototype.hasOwnProperty.call(CLIENT_LABELS, value);
 }
+
+/** Single source of the client set; derived from the exhaustive label record. */
+export const CLIENT_KEYS: readonly ClientKey[] = Object.keys(CLIENT_LABELS).filter(isClientKey);
+
+export const GROK_USAGE_NOTE =
+  "Grok CLI 按轮记录用量：请求数表示轮数，均量为每轮 Token，按轮结束时间归属，无法拆分为独立模型调用。";

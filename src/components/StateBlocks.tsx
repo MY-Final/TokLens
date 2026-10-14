@@ -1,7 +1,7 @@
 /** 加载 / 空 / 错误 / 等待采集 的统一状态块（全部使用语义 token）。 */
 
 import type { ReactNode } from "react";
-import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
+import { AlertTriangle, Inbox } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,19 +12,6 @@ export function LoadingRows({ rows = 3 }: { rows?: number }) {
       {Array.from({ length: rows }, (_, index) => (
         <Skeleton key={index} className="h-9 w-full" />
       ))}
-    </div>
-  );
-}
-
-export function LoadingInline({ label = "正在加载…" }: { label?: string }) {
-  return (
-    <div
-      className="flex items-center gap-2 text-sm text-muted-foreground"
-      aria-busy="true"
-      aria-live="polite"
-    >
-      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-      {label}
     </div>
   );
 }

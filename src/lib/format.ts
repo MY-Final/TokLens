@@ -59,19 +59,6 @@ export function formatTokensOrDash(value: number | null): string {
   return value === null ? "—" : formatNumber(value);
 }
 
-export function formatCompactOrDash(value: number | null): string {
-  return value === null ? "—" : formatCompactTokens(value);
-}
-
-/** 百分比：`part / whole`，两位小数以内的整数百分比。 */
-export function formatPercent(part: number, whole: number): string {
-  if (whole <= 0) {
-    return "—";
-  }
-  const percent = (part / whole) * 100;
-  return `${percent >= 10 ? percent.toFixed(0) : percent.toFixed(1)}%`;
-}
-
 function pad(value: number): string {
   return value.toString().padStart(2, "0");
 }
@@ -85,10 +72,9 @@ export function formatDateTime(ms: number | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** 本地日期 10-11（用于趋势坐标轴）。 */
-export function formatMonthDay(ms: number): string {
-  const date = new Date(ms);
-  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+/** Tooltip total label for a day; mirrors `dailyScope`'s partial-day wording. */
+export function dayTotalLabel(scope: string): string {
+  return scope === "所选时段 · 本地日期" ? "所选时段已知 Token" : "当日已知 Token";
 }
 
 /** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / 具体日期。 */

@@ -11,8 +11,9 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
-import { formatDateTime } from "@/lib/format";
-import type { DailyTokenBucket } from "@/lib/usage-types";
+import { CLIENT_KEYS, clientLabel } from "@/lib/client-labels";
+import { dayTotalLabel, formatDateTime } from "@/lib/format";
+import type { ClientKey, DailyTokenBucket } from "@/lib/usage-types";
 
 const SERIES = [
   { key: "cacheRead", label: "缓存读取", color: "var(--chart-1)", dotClass: "bg-chart-1" },
@@ -26,58 +27,30 @@ const SERIES = [
     dotClass: "bg-chart-5",
   },
 ] as const;
-const TOTAL_SERIES = [
-  { key: "codex", label: "Codex", color: "var(--client-codex)", dotClass: "bg-client-codex" },
-  {
-    key: "claude_code",
-    label: "Claude Code",
-    color: "var(--client-claude)",
-    dotClass: "bg-client-claude",
-  },
-  {
-    key: "opencode",
-    label: "OpenCode",
-    color: "var(--client-opencode)",
-    dotClass: "bg-client-opencode",
-  },
-  { key: "dsh", label: "DSH", color: "var(--client-dsh)", dotClass: "bg-client-dsh" },
-  { key: "kimi_code", label: "Kimi Code", color: "var(--client-kimi)", dotClass: "bg-client-kimi" },
-  { key: "mimocode", label: "MiMoCode", color: "var(--client-mimo)", dotClass: "bg-client-mimo" },
-  { key: "pi_desktop", label: "Pi Desktop", color: "var(--client-pi)", dotClass: "bg-client-pi" },
-  {
-    key: "workbuddy",
-    label: "WorkBuddy",
-    color: "var(--client-workbuddy)",
-    dotClass: "bg-client-workbuddy",
-  },
-  {
-    key: "copilot",
-    label: "GitHub Copilot",
-    color: "var(--client-copilot)",
-    dotClass: "bg-client-copilot",
-  },
-  {
-    key: "gemini_cli",
-    label: "Gemini CLI",
-    color: "var(--client-gemini)",
-    dotClass: "bg-client-gemini",
-  },
-  { key: "grok", label: "Grok CLI", color: "var(--client-grok)", dotClass: "bg-client-grok" },
-  { key: "mcode", label: "MCode", color: "var(--client-mcode)", dotClass: "bg-client-mcode" },
-] as const;
+const CLIENT_SERIES: Record<ClientKey, { color: string; dotClass: string }> = {
+  codex: { color: "var(--client-codex)", dotClass: "bg-client-codex" },
+  claude_code: { color: "var(--client-claude)", dotClass: "bg-client-claude" },
+  opencode: { color: "var(--client-opencode)", dotClass: "bg-client-opencode" },
+  dsh: { color: "var(--client-dsh)", dotClass: "bg-client-dsh" },
+  kimi_code: { color: "var(--client-kimi)", dotClass: "bg-client-kimi" },
+  mimocode: { color: "var(--client-mimo)", dotClass: "bg-client-mimo" },
+  pi_desktop: { color: "var(--client-pi)", dotClass: "bg-client-pi" },
+  workbuddy: { color: "var(--client-workbuddy)", dotClass: "bg-client-workbuddy" },
+  copilot: { color: "var(--client-copilot)", dotClass: "bg-client-copilot" },
+  gemini_cli: { color: "var(--client-gemini)", dotClass: "bg-client-gemini" },
+  grok: { color: "var(--client-grok)", dotClass: "bg-client-grok" },
+  mcode: { color: "var(--client-mcode)", dotClass: "bg-client-mcode" },
+};
+const TOTAL_SERIES = CLIENT_KEYS.map((key) => ({
+  key,
+  label: clientLabel(key),
+  color: CLIENT_SERIES[key].color,
+  dotClass: CLIENT_SERIES[key].dotClass,
+}));
 const CHART_CONFIG = {
-  codex: { label: "Codex", color: "var(--client-codex)" },
-  claude_code: { label: "Claude Code", color: "var(--client-claude)" },
-  opencode: { label: "OpenCode", color: "var(--client-opencode)" },
-  dsh: { label: "DSH", color: "var(--client-dsh)" },
-  kimi_code: { label: "Kimi Code", color: "var(--client-kimi)" },
-  mimocode: { label: "MiMoCode", color: "var(--client-mimo)" },
-  pi_desktop: { label: "Pi Desktop", color: "var(--client-pi)" },
-  workbuddy: { label: "WorkBuddy", color: "var(--client-workbuddy)" },
-  copilot: { label: "GitHub Copilot", color: "var(--client-copilot)" },
-  gemini_cli: { label: "Gemini CLI", color: "var(--client-gemini)" },
-  grok: { label: "Grok CLI", color: "var(--client-grok)" },
-  mcode: { label: "MCode", color: "var(--client-mcode)" },
+  ...Object.fromEntries(
+    CLIENT_KEYS.map((key) => [key, { label: clientLabel(key), color: CLIENT_SERIES[key].color }]),
+  ),
   cacheWrite: { label: "缓存写入（计入总量）", color: "var(--chart-5)" },
   cacheRead: { label: "缓存读取", color: "var(--chart-1)" },
   input: { label: "输入（未命中缓存）", color: "var(--chart-2)" },
@@ -106,12 +79,16 @@ export function TokenTrendChart({
   const [mode, setMode] = useState("client");
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const gradientId = useId().replace(/:/g, "");
-  const clientValue = (bucket: DailyTokenBucket, key: string) => {
+  const clientValue = (bucket: DailyTokenBucket, key: ClientKey) => {
     const entry = bucket.clients.find((client) => client.client === key);
     return entry && entry.sessions > 0 && entry.sessions === entry.sessionsWithoutUsage
       ? null
       : (entry?.totalTokens ?? 0);
   };
+  const clientValues = (bucket: DailyTokenBucket): Record<ClientKey, number | null> =>
+    Object.fromEntries(
+      CLIENT_KEYS.map((key): [ClientKey, number | null] => [key, clientValue(bucket, key)]),
+    ) as Record<ClientKey, number | null>;
   const data = (buckets ?? []).map((bucket) => ({
     label: formatDateTime(bucket.dayStartMs).split(" ")[0],
     total:
@@ -119,18 +96,7 @@ export function TokenTrendChart({
         ? null
         : bucket.totals.totalTokens,
     bucket,
-    codex: clientValue(bucket, "codex"),
-    claude_code: clientValue(bucket, "claude_code"),
-    opencode: clientValue(bucket, "opencode"),
-    dsh: clientValue(bucket, "dsh"),
-    kimi_code: clientValue(bucket, "kimi_code"),
-    mimocode: clientValue(bucket, "mimocode"),
-    pi_desktop: clientValue(bucket, "pi_desktop"),
-    workbuddy: clientValue(bucket, "workbuddy"),
-    copilot: clientValue(bucket, "copilot"),
-    gemini_cli: clientValue(bucket, "gemini_cli"),
-    grok: clientValue(bucket, "grok"),
-    mcode: clientValue(bucket, "mcode"),
+    ...clientValues(bucket),
     cacheWrite: bucket.totals.countedCacheWriteTokens,
     input: bucket.totals.inputTokens,
     output: bucket.totals.outputTokens,
@@ -236,10 +202,12 @@ export function TokenTrendChart({
                     if (!active) return null;
                     const entry = data.find((day) => day.label === String(label));
                     if (!entry) return null;
+                    const scope = dailyScope(entry.bucket.dayStartMs, selectedRange);
                     return (
                       <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
                         <UsageTooltip
-                          title={`${entry.label} · ${dailyScope(entry.bucket.dayStartMs, selectedRange)}`}
+                          title={`${entry.label} · ${scope}`}
+                          totalLabel={dayTotalLabel(scope)}
                           total={entry.total}
                           requests={entry.bucket.messages}
                           sessions={entry.bucket.sessions}
