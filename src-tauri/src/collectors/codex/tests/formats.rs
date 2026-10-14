@@ -250,6 +250,74 @@ fn mixed_format_keeps_legacy_prefix_and_takes_max_cumulative() {
 }
 
 #[test]
+fn counts_exceeding_i64_are_rejected_without_negative_values() {
+    // 超过 i64::MAX 的计数在写库前必须被拒绝：否则 `as i64` 会静默回绕成负数。
+    let dir = temp_dir("overflow-counts");
+    let huge = u64::MAX;
+    write_file(
+        &dir,
+        "rollout-overflow.jsonl",
+        &[
+            session_meta_at(THREAD, "2026-10-12T01:03:00.000Z", None, 0),
+            usage_record(
+                THREAD,
+                "2026-10-12T01:04:00.000Z",
+                1,
+                "resp_big",
+                counts(huge, 0, 0, 0, 0),
+                counts(huge, 0, 0, 0, 0),
+            ),
+            legacy_token_count(
+                None,
+                "2026-10-12T01:05:00.000Z",
+                2,
+                counts(huge, 0, 0, 0, 0),
+                counts(huge, 0, 0, 0, 0),
+            ),
+            usage_record(
+                THREAD,
+                "2026-10-12T01:06:00.000Z",
+                3,
+                "resp_ok",
+                counts(100, 10, 0, 0, 0),
+                counts(100, 10, 0, 0, 0),
+            ),
+        ],
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = sync(&store, &dir);
+
+    assert_eq!(report.unparsed_lines, 2, "两条超限记录被拒绝");
+    assert_eq!(
+        store.message_count().expect("messages"),
+        1,
+        "合法记录仍导入"
+    );
+    let negatives: i64 = store
+        .connection_for_tests()
+        .query_row(
+            "SELECT COUNT(*) FROM messages
+             WHERE input_tokens < 0 OR output_tokens < 0 OR reasoning_tokens < 0
+                OR cache_read_tokens < 0 OR cache_write_tokens < 0 OR total_tokens < 0",
+            [],
+            |row| row.get(0),
+        )
+        .expect("negatives");
+    assert_eq!(negatives, 0, "不得写入负值");
+    let session_negative: i64 = store
+        .connection_for_tests()
+        .query_row(
+            "SELECT COUNT(*) FROM sessions
+             WHERE input_tokens < 0 OR output_tokens < 0 OR total_tokens < 0",
+            [],
+            |row| row.get(0),
+        )
+        .expect("session negatives");
+    assert_eq!(session_negative, 0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn mixed_format_files_use_new_records_only() {
     let dir = temp_dir("mixed");
     let usage = counts(1_000, 100, 400, 0, 20);

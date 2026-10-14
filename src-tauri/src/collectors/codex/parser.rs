@@ -1,6 +1,7 @@
 //! Streaming JSONL parser: extract only whitelisted metadata.
 
 use super::parsed::ParsedFile;
+use crate::collectors::files::valid_counts;
 use crate::usage::model::MessageRecord;
 use crate::usage::normalize::{
     CodexRecordIdentity, CodexUsageRecord, codex_dedup_key, codex_message,
@@ -257,11 +258,18 @@ fn parse_token_usage_record(
             .and_then(Value::as_str)
             .map(str::to_string);
     }
+    // 计数可能超过 i64（损坏或异常输入）；写库前拒绝，避免 `as i64` 回绕成负数。
+    let usage = raw_counts(payload.and_then(|payload| payload.get("usage")));
+    if !valid_counts(&usage) {
+        parsed.unparsed_lines += 1;
+        return;
+    }
     parsed.mark_time(timestamp);
     let cumulative = payload
         .and_then(|payload| payload.get("thread_token_usage"))
         .filter(|usage| usage.is_object())
-        .map(|usage| raw_counts(Some(usage)));
+        .map(|usage| raw_counts(Some(usage)))
+        .filter(valid_counts);
     let source_path = parsed.path.to_string_lossy();
     records.push(codex_message(&CodexUsageRecord {
         thread_id: &thread_id,
@@ -270,7 +278,7 @@ fn parse_token_usage_record(
             .and_then(Value::as_str),
         identity: record_identity(ordinal, cumulative, &source_path, line),
         timestamp,
-        usage: raw_counts(payload.and_then(|payload| payload.get("usage"))),
+        usage,
     }));
     // 文件按追加顺序写入：最后一条即为文件末尾的线程累计。
     if let Some(cumulative) = cumulative {
@@ -315,18 +323,25 @@ fn parse_legacy_token_count(
         parsed.unparsed_lines += 1;
         return;
     };
+    // 与新版路径一致：超过 i64 的计数拒绝并计数，不入库、不回绕。
+    let usage = raw_counts(Some(last_usage));
+    if !valid_counts(&usage) {
+        parsed.unparsed_lines += 1;
+        return;
+    }
     parsed.mark_time(timestamp);
     let cumulative = info
         .get("total_token_usage")
         .filter(|usage| usage.is_object())
-        .map(|usage| raw_counts(Some(usage)));
+        .map(|usage| raw_counts(Some(usage)))
+        .filter(valid_counts);
     events.push(LegacyEvent {
         ordinal,
         line,
         cumulative,
         timestamp: timestamp.map(str::to_string),
         thread_id,
-        usage: raw_counts(Some(last_usage)),
+        usage,
     });
     if let Some(cumulative) = cumulative {
         parsed.legacy_cumulative = Some(cumulative);

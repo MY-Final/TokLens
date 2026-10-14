@@ -58,11 +58,13 @@ impl ClaudeCodeCollector {
                 unparsed_records: 0,
             });
         }
-        unchanged &= store.source_paths(Client::ClaudeCode)?
-            == sources
-                .iter()
-                .map(|source| source.path.clone())
-                .collect::<Vec<_>>();
+        let mut source_paths = sources
+            .iter()
+            .map(|source| source.path.clone())
+            .collect::<Vec<_>>();
+        // PathBuf order on Windows differs from SQLite's string order for nested paths.
+        source_paths.sort();
+        unchanged &= store.source_paths(Client::ClaudeCode)? == source_paths;
         if unchanged {
             report.files_skipped_unchanged = paths.len();
             return Ok(report);
