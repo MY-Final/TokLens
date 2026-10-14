@@ -1,6 +1,7 @@
 pub mod collectors;
 pub mod commands;
 pub mod desktop;
+pub mod panels;
 pub mod settings;
 pub mod updates;
 pub mod usage;
@@ -94,6 +95,13 @@ pub fn run() {
             desktop::get_close_pending,
             desktop::resolve_close,
             commands::tray_usage::refresh_tray_usage,
+            panels::catalog::get_panel_catalog,
+            panels::query::run_panel_query,
+            panels::store::get_panel_specs,
+            panels::store::save_panel_spec,
+            panels::store::delete_panel_spec,
+            panels::store::reorder_panels,
+            panels::store::reset_panel_specs,
             commands::queries::get_overview_stats,
             commands::queries::get_daily_token_trend,
             commands::queries::get_client_usage,
