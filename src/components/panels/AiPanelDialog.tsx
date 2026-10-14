@@ -211,11 +211,10 @@ function AiPanelDialogBody({
         </p>
       ) : !configured ? (
         <div className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
-          <p className="text-sm">
-            AI 面板生成默认关闭，尚未配置 Base URL、模型或 API Key，因此不会联网。
-          </p>
+          <p className="text-sm">AI 面板生成默认关闭，尚未配置 Base URL 或模型，因此不会联网。</p>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            请在设置中填写 OpenAI 兼容接口地址、模型与 API Key（密钥存于系统凭据库），之后即可生成。
+            请在设置中填写 OpenAI 兼容接口地址与模型；本地模型可留空 API Key，部分在线服务需要 API
+            Key（密钥存于系统凭据库）。之后即可生成。
           </p>
           <Button
             size="sm"

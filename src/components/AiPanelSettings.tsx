@@ -96,9 +96,26 @@ export function AiPanelSettings() {
     setConfigMessage(null);
     setConfigError(null);
     try {
-      await setLlmConfig({ baseUrl: baseUrl.trim() || null, model: model.trim() || null });
+      // 空串表示清除（后端语义）；未清空的字段按当前输入保存。
+      await setLlmConfig({ baseUrl: baseUrl.trim(), model: model.trim() });
       applyConfig(await getLlmConfig());
       setConfigMessage("配置已保存");
+    } catch (cause: unknown) {
+      setConfigError(toErrorMessage(cause));
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const clearConfig = async () => {
+    if (busy) return;
+    setSavingConfig(true);
+    setConfigMessage(null);
+    setConfigError(null);
+    try {
+      await setLlmConfig({ baseUrl: "", model: "" });
+      applyConfig(await getLlmConfig());
+      setConfigMessage("已清除 Base URL 与模型（API Key 不受影响）");
     } catch (cause: unknown) {
       setConfigError(toErrorMessage(cause));
     } finally {
@@ -158,8 +175,8 @@ export function AiPanelSettings() {
   };
 
   const hasKey = config?.hasKey ?? false;
-  const canTest =
-    !loading && !busy && hasKey && baseUrl.trim().length > 0 && model.trim().length > 0;
+  const canTest = !loading && !busy && baseUrl.trim().length > 0 && model.trim().length > 0;
+  const isCleared = baseUrl.trim().length === 0 && model.trim().length === 0;
 
   return (
     <SettingsSection
@@ -219,7 +236,7 @@ export function AiPanelSettings() {
             <Field
               label="API Key"
               htmlFor={keyId}
-              hint="保存到系统凭据库（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），保存后无法再显示，可随时一键清除。"
+              hint="本地模型（如 Ollama）可留空；部分在线服务需要 API Key。密钥保存到系统凭据库（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），保存后无法再显示，可随时一键清除。"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <Input
@@ -260,7 +277,15 @@ export function AiPanelSettings() {
               <Button size="sm" variant="outline" disabled={!canTest} onClick={() => void test()}>
                 {testing ? "测试中…" : "测试连接"}
               </Button>
-              {!canTest && !busy && hasKey ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy || isCleared}
+                onClick={() => void clearConfig()}
+              >
+                清除配置
+              </Button>
+              {!canTest && !busy ? (
                 <span className="text-xs text-muted-foreground">
                   填写 Base URL 与模型后可测试连接
                 </span>
