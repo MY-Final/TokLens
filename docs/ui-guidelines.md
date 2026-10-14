@@ -62,6 +62,9 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 - 客户端标识稳定使用品牌 token：Codex 绿色，Claude Code 暖橘色，OpenCode 蓝紫色；颜色值只在 `src/index.css` 定义。
 - 暗色模式通过 `.dark` 覆盖 token 实现，组件内不得写"暗色分支"逻辑。
 - 强调色用于主操作与选中态，保持稀缺；大面积区域使用 `background` / `muted` 这类中性底色。
+- 颜色 token 按三层职责解耦，三层不复用同一色值：**交互强调簇**（`primary` / `primary-foreground` / `ring` / `sidebar-primary` / `sidebar-primary-foreground` / `sidebar-ring` / `accent` / `accent-foreground` / `sidebar-accent` / `sidebar-accent-foreground`）、**身份色簇**（`client-*`）与**图表簇**（`chart-1..5`）。主色（2026-10-14 起）为莓紫 335：亮 `oklch(0.52 0.19 335)`（foreground `#ffffff`）、暗 `oklch(0.75 0.15 335)`（foreground `#15181d`）；`ring` / `sidebar-primary` / `sidebar-ring` 与 `primary` 同值，`accent` 系列为同色相低强度 tint。不做多主题或主题切换。
+- 图表簇（2026-10-14 起）移出青绿：`chart-1` 黄绿、`chart-2` 青、`chart-3` 蓝、`chart-4` 紫、`chart-5` 琥珀；同一指标在所有图表复用同一 token，客户端 / 模型维度优先使用 `client-*` 身份色。
+- 颜色可读性与可辨识度由 `scripts/check-color.mjs`（零依赖）校验：WCAG 对比度、OKLab ΔE 与 protan / deutan / tritan 模拟；`pnpm check` 会执行其中的 `color:check`。新增或调整颜色时必须同步更新 `src/index.css` 并保证校验通过，禁止静默豁免（豁免需登记双方与理由）。
 
 ## 3. 层次、间距、圆角、字体
 
