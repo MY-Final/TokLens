@@ -10,11 +10,13 @@ import {
   Pencil,
   Plus,
   RotateCcw,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { EmptyBlock, ErrorBlock } from "@/components/StateBlocks";
+import { AiPanelDialog } from "@/components/panels/AiPanelDialog";
 import { PanelEditor } from "@/components/panels/PanelEditor";
 import { PanelRenderer } from "@/components/panels/PanelRenderer";
 import { PANEL_GRID_CLASSES, PANEL_SPAN_CLASSES } from "@/components/panels/panel-layout";
@@ -111,12 +113,14 @@ export function CustomPanelsPage({
   firstEventMs,
   refreshToken,
   onOpenSessions,
+  onOpenSettings,
 }: {
   range: DateRange;
   nowMs: number;
   firstEventMs: number | null;
   refreshToken: number;
   onOpenSessions: (filters?: Partial<SessionFilters>, range?: DateRange) => void;
+  onOpenSettings: () => void;
 }) {
   const panels = usePanels();
   const catalog = useAsyncData(
@@ -125,6 +129,7 @@ export function CustomPanelsPage({
     "panel-catalog",
   );
   const [editorOpen, setEditorOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [editing, setEditing] = useState<PanelSpec | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
@@ -213,6 +218,10 @@ export function CustomPanelsPage({
             <RotateCcw className="size-4" aria-hidden="true" />
             重置面板
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setAiOpen(true)}>
+            <Sparkles className="size-4" aria-hidden="true" />
+            AI 生成
+          </Button>
           <Button size="sm" onClick={openCreate}>
             <Plus className="size-4" aria-hidden="true" />
             新增面板
@@ -269,6 +278,13 @@ export function CustomPanelsPage({
         catalog={catalog.data}
         initial={editing}
         onSave={handleSave}
+      />
+
+      <AiPanelDialog
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        onSave={handleSave}
+        onOpenSettings={onOpenSettings}
       />
 
       <AlertDialog

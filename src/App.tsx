@@ -250,6 +250,7 @@ export default function App() {
                   firstEventMs={status?.firstEventMs ?? null}
                   refreshToken={refreshToken}
                   onOpenSessions={openSessions}
+                  onOpenSettings={() => handleNavigate("settings")}
                 />
               ) : null}
               {page === "sessions" ? (
