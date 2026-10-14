@@ -12,6 +12,9 @@ pub(crate) mod query;
 mod spec;
 pub(crate) mod store;
 
+#[cfg(test)]
+mod tests;
+
 pub use catalog::{PanelCatalog, get_panel_catalog};
 pub use query::{PanelQueryArgs, PanelQueryResultDto, run_panel_query};
 pub use spec::{PanelSpec, SUPPORTED_SPEC_VERSION};
