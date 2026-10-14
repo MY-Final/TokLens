@@ -221,7 +221,7 @@ fn patches_and_update_timestamp_do_not_overwrite_each_other() {
 }
 
 #[test]
-fn schema_v1_document_migrates_to_v2_without_losing_settings_or_panels() {
+fn schema_v1_document_migrates_to_current_without_losing_settings_or_panels() {
     let directory = Directory::new();
     std::fs::write(
         directory.0.join("settings.json"),
@@ -233,8 +233,9 @@ fn schema_v1_document_migrates_to_v2_without_losing_settings_or_panels() {
     assert!(snapshot.warning.is_none());
     assert_eq!(snapshot.settings.theme, model::Theme::Dark);
     assert!(store.panels().expect("panels").is_empty());
+    assert_eq!(store.llm().expect("llm"), LlmConfig::default());
 
-    // 保存后写回 schemaVersion 2 且补齐 panels。
+    // 保存后写回 SCHEMA_VERSION 且补齐 panels 与 llm。
     store
         .update(SettingsPatch {
             collection_paused: Some(true),
@@ -245,9 +246,82 @@ fn schema_v1_document_migrates_to_v2_without_losing_settings_or_panels() {
         &std::fs::read_to_string(directory.0.join("settings.json")).expect("read"),
     )
     .expect("json");
-    assert_eq!(value["schemaVersion"], serde_json::json!(2));
+    assert_eq!(value["schemaVersion"], serde_json::json!(SCHEMA_VERSION));
     assert_eq!(value["panels"], serde_json::json!([]));
+    assert_eq!(value["llm"], serde_json::json!({}));
     assert_eq!(value["settings"]["theme"], serde_json::json!("dark"));
+}
+
+fn migrated(value: serde_json::Value) -> serde_json::Value {
+    migrate_document(value).expect("migration")
+}
+
+#[test]
+fn migrate_document_is_a_pure_function_with_explicit_steps() {
+    // 2 → 3：显式补齐 llm 键，并标记当前版本；既有字段原样保留。
+    let v2 = migrated(serde_json::json!({
+        "schemaVersion": 2,
+        "settings": { "theme": "dark" },
+        "panels": [{ "specVersion": 1, "id": "p1" }],
+    }));
+    assert_eq!(v2["schemaVersion"], serde_json::json!(SCHEMA_VERSION));
+    assert_eq!(v2["llm"], serde_json::json!({}));
+    assert_eq!(v2["settings"]["theme"], serde_json::json!("dark"));
+    assert_eq!(v2["panels"][0]["id"], serde_json::json!("p1"));
+
+    // 1 → 3 一步到位；缺失 schemaVersion 视为当前版本。
+    let v1 = migrated(serde_json::json!({ "schemaVersion": 1, "settings": {} }));
+    assert_eq!(v1["schemaVersion"], serde_json::json!(SCHEMA_VERSION));
+    assert_eq!(v1["llm"], serde_json::json!({}));
+
+    let missing = migrated(serde_json::json!({ "settings": {} }));
+    assert_eq!(missing["schemaVersion"], serde_json::json!(SCHEMA_VERSION));
+
+    // 已含 llm 的当前版本不覆盖用户值。
+    let current = migrated(serde_json::json!({
+        "schemaVersion": SCHEMA_VERSION,
+        "llm": { "baseUrl": "https://api.example.com", "model": "m" },
+    }));
+    assert_eq!(current["llm"]["model"], serde_json::json!("m"));
+
+    // 高于当前版本：拒绝，调用方回退默认并提示（不静默丢弃）。
+    assert!(migrate_document(serde_json::json!({ "schemaVersion": SCHEMA_VERSION + 1 })).is_err());
+    assert!(migrate_document(serde_json::json!({ "schemaVersion": -1 })).is_err());
+    assert!(migrate_document(serde_json::json!("not an object")).is_err());
+}
+
+#[test]
+fn llm_config_persists_and_resets_without_changing_other_settings() {
+    let directory = Directory::new();
+    let store = SettingsStore::load(&directory.0);
+    let saved = store
+        .transform_llm(|llm| {
+            llm.base_url = Some("https://api.deepseek.com".into());
+            llm.model = Some("deepseek-chat".into());
+            Ok(())
+        })
+        .expect("save llm");
+    assert_eq!(saved.base_url.as_deref(), Some("https://api.deepseek.com"));
+
+    let reloaded = SettingsStore::load(&directory.0);
+    let llm = reloaded.llm().expect("llm");
+    assert_eq!(llm.model.as_deref(), Some("deepseek-chat"));
+    // 非机密：设置文件里有 baseUrl/model，但绝无 key 字段。
+    let raw = std::fs::read_to_string(directory.0.join("settings.json")).expect("read");
+    assert!(raw.contains("deepseek-chat"));
+    assert!(!raw.contains("apiKey") && !raw.contains("api_key"));
+
+    // 恢复默认偏好不触碰 llm（llm 独立于 AppSettings）。
+    reloaded
+        .update(AppSettings::default().into())
+        .expect("reset preferences");
+    assert_eq!(
+        SettingsStore::load(&directory.0).llm().expect("llm"),
+        LlmConfig {
+            base_url: Some("https://api.deepseek.com".into()),
+            model: Some("deepseek-chat".into()),
+        }
+    );
 }
 
 #[test]

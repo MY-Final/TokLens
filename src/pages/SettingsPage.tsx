@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Download, Info, Palette, ScanLine, Settings2, ShieldCheck } from "lucide-react";
+import { Download, Info, Palette, ScanLine, Settings2, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AboutSettings } from "@/components/AboutSettings";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,7 @@ import type { CloseBehavior, Theme } from "@/lib/settings-types";
 import { RANGE_OPTIONS } from "@/lib/ranges";
 import { TOKEN_DISPLAY_OPTIONS } from "@/lib/format";
 import { CollectionSettings } from "@/components/CollectionSettings";
+import { AiPanelSettings } from "@/components/AiPanelSettings";
 import { DataSettings } from "@/components/DataSettings";
 import { UpdateSettings } from "@/components/UpdateSettings";
 import type { UpdatesController } from "@/hooks/use-updates";
@@ -29,6 +30,7 @@ const CATEGORIES = [
   { key: "general", label: "通用", icon: Settings2, group: "应用" },
   { key: "appearance", label: "外观与统计", icon: Palette, group: "应用" },
   { key: "collection", label: "采集", icon: ScanLine, group: "应用" },
+  { key: "ai", label: "AI 面板生成", icon: Sparkles, group: "应用" },
   { key: "updates", label: "更新", icon: Download, group: "管理" },
   { key: "data", label: "数据与隐私", icon: ShieldCheck, group: "管理" },
   { key: "about", label: "关于", icon: Info, group: "管理" },
@@ -39,20 +41,31 @@ export function SettingsPage({
   controller,
   updates,
   updateFocusToken = 0,
+  aiFocusToken = 0,
 }: {
   controller: SettingsController;
   updates: UpdatesController;
   updateFocusToken?: number;
+  aiFocusToken?: number;
 }) {
   const { settings, busy, error, warning, patch, reload } = controller;
-  const [selection, setSelection] = useState<{ category: Category; token: number }>({
+  const [selection, setSelection] = useState<{
+    category: Category;
+    updateToken: number;
+    aiToken: number;
+  }>({
     category: "general",
-    token: 0,
+    updateToken: 0,
+    aiToken: 0,
   });
   const category =
-    updateFocusToken !== 0 && selection.token !== updateFocusToken ? "updates" : selection.category;
+    updateFocusToken !== 0 && selection.updateToken !== updateFocusToken
+      ? "updates"
+      : aiFocusToken !== 0 && selection.aiToken !== aiFocusToken
+        ? "ai"
+        : selection.category;
   const selectCategory = (category: Category) =>
-    setSelection({ category, token: updateFocusToken });
+    setSelection({ category, updateToken: updateFocusToken, aiToken: aiFocusToken });
   const updateSection = useRef<HTMLDivElement>(null);
   const focusedToken = useRef(0);
   useEffect(() => {
@@ -201,6 +214,7 @@ export function SettingsPage({
             </SettingsSection>
           )}
           {category === "collection" && <CollectionSettings controller={controller} />}
+          {category === "ai" && <AiPanelSettings />}
           {category === "updates" && (
             <div ref={updateSection} tabIndex={-1} aria-label="更新">
               <UpdateSettings controller={controller} updates={updates} />

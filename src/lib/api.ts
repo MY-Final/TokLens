@@ -34,7 +34,16 @@ export function onUpdateState(callback: (state: UpdateState) => void): Promise<U
 export function openProjectPage(): Promise<void> {
   return openUrl("https://github.com/MY-Final/TokLens");
 }
-import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
+import type {
+  AppInfo,
+  CloseBehavior,
+  GeneratedPanelResult,
+  LlmConfig,
+  LlmConfigInput,
+  LlmTestResult,
+  SettingsPatch,
+  SettingsSnapshot,
+} from "@/lib/settings-types";
 import type { DesktopStatus } from "@/lib/usage-types";
 import {
   adaptPanelCatalog,
@@ -294,6 +303,90 @@ export function reorderPanels(ids: string[]): Promise<unknown> {
 /** 独立「重置面板」入口：清空用户面板，不影响统计与其它偏好。 */
 export function resetPanelSpecs(): Promise<unknown> {
   return invoke("reset_panel_specs");
+}
+
+/**
+ * AI 面板生成（OpenAI 兼容协议）命令封装。
+ *
+ * 默认离线：`get_llm_config` 只读本地配置；只有用户在设置页点击「测试连接」或自定义页点击
+ * 「生成」时才会联网。密钥 write-only（`set` / `clear`），前端不回读明文、不打印、不持久化。
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return null;
+}
+
+/** 容忍后端字段差异，把配置回读收敛为 `{ baseUrl, model, hasKey }`。 */
+export function adaptLlmConfig(value: unknown): LlmConfig {
+  const record = isRecord(value) ? value : {};
+  return {
+    baseUrl: firstString(record.baseUrl),
+    model: firstString(record.model),
+    hasKey: record.hasKey === true,
+  };
+}
+
+/** 容忍后端字段差异，把测试连接结果收敛为 `{ ok, message }`。 */
+export function adaptLlmTestResult(value: unknown): LlmTestResult {
+  if (!isRecord(value)) return { ok: false, message: "测试连接未返回结果" };
+  return {
+    ok: value.ok === true || value.success === true,
+    message: firstString(value.message, value.error, value.detail),
+  };
+}
+
+/** 容忍后端字段差异，把生成结果收敛为 `{ spec, usage? }`；缺少 spec 视为错误。 */
+export function adaptGeneratedPanelResult(value: unknown): GeneratedPanelResult {
+  if (!isRecord(value) || !("spec" in value)) {
+    throw new Error("生成结果缺少面板定义（spec）。");
+  }
+  const usage = isRecord(value.usage) ? extractLlmUsage(value.usage) : undefined;
+  return usage ? { spec: value.spec, usage } : { spec: value.spec };
+}
+
+function extractLlmUsage(value: Record<string, unknown>): GeneratedPanelResult["usage"] {
+  const usage: NonNullable<GeneratedPanelResult["usage"]> = {};
+  for (const key of ["promptTokens", "completionTokens", "totalTokens"] as const) {
+    const entry = value[key];
+    if (typeof entry === "number" && Number.isFinite(entry)) usage[key] = entry;
+  }
+  return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
+/** 读取本地 AI 面板生成配置（不联网）。 */
+export async function getLlmConfig(): Promise<LlmConfig> {
+  return adaptLlmConfig(await invoke("get_llm_config"));
+}
+
+/** 保存 Base URL 与模型；密钥不在此命令，改走系统凭据库。 */
+export function setLlmConfig(config: LlmConfigInput): Promise<void> {
+  return invoke("set_llm_config", { ...config });
+}
+
+/** 写入 API Key（只写不读，存于系统凭据库）。 */
+export function setLlmCredential(key: string): Promise<void> {
+  return invoke("set_llm_credential", { key });
+}
+
+/** 清除 API Key；清除后回到完全离线。 */
+export function clearLlmCredential(): Promise<void> {
+  return invoke("clear_llm_credential");
+}
+
+/** 测试连接：唯一会立即联网的配置操作，失败信息可读且不含密钥。 */
+export async function testLlmConnection(): Promise<LlmTestResult> {
+  return adaptLlmTestResult(await invoke("test_llm_connection"));
+}
+
+/** 由自然语言生成面板定义；返回 `spec` 仍需过 `validatePanelSpec` 二次校验。 */
+export async function generatePanelSpec(prompt: string): Promise<GeneratedPanelResult> {
+  return adaptGeneratedPanelResult(await invoke("generate_panel_spec", { prompt }));
 }
 
 export function syncUsage(force = false): Promise<SyncState> {

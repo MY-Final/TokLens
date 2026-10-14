@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod collectors;
 pub mod commands;
 pub mod desktop;
@@ -86,6 +87,12 @@ pub fn run() {
             updates::install::install_update,
             commands::settings::get_settings,
             commands::settings::update_settings,
+            ai::commands::get_llm_config,
+            ai::commands::set_llm_config,
+            ai::commands::set_llm_credential,
+            ai::commands::clear_llm_credential,
+            ai::commands::test_llm_connection,
+            ai::commands::generate_panel_spec,
             commands::storage::get_storage_status,
             commands::storage::relocate_storage,
             commands::maintenance::clear_statistics,

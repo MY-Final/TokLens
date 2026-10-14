@@ -9,7 +9,7 @@
 
 pub(crate) mod catalog;
 pub(crate) mod query;
-mod spec;
+pub(crate) mod spec;
 pub(crate) mod store;
 
 #[cfg(test)]

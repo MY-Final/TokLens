@@ -19,6 +19,19 @@ pub enum Theme {
     Dark,
 }
 
+/// 面板 AI 生成的**非机密**配置（Base URL 与模型名）。
+///
+/// API Key 绝不进入设置文件：它只存 OS 凭据库（`ai::credential`，write-only）。
+/// 字段缺失均为 `None`，表示未配置；未配置时 AI 功能整体禁用、保持离线。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LlmConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenDisplay {

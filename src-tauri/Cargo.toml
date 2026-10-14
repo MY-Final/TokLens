@@ -28,6 +28,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 zstd = { version = "0.13.3", default-features = false }
 rusqlite = { version = "0.40.2", features = ["bundled", "serialize"] }
+# 面板 AI 生成（OpenAI 兼容）：Rust 代发、仅用户显式触发时出网。
+# 复用 tauri-plugin-updater 已引入的 rustls/ring（`rustls-no-provider` 不新增 TLS 提供方）。
+reqwest = { version = "0.13", default-features = false, features = [
+    "json",
+    "rustls-no-provider",
+] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# API Key 仅存 OS 凭据库（write-only）；平台原生后端，无系统库依赖。
+keyring = { version = "3.6", default-features = false, features = [
+    "windows-native",
+    "apple-native",
+    "linux-native",
+] }
 
 [dev-dependencies]
 base64 = "0.22"

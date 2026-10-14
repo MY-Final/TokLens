@@ -46,6 +46,7 @@ export default function App() {
     rangeScope: "",
   });
   const [updateFocusToken, setUpdateFocusToken] = useState(0);
+  const [aiFocusToken, setAiFocusToken] = useState(0);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [selectedRange, setSelectedRange] = useState<DateRange | null>(null);
   const nowMs = useLocalClock();
@@ -58,7 +59,15 @@ export default function App() {
 
   const handleNavigate = useCallback((nextPage: PageKey) => {
     setUpdateFocusToken(0);
+    setAiFocusToken(0);
     setPage(nextPage);
+  }, []);
+
+  /** 从自定义页「前往设置」深链到「AI 面板生成」分类。 */
+  const openAiSettings = useCallback(() => {
+    setUpdateFocusToken(0);
+    setAiFocusToken((token) => token + 1);
+    setPage("settings");
   }, []);
 
   useEffect(() => {
@@ -250,6 +259,7 @@ export default function App() {
                   firstEventMs={status?.firstEventMs ?? null}
                   refreshToken={refreshToken}
                   onOpenSessions={openSessions}
+                  onOpenSettings={openAiSettings}
                 />
               ) : null}
               {page === "sessions" ? (
@@ -290,6 +300,7 @@ export default function App() {
                   controller={settings}
                   updates={updates}
                   updateFocusToken={updateFocusToken}
+                  aiFocusToken={aiFocusToken}
                 />
               ) : null}
             </AppShell>
