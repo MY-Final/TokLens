@@ -438,6 +438,22 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-14 | 双层校验：Rust 权威 + 前端镜像，`get_panel_catalog` 为 SSOT                                | 已采纳 | 前端仅做 UX 预校验并驱动合法控件；P2 AI 输出必须过同一校验器                       |
 | 2026-10-14 | 新增 `src-tauri/src/panels/`、`src/components/panels/`、`use-panels/`、`lib/panel-spec.ts` | 已采纳 | 与既有分层一致（前端只消费 DTO、口径集中在 Rust），不扩大公开接口                  |
 
+### 面板 AI 生成（Rust 代理 + keyring）（2026-10-14）
+
+自然语言 → `PanelSpec` 的 LLM 能力采用 **OpenAI 兼容协议**（用户自填 Base URL / 模型 / API Key，如 DeepSeek、中转站或本地模型）。
+请求由 **Rust 代发**（新增 command，前端不直连；**不改 CSP、不改 `capabilities`**），默认离线：未配置即禁用，仅用户显式触发时出网，无遥测、无导出。
+出网白名单：`https://`（任意主机，用户自配）与 `http://localhost` / `http://127.0.0.1`（本地模型），其余 scheme / 主机一律拒绝。
+API Key **仅存 OS 凭据库**（`keyring`：Windows Credential Manager / macOS Keychain / Linux Secret Service），**write-only**：只提供 `set` / `clear` / `has`，
+绝不回读明文给前端，绝不落日志 / 设置 / 导出；未配置 key 时完全离线。非机密配置（`baseUrl` / `model`）存 `settings.json`。
+`get_panel_catalog()` 输出内嵌进 system prompt 作为**目录即契约**（SSOT + 输出规范）；模型响应（剥离 ```json 围栏后）必须过既有 `PanelSpec` 校验器（deny unknown、边界拒绝），不合法返回可读错误。
+新增 `src-tauri/src/ai/`：`config`（配置规范化 / 校验 + DTO）、`credential`（凭据窄接口）、`prompt`（目录提示词）、`http`（纯请求构造 / 响应清洗 / 解析 + `reqwest` 调用）、`commands`（六个命令）；URL 规范化、请求体构造、围栏剥离与解析均为纯函数，测试用合成数据、不联网。
+引入 `reqwest`（复用既有 `rustls` / `ring`，不新增 TLS 提供方）与 `keyring`（平台原生后端，无系统库依赖）；settings schema 由 2 升 3，新增非机密 `llm: { baseUrl?, model? }`（迁移纯函数 + 测试）。
+
+| 日期       | 决策                                                                                                 | 状态   | 理由 / 影响                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| 2026-10-14 | 面板 AI 生成由 Rust 代发（`reqwest`），Key 仅存 `keyring`，出网限 https/localhost，默认禁用、无遥测 | 已采纳 | 前端不直连、不改 CSP / capabilities；目录即契约 + 过同一校验器；未配置即离线，最小权限、无数据外流 |
+| 2026-10-14 | 新增 `src-tauri/src/ai/` 与 settings schema 2→3（非机密 `llm` 配置）                                 | 已采纳 | 与既有分层一致（前端只消费 DTO、口径集中在 Rust）；凭据与配置分离，凭据不落盘                   |
+
 ### 可配置本地存储（2026-10-13）
 
 新增 `commands/storage.rs` 管理版本化存储位置记录并协调应用自有数据库与设置迁移；SQLite 快照由 `usage/store/maintenance.rs` 提供，设置路径切换由 `settings/mod.rs` 在偏好锁中完成。
