@@ -402,6 +402,23 @@ export function isPanelType(value: unknown): value is PanelType {
   return typeof value === "string" && TYPE_SET.has(value);
 }
 
+/**
+ * AI 面板生成是否已就绪：Base URL、模型与密钥三者齐备才算已配置；
+ * 未配置时生成入口保持禁用并引导去设置页（默认离线，不配置不发请求）。
+ */
+export function isPanelAiConfigured(
+  config: { baseUrl: string | null; model: string | null; hasKey: boolean } | null,
+): boolean {
+  return (
+    config !== null &&
+    typeof config.baseUrl === "string" &&
+    config.baseUrl.length > 0 &&
+    typeof config.model === "string" &&
+    config.model.length > 0 &&
+    config.hasKey
+  );
+}
+
 export function panelTypeLabel(type: PanelType): string {
   return DEFAULT_PANEL_TITLES[type];
 }
