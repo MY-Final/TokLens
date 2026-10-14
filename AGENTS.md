@@ -80,9 +80,11 @@ pnpm tauri build      # 生产打包
 | `src-tauri/src/usage/`      | 统一数据模型 / Token 口径 / SQLite 存储（不含采集器与 UI，见 `docs/data-model.md`）                                                                                                                |
 | `src-tauri/src/collectors/` | 客户端采集器：发现/解析/增量导入（Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / GitHub Copilot / Gemini CLI / Grok CLI / MCode，见 `docs/data-model.md`） |
 | `src-tauri/src/commands/`   | Tauri command 层：应用状态、后台同步调度与前端 DTO（口径仍由 `usage` 提供）                                                                                                                        |
+| `src-tauri/src/desktop/`    | 桌面生命周期：托盘、窗口事件与关闭流程（见 `docs/architecture.md`）                                                                                                                                |
+| `src-tauri/src/settings/`   | 版本化 JSON 设置存储、校验与原子保存（见 `docs/architecture.md`）                                                                                                                                  |
+| `src-tauri/src/updates/`    | 官方签名更新：状态 / 策略 / 检查 / 下载 / 安装（见 `docs/architecture.md`）                                                                                                                        |
 | `src-tauri/capabilities/`   | Tauri 2 权限声明（最小权限，见第 5 节）                                                                                                                                                            |
 | `docs/`                     | 规范文档（架构 / UI / 数据统计）                                                                                                                                                                   |
-| `public/`                   | 原样拷贝的静态资源                                                                                                                                                                                 |
 
 约束：
 

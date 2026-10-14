@@ -205,7 +205,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 多客户端接入后，客户端筛选均可用；空数据表达为「暂无数据」，目录缺失表达为「未发现数据源」，采集支持状态与连接状态分开。
 同步结果逐客户端显示，单源失败保留历史并明确提示；刷新触发 `sync_usage`。
 客户端 Progress 占比使用后端 `shareBps`；趋势使用逐日客户端总量，禁止把合并数据标成 Codex。
-Token 构成仅堆叠计入总量的缓存写入（当前为 Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop），不堆叠其他客户端的原始 cache_write。
+Token 构成仅堆叠计入总量的缓存写入（以 `TokenSemantics::cache_write_counts_in_total` 为准，当前 7 个：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / Copilot / MCode），不堆叠其他客户端的原始 cache_write。
 DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标签始终明确为 DSH。
 
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。

@@ -14,6 +14,7 @@
 | 存储       | `src-tauri/src/usage/store/`              | 表结构、版本化迁移、幂等导入、增量同步水位                                                                                                |
 | 时间工具   | `src-tauri/src/usage/time.rs`             | ISO 8601 UTC 解析与 Unix 毫秒系统时间                                                                                                     |
 | 统计查询   | `src-tauri/src/usage/analytics/`          | 查询类型、区间/趋势/客户端汇总、排行与摘要                                                                                                |
+| 统计报告   | `src-tauri/src/usage/report.rs`           | 报告元数据白名单与 CSV / JSON / Markdown 序列化                                                                                           |
 
 边界：本模块负责"数据模型 / 统计口径 / 存储 / 查询"，不包含客户端文件读取与 UI；
 客户端采集器在 `src-tauri/src/collectors/`（见第 8 节）。采集数据来源与字段证据见 [`data-source-research.md`](./data-source-research.md)。
@@ -92,11 +93,11 @@
 会话总量的取值依据记录在 `sessions.total_basis`：
 
 - `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
-- `client_reported`：OpenCode，直接使用会话聚合列。
-- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI，由去重后的消息求和得出。
+- `client_reported`：OpenCode / Grok CLI，直接使用会话聚合列；Copilot Agent Host 在 CLI 求和基础上覆盖为 `client_reported`。
+- `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI / Gemini CLI / MCode，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI 按完整扫描汇总；OpenCode 按会话聚合与请求明细的已知总量校验，无法确认完整度时标记 `partial`。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI / Gemini CLI / MCode 按完整扫描汇总；OpenCode 由会话聚合与请求明细的已知总量校验、Grok CLI 由轮次计数对应关系校验，无法确认时标记 `partial`；Copilot Agent Host 明细始终为 `partial`，会话总量与请求求和可以不同。
 
 ## 4. SQLite 表结构（v1）
 
@@ -420,7 +421,7 @@ SQL 每次在只读事务中读取 WAL，完整快照原子替换，失败保留
 
 ### Copilot Agent Host（口径 2.9，2026-10-12）
 
-client 仍为 copilot，展示名 GitHub Copilot，parser_version=2；无 schema 迁移。新增 collectors/copilot/{database,events,agent_host,agent_host_tests}.rs，职责见 architecture.md。
+client 仍为 copilot，展示名 GitHub Copilot，parser_version=2；无 schema 迁移。新增 collectors/copilot/{events,agent_host,agent_host_tests}.rs，复用共享 collectors/sqlite_snapshot.rs（copilot/mod.rs 中以 `database` 为别名），职责见 architecture.md。
 默认 Windows Code 数据目录来自 APPDATA，测试显式注入路径；不在测试中发现真实客户端目录。Code Insiders、便携版与普通 workspace chatSessions 暂不发现。
 events.jsonl 通过白名单读取 session.start.data.sessionId / startTime / context.cwd、session.model_change.data.newModel、user.message.id、assistant.message.data.apiCallId / model、外层 ISO timestamp；无 apiCallId 不虚构模型调用。
 Agent Host 的 session_metadata.defaultChatProviderData（兼容镜像 agentHost.chatProviderData）提供 sdkSessionId；turns.event_id 关联 SDK user.message.id。外层目录 UUID、turns.id 和 SDK turnId 均不能当作跨源关联键。

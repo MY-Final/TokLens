@@ -60,8 +60,8 @@
 | `output_tokens`                            | u64?               | 否   | measured | 输出 token                                                                                                                                         |
 | `cache_read_tokens` / `cache_write_tokens` | u64?               | 否   | measured | 缓存读写 token，单列统计                                                                                                                           |
 | `cost_usd`                                 | f64?               | 否   | measured | 当前仅保存客户端自报值（OpenCode）；价格换算未实现                                                                                                 |
-| `source`                                   | enum               | 是   | -        | 该事件整体可信等级                                                                                                                                 |
-| `confidence`                               | f64?               | 否   | -        | 估算置信度（0–1），仅 estimated 事件需要                                                                                                           |
+| `source_kind`                              | enum               | 是   | -        | 该事件整体可信等级，跨端 DTO 字段为 `sourceKind`                                                                                                   |
+| `confidence`                               | f64?               | 否   | -        | 预留字段，当前未落库；估算置信度（0–1），仅 estimated 事件需要                                                                                     |
 
 字段可以不落库，但含义与等级必须稳定；新增字段时在本文补一行。
 
