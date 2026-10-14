@@ -30,15 +30,15 @@ TokLens 是一个**本地优先**的桌面应用，用于统计本机 **Codex、
 
 ## 2. 技术栈与工具链
 
-| 层       | 技术                                                     |
-| -------- | -------------------------------------------------------- |
-| 桌面外壳 | Tauri 2（identifier：`com.toklens.app`）                 |
-| 前端     | React 19 + TypeScript + Vite                             |
-| 样式     | Tailwind CSS v4（CSS-first，见 `src/index.css`）         |
-| 组件     | shadcn/ui（new-york、baseColor neutral）+ lucide-react   |
-| 后端     | Rust（edition 2024，Tauri command 为前后端唯一边界）     |
-| 包管理   | pnpm（唯一包管理器）                                     |
-| 校验     | ESLint（flat config）+ Prettier + tsc + rustfmt + clippy |
+| 层       | 技术                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| 桌面外壳 | Tauri 2（identifier：`com.toklens.app`）                                                        |
+| 前端     | React 19 + TypeScript + Vite                                                                    |
+| 样式     | Tailwind CSS v4（CSS-first，见 `src/index.css`）                                                |
+| 组件     | shadcn/ui（new-york、baseColor neutral）+ lucide-react                                          |
+| 后端     | Rust（edition 2024，Tauri command 为前后端唯一边界）                                            |
+| 包管理   | pnpm（唯一包管理器）                                                                            |
+| 校验     | ESLint（flat config）+ Prettier + tsc + 颜色校验（`scripts/check-color.mjs`）+ rustfmt + clippy |
 
 - 通用图标使用 lucide-react；AI 客户端品牌图标使用用户指定、已登记的 `@lobehub/icons`，通过 `ClientIdentity` 统一呈现。
   图标本地打包，peer 依赖不作为业务 UI 组件库使用，接入与体积记录见 `docs/architecture.md`。
@@ -57,7 +57,8 @@ pnpm lint:fix         # ESLint 自动修复
 pnpm typecheck        # tsc 类型检查（src + vite.config.ts）
 pnpm format           # Prettier 写入
 pnpm format:check     # Prettier 校验
-pnpm check            # lint + typecheck + format:check（提交前必跑）
+pnpm color:check      # 颜色 token 校验（WCAG 对比度 + OKLab ΔE + 色觉模拟，零依赖）
+pnpm check            # lint + typecheck + format:check + color:check（提交前必跑）
 pnpm rust:fmt         # cargo fmt 写入
 pnpm rust:fmt:check   # cargo fmt --check
 pnpm rust:clippy      # cargo clippy --all-targets -- -D warnings
@@ -171,7 +172,7 @@ pnpm tauri build      # 生产打包
 ## 8. 开发完成后的验收流程
 
 1. 依赖变化时执行 `pnpm install`，确认 `pnpm-lock.yaml` 同步更新。
-2. 运行 `pnpm check`（lint + typecheck + format 校验），必须全绿。
+2. 运行 `pnpm check`（lint + typecheck + format 校验 + 颜色校验），必须全绿。
 3. 改动涉及 Rust 时，运行 `pnpm rust:check`（fmt + clippy + test），必须全绿。
 4. 涉及界面或交互时，运行 `pnpm tauri dev` 手动验证：窗口可启动、控制台无报错、关键路径可完成、空/加载/错误三态正常。
 5. 涉及统计数据时，抽样与客户端自身统计对账，并在提交说明中写明口径、差异与原因。
