@@ -1,6 +1,6 @@
 /** 侧边导航 + 顶部工具栏。 */
 
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { BarChart3, Database, LayoutDashboard, ListTree, Settings } from "lucide-react";
 
 import {
@@ -74,6 +74,21 @@ export function AppShell({
   updateControl?: ReactNode;
 }) {
   const sync = status?.sync;
+  const toolbarRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const toolbar = toolbarRef.current;
+    const content = toolbar?.parentElement;
+    if (!toolbar || !content) return;
+    const updateHeight = () =>
+      content.style.setProperty("--app-header-height", `${toolbar.getBoundingClientRect().height}px`);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(toolbar);
+    return () => {
+      observer.disconnect();
+      content.style.removeProperty("--app-header-height");
+    };
+  }, []);
   useEffect(() => {
     const preventSidebarToggle = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "b" || (!event.ctrlKey && !event.metaKey)) return;
@@ -140,7 +155,10 @@ export function AppShell({
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header className="sticky top-0 z-20 grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 bg-background px-3 py-2 lg:gap-3 lg:px-5">
+        <header
+          ref={toolbarRef}
+          className="sticky top-0 z-20 grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 bg-background px-3 py-2 lg:gap-3 lg:px-5"
+        >
           <div className="flex shrink-0 items-center gap-2">
             <h1 className="truncate text-base font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
           </div>

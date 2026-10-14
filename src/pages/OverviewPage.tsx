@@ -51,7 +51,9 @@ export function OverviewPage(props: OverviewPageProps) {
   const { basis, onBasisChange } = props;
   return (
     <div className="space-y-4">
-      <UsageBasisSelect value={basis} onChange={onBasisChange} />
+      <div className="sticky top-[var(--app-header-height,4rem)] z-10 bg-background py-2">
+        <UsageBasisSelect value={basis} onChange={onBasisChange} />
+      </div>
       {basis === "requests" ? (
         <RequestActivityView
           range={props.range}
