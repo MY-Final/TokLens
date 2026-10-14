@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Copy, LayoutGrid, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  LayoutGrid,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { EmptyBlock, ErrorBlock } from "@/components/StateBlocks";
@@ -118,6 +127,7 @@ export function CustomPanelsPage({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<PanelSpec | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
 
   const context: PanelRenderContext = {
     range,
@@ -148,6 +158,11 @@ export function CustomPanelsPage({
     setPendingDelete(null);
     if (!id) return;
     void panels.remove(id).catch((cause: unknown) => toast.error(toErrorMessage(cause)));
+  };
+
+  const confirmReset = () => {
+    setResetOpen(false);
+    void panels.reset().catch((cause: unknown) => toast.error(toErrorMessage(cause)));
   };
 
   const duplicate = (spec: PanelSpec) => {
@@ -188,10 +203,21 @@ export function CustomPanelsPage({
         <p className="text-xs text-muted-foreground tabular-nums">
           {panels.loading ? "加载中…" : `${panels.panels.length} 个面板`}
         </p>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="size-4" aria-hidden="true" />
-          新增面板
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!hasPanels}
+            onClick={() => setResetOpen(true)}
+          >
+            <RotateCcw className="size-4" aria-hidden="true" />
+            重置面板
+          </Button>
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="size-4" aria-hidden="true" />
+            新增面板
+          </Button>
+        </div>
       </div>
 
       {!panels.loading && !hasPanels ? (
@@ -259,6 +285,21 @@ export function CustomPanelsPage({
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDelete}>删除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>重置全部面板？</AlertDialogTitle>
+            <AlertDialogDescription>
+              将删除所有自定义面板定义（含更高版本只读面板），不影响已采集的统计、会话数据与其它偏好。此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmReset}>重置面板</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
