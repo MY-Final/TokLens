@@ -41,20 +41,31 @@ export function SettingsPage({
   controller,
   updates,
   updateFocusToken = 0,
+  aiFocusToken = 0,
 }: {
   controller: SettingsController;
   updates: UpdatesController;
   updateFocusToken?: number;
+  aiFocusToken?: number;
 }) {
   const { settings, busy, error, warning, patch, reload } = controller;
-  const [selection, setSelection] = useState<{ category: Category; token: number }>({
+  const [selection, setSelection] = useState<{
+    category: Category;
+    updateToken: number;
+    aiToken: number;
+  }>({
     category: "general",
-    token: 0,
+    updateToken: 0,
+    aiToken: 0,
   });
   const category =
-    updateFocusToken !== 0 && selection.token !== updateFocusToken ? "updates" : selection.category;
+    updateFocusToken !== 0 && selection.updateToken !== updateFocusToken
+      ? "updates"
+      : aiFocusToken !== 0 && selection.aiToken !== aiFocusToken
+        ? "ai"
+        : selection.category;
   const selectCategory = (category: Category) =>
-    setSelection({ category, token: updateFocusToken });
+    setSelection({ category, updateToken: updateFocusToken, aiToken: aiFocusToken });
   const updateSection = useRef<HTMLDivElement>(null);
   const focusedToken = useRef(0);
   useEffect(() => {
