@@ -47,6 +47,7 @@ export function ModelIdentity({
   unknownLabel = "未知",
   className,
   labelClassName,
+  iconClassName,
 }: {
   model: string | null;
   compact?: boolean;
@@ -54,6 +55,7 @@ export function ModelIdentity({
   unknownLabel?: string;
   className?: string;
   labelClassName?: string;
+  iconClassName?: string;
 }) {
   const kind = modelIconKind(model);
   const Icon = MODEL_ICONS[kind];
@@ -67,6 +69,7 @@ export function ModelIdentity({
         className={cn(
           "flex shrink-0 items-center justify-center rounded-md bg-muted/70 text-muted-foreground",
           compact ? "size-6" : "size-8",
+          iconClassName,
         )}
       >
         <Icon size={compact ? 14 : 16} />

@@ -12,7 +12,7 @@ export function DataExplanation({ summary, children }: { summary: string; childr
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1 px-2 text-xs"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
             aria-label="查看统计口径与数据覆盖"
           >
             <Info className="size-3.5" />
