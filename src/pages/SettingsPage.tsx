@@ -86,7 +86,7 @@ export function SettingsPage({
     <div className="flex min-h-[calc(100svh-4rem)] items-start">
       <nav
         aria-label="设置分类"
-        className="sticky top-0 min-h-[calc(100svh-4rem)] w-44 shrink-0 border-r border-border/60 bg-sidebar/50 px-3 py-6 xl:w-52 xl:px-4"
+        className="sticky top-16 min-h-[calc(100svh-4rem)] w-44 shrink-0 border-r border-border/60 bg-sidebar/50 px-3 py-6 xl:w-52 xl:px-4"
       >
         <h2 className="mb-6 px-3 text-base font-semibold">偏好设置</h2>
         {["应用", "管理"].map((group) => (
