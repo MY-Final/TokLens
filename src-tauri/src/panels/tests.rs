@@ -463,15 +463,13 @@ fn run_each_panel_type_against_synthetic_store() {
         PanelQueryArgs::default(),
     )
     .expect("stat session");
-    assert!(matches!(result.data, PanelDataDto::Overview(_)));
-    assert_eq!(result.panel_type, "stat");
-    assert_eq!(result.time_basis, "session");
+    assert!(matches!(result, PanelDataDto::Overview(_)));
 
     let mut spec = typed(base("stat"));
     spec.query.time_basis = Some(TimeBasis::Request);
     let result =
         query::execute(&store, &enabled, spec, PanelQueryArgs::default()).expect("stat request");
-    assert!(matches!(result.data, PanelDataDto::RequestAnalysis(_)));
+    assert!(matches!(result, PanelDataDto::RequestAnalysis(_)));
 
     let result = query::execute(
         &store,
@@ -480,7 +478,7 @@ fn run_each_panel_type_against_synthetic_store() {
         trend_args.clone(),
     )
     .expect("trend");
-    assert!(matches!(result.data, PanelDataDto::DailyTokenTrend(_)));
+    assert!(matches!(result, PanelDataDto::DailyTokenTrend(_)));
 
     let calendar_args = PanelQueryArgs {
         day_count: Some(30),
@@ -493,7 +491,7 @@ fn run_each_panel_type_against_synthetic_store() {
         calendar_args,
     )
     .expect("calendar");
-    assert!(matches!(result.data, PanelDataDto::DailyTokenTrend(_)));
+    assert!(matches!(result, PanelDataDto::DailyTokenTrend(_)));
 
     let activity_args = PanelQueryArgs {
         from_ms: Some(from),
@@ -508,7 +506,7 @@ fn run_each_panel_type_against_synthetic_store() {
         activity_args,
     )
     .expect("activity");
-    assert!(matches!(result.data, PanelDataDto::RequestActivity(_)));
+    assert!(matches!(result, PanelDataDto::RequestActivity(_)));
 
     let result = query::execute(
         &store,
@@ -517,7 +515,7 @@ fn run_each_panel_type_against_synthetic_store() {
         PanelQueryArgs::default(),
     )
     .expect("clients");
-    assert!(matches!(result.data, PanelDataDto::ClientUsage(_)));
+    assert!(matches!(result, PanelDataDto::ClientUsage(_)));
 
     let result = query::execute(
         &store,
@@ -526,7 +524,7 @@ fn run_each_panel_type_against_synthetic_store() {
         PanelQueryArgs::default(),
     )
     .expect("ranking");
-    assert!(matches!(result.data, PanelDataDto::Rankings(_)));
+    assert!(matches!(result, PanelDataDto::Rankings(_)));
 
     let result = query::execute(
         &store,
@@ -535,7 +533,7 @@ fn run_each_panel_type_against_synthetic_store() {
         PanelQueryArgs::default(),
     )
     .expect("sessions");
-    assert!(matches!(result.data, PanelDataDto::SessionTable(_)));
+    assert!(matches!(result, PanelDataDto::SessionTable(_)));
 }
 
 #[test]
@@ -582,7 +580,7 @@ fn search_is_matched_literally_and_cannot_reach_sql() {
     spec.type_options.search = Some("'; DROP TABLE sessions;--".to_string());
     let result =
         query::execute(&store, &enabled, spec, PanelQueryArgs::default()).expect("injection try");
-    assert!(matches!(result.data, PanelDataDto::SessionTable(rows) if rows.is_empty()));
+    assert!(matches!(result, PanelDataDto::SessionTable(rows) if rows.is_empty()));
     assert_eq!(
         store.session_count().expect("count"),
         before,
@@ -594,7 +592,41 @@ fn search_is_matched_literally_and_cannot_reach_sql() {
     spec.type_options.search = Some("alpha".to_string());
     let result =
         query::execute(&store, &enabled, spec, PanelQueryArgs::default()).expect("literal match");
-    assert!(matches!(result.data, PanelDataDto::SessionTable(rows) if !rows.is_empty()));
+    assert!(matches!(result, PanelDataDto::SessionTable(rows) if !rows.is_empty()));
+}
+
+#[test]
+fn query_args_tolerate_frontend_superset_and_use_limit_offset_fallbacks() {
+    let store = seeded_store();
+    let enabled = Client::ALL.to_vec();
+
+    // 宽容：前端可附带 groupBy / sessionQuery 等展示层字段而不报错。
+    let args: PanelQueryArgs = serde_json::from_value(json!({
+        "limit": 3,
+        "offset": 0,
+        "groupBy": "model",
+        "sessionQuery": { "search": "alpha" },
+    }))
+    .expect("tolerant args");
+    let result = query::execute(&store, &enabled, typed(base("ranking")), args).expect("ranking");
+    assert!(matches!(result, PanelDataDto::Rankings(_)));
+
+    // 越界的 args.limit 按规格 ④ 上限拒绝。
+    let args: PanelQueryArgs =
+        serde_json::from_value(json!({ "limit": spec::RANKING_LIMIT_MAX + 1 })).expect("parse");
+    assert!(query::execute(&store, &enabled, typed(base("ranking")), args).is_err());
+
+    // session_table 经 args 传入 offset（规格 ② typeOptions 无此字段）。
+    let args: PanelQueryArgs =
+        serde_json::from_value(json!({ "offset": 1 })).expect("parse offset");
+    let result =
+        query::execute(&store, &enabled, typed(base("session_table")), args).expect("offset");
+    assert!(matches!(result, PanelDataDto::SessionTable(_)));
+
+    // 越界 offset 被拒绝。
+    let args: PanelQueryArgs =
+        serde_json::from_value(json!({ "offset": spec::SESSION_OFFSET_MAX + 1 })).expect("parse");
+    assert!(query::execute(&store, &enabled, typed(base("session_table")), args).is_err());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -627,22 +659,23 @@ fn panels_persist_validate_update_and_delete() {
     let store = SettingsStore::load(&directory.0);
     let enabled = Client::ALL.to_vec();
 
-    assert!(
-        panel_store::save(&store, &enabled, base("token_trend"))
-            .expect("save")
-            .readable
+    let saved = panel_store::save(&store, &enabled, base("token_trend")).expect("save");
+    assert_eq!(
+        saved.len(),
+        1,
+        "write commands return the full updated list"
     );
+    assert!(saved[0].readable);
     assert_eq!(panel_store::list(&store).expect("list").len(), 1);
 
     // 从磁盘重载（版本化文档 + 原子写）。
     let reloaded = SettingsStore::load(&directory.0);
     assert_eq!(panel_store::list(&reloaded).expect("list").len(), 1);
 
-    // 相同 id 原位更新。
+    // 相同 id 原位更新；写命令返回更新后的完整列表。
     let mut updated = base("token_trend");
     updated["title"] = json!("renamed");
-    panel_store::save(&store, &enabled, updated).expect("update");
-    let panels = panel_store::list(&store).expect("list");
+    let panels = panel_store::save(&store, &enabled, updated).expect("update");
     assert_eq!(panels.len(), 1);
     assert_eq!(panels[0].spec["title"], json!("renamed"));
 
@@ -652,8 +685,8 @@ fn panels_persist_validate_update_and_delete() {
     assert!(panel_store::save(&store, &enabled, invalid).is_err());
     assert_eq!(panel_store::list(&store).expect("list").len(), 1);
 
-    panel_store::delete(&store, "p-token_trend").expect("delete");
-    assert!(panel_store::list(&store).expect("list").is_empty());
+    let panels = panel_store::delete(&store, "p-token_trend").expect("delete");
+    assert!(panels.is_empty());
 }
 
 #[test]
@@ -664,9 +697,8 @@ fn reorder_writes_order_and_rejects_mismatched_sets() {
     panel_store::save(&store, &enabled, base("stat")).expect("a");
     panel_store::save(&store, &enabled, base("ranking")).expect("b");
 
-    panel_store::reorder(&store, &["p-ranking".to_string(), "p-stat".to_string()])
+    let panels = panel_store::reorder(&store, &["p-ranking".to_string(), "p-stat".to_string()])
         .expect("reorder");
-    let panels = panel_store::list(&store).expect("list");
     let ids: Vec<&str> = panels
         .iter()
         .map(|panel| panel.spec["id"].as_str().expect("id"))
@@ -732,6 +764,6 @@ fn clearing_and_resetting_settings_keep_panels() {
     assert_eq!(panel_store::list(&store).expect("list").len(), 1);
 
     // 独立的重置入口只清空面板。
-    panel_store::reset(&store).expect("reset panels");
-    assert!(panel_store::list(&store).expect("list").is_empty());
+    let panels = panel_store::reset(&store).expect("reset panels");
+    assert!(panels.is_empty());
 }

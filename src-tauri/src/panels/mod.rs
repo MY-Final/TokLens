@@ -16,7 +16,7 @@ pub(crate) mod store;
 mod tests;
 
 pub use catalog::{PanelCatalog, get_panel_catalog};
-pub use query::{PanelQueryArgs, PanelQueryResultDto, run_panel_query};
+pub use query::{PanelDataDto, PanelQueryArgs, run_panel_query};
 pub use spec::{PanelSpec, SUPPORTED_SPEC_VERSION};
 pub use store::{
     StoredPanelDto, delete_panel_spec, get_panel_specs, reorder_panels, reset_panel_specs,

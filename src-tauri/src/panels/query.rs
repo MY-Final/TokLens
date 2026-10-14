@@ -12,7 +12,7 @@ use super::spec::{
     CALENDAR_DAY_COUNT_MAX, DAY_BOUNDARY_MAX, DAY_BOUNDARY_MIN, DAY_COUNT_MAX, DAY_COUNT_MIN,
     HOURLY_BOUNDARY_MAX, PanelRange, PanelSpec, PanelType, RANKING_LIMIT_DEFAULT,
     RANKING_LIMIT_MAX, RANKING_LIMIT_MIN, RangeKind, SESSION_LIMIT_DEFAULT, SESSION_LIMIT_MAX,
-    SESSION_LIMIT_MIN, TimeBasis,
+    SESSION_LIMIT_MIN, SESSION_OFFSET_MAX, TimeBasis,
 };
 use crate::commands::dto::{
     ClientUsageDto, DailyClientTokensDto, DailyTokenBucketDto, OverviewStatsDto, RankingEntryDto,
@@ -31,8 +31,12 @@ use crate::usage::store::UsageStore;
 ///
 /// 规格里的 `range` 是声明（`followPage` / `preset` / `custom`）；预设与页面范围由前端按本地日历
 /// 解析为具体时间戳与桶边界后传入（不经后端推算，口径复用现有前端时间语义）。
+///
+/// 该结构**刻意宽容**（不 `deny_unknown_fields`）：前端可附带 `groupBy` / `sessionQuery` 等
+/// 展示层字段而不报错。展示类选项以规格 `typeOptions` 为权威；`limit` / `offset` 在规格缺省时
+/// 作为回退（`limit` 仍按规格 ④ 上限校验，越界拒绝）。
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+#[serde(rename_all = "camelCase", default)]
 pub struct PanelQueryArgs {
     pub from_ms: Option<i64>,
     pub to_ms: Option<i64>,
@@ -42,15 +46,22 @@ pub struct PanelQueryArgs {
     pub day_count: Option<u32>,
     pub day_boundaries: Vec<i64>,
     pub hourly_boundaries: Vec<i64>,
+    /// 回退：规格 `typeOptions.limit` 缺省时使用；规格存在时以规格为准。
+    pub limit: Option<u32>,
+    /// 会话表偏移（规格 ② 无此字段，仅经 args 传入）。
+    pub offset: Option<u32>,
 }
 
-/// 面板查询返回的数据：与现有前端组件的 props 逐字对应。
+/// 面板查询返回的数据：与对应既有命令的 DTO **逐字相同**，前端按 `spec.type` / `timeBasis`
+/// 从 `unknown` 收窄后直接喂给现有组件 props。
 ///
-/// 类型无损直通 `src/lib/usage-types.ts` / `api.ts` 的既有 DTO：`token_trend` 与
-/// `activity_calendar` 返回 `DailyTokenBucket[]`，`request_trend` 返回 `RequestActivity`，
-/// `ranking`(session) 返回 `Rankings`，`client_distribution`(session) 返回 `ClientUsage[]`，
-/// `session_table` 返回 `SessionSummary[]`，`stat` 返回 `OverviewStats`（session）或
-/// `RequestAnalysis`（request，与 `ranking`/`client_distribution` 的 request 口径共用）。
+/// - `stat`(session) → `OverviewStats`（同 `get_overview_stats`）
+/// - `stat` / `ranking` / `client_distribution`(request) → `RequestAnalysis`（同 `get_request_analysis`）
+/// - `token_trend`、`activity_calendar` → `DailyTokenBucket[]`（同 `get_daily_token_trend`）
+/// - `request_trend` → `RequestActivity`（同 `get_request_activity`）
+/// - `client_distribution`(session) → `ClientUsage[]`（同 `get_client_usage`）
+/// - `ranking`(session) → `Rankings`（同 `get_rankings`）
+/// - `session_table` → `SessionSummary[]`（同 `get_sessions`）
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum PanelDataDto {
@@ -61,17 +72,6 @@ pub enum PanelDataDto {
     ClientUsage(Vec<ClientUsageDto>),
     Rankings(RankingsDto),
     SessionTable(Vec<SessionSummaryDto>),
-}
-
-/// 面板查询结果封装（`data` 为上面其一，`type` / `timeBasis` 供前端分派适配器）。
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PanelQueryResultDto {
-    pub spec_id: String,
-    #[serde(rename = "type")]
-    pub panel_type: String,
-    pub time_basis: String,
-    pub data: PanelDataDto,
 }
 
 /// 纯路由映射（无 I/O）：`type` + `timeBasis` → 领域查询。与 `panels::catalog` 必须一致。
@@ -99,17 +99,11 @@ pub(crate) fn execute(
     enabled: &[Client],
     spec: PanelSpec,
     args: PanelQueryArgs,
-) -> Result<PanelQueryResultDto, CommandError> {
+) -> Result<PanelDataDto, CommandError> {
     let validated = super::spec::validate_spec(spec, enabled).map_err(CommandError::new)?;
     let query = route(validated.spec.panel_type, validated.time_basis)
         .ok_or_else(|| CommandError::new("该面板类型不支持所选时间口径"))?;
-    let data = run_query(store, &validated, &args, query)?;
-    Ok(PanelQueryResultDto {
-        spec_id: validated.spec.id.clone(),
-        panel_type: validated.spec.panel_type.as_str().to_string(),
-        time_basis: validated.time_basis.as_str().to_string(),
-        data,
-    })
+    run_query(store, &validated, &args, query)
 }
 
 fn run_query(
@@ -164,7 +158,12 @@ fn run_query(
             &store.client_usage(&filter)?,
         ))),
         DomainQuery::Rankings => {
-            let limit = ranking_limit(validated.spec.type_options.limit);
+            let limit = resolve_limit(
+                validated.spec.type_options.limit.or(args.limit),
+                RANKING_LIMIT_MIN,
+                RANKING_LIMIT_MAX,
+                RANKING_LIMIT_DEFAULT,
+            )?;
             Ok(PanelDataDto::Rankings(RankingsDto {
                 models: store
                     .model_ranking(&filter, limit)?
@@ -179,7 +178,7 @@ fn run_query(
             }))
         }
         DomainQuery::SessionSummaries => Ok(PanelDataDto::SessionTable(session_summaries(
-            store, validated, &filter,
+            store, validated, args, &filter,
         )?)),
     }
 }
@@ -276,13 +275,22 @@ fn validate_activity_buckets(
 fn session_summaries(
     store: &UsageStore,
     validated: &super::spec::ValidatedSpec,
+    args: &PanelQueryArgs,
     filter: &AnalyticsFilter<'_>,
 ) -> Result<Vec<SessionSummaryDto>, CommandError> {
     let options = &validated.spec.type_options;
-    let limit = options
-        .limit
-        .unwrap_or(SESSION_LIMIT_DEFAULT)
-        .clamp(SESSION_LIMIT_MIN, SESSION_LIMIT_MAX);
+    let limit = resolve_limit(
+        options.limit.or(args.limit),
+        SESSION_LIMIT_MIN,
+        SESSION_LIMIT_MAX,
+        SESSION_LIMIT_DEFAULT,
+    )?;
+    let offset = args.offset.unwrap_or(0);
+    if offset > SESSION_OFFSET_MAX {
+        return Err(CommandError::new(format!(
+            "偏移量不能超过 {SESSION_OFFSET_MAX}"
+        )));
+    }
     let mut query_filter = *filter;
     query_filter.project_path = options.project_path.as_deref();
     let search = options
@@ -305,16 +313,19 @@ fn session_summaries(
         sort,
     };
     Ok(store
-        .session_summaries(&query_filter, &list_options, limit, 0)?
+        .session_summaries(&query_filter, &list_options, limit, offset)?
         .into_iter()
         .map(SessionSummaryDto::from)
         .collect())
 }
 
-fn ranking_limit(limit: Option<u32>) -> u32 {
-    limit
-        .unwrap_or(RANKING_LIMIT_DEFAULT)
-        .clamp(RANKING_LIMIT_MIN, RANKING_LIMIT_MAX)
+/// 解析数量上限：`None` 用默认值；越界一律拒绝（不改写）。
+fn resolve_limit(raw: Option<u32>, min: u32, max: u32, default: u32) -> Result<u32, CommandError> {
+    match raw {
+        None => Ok(default),
+        Some(limit) if (min..=max).contains(&limit) => Ok(limit),
+        Some(_) => Err(CommandError::new(format!("数量必须在 {min}..={max} 之间"))),
+    }
 }
 
 /// custom 范围可直接给出时间戳；否则用前端解析后的参数。
@@ -333,14 +344,14 @@ pub(crate) fn enabled_clients(app: &AppHandle) -> Result<Vec<Client>, CommandErr
         .map_err(CommandError::new)
 }
 
-/// 面板运行查询：单一咽喉，权威校验后分发到既有领域查询。
+/// 面板运行查询：单一咽喉，权威校验后分发到既有领域查询；返回对应组件的 DTO。
 #[tauri::command(rename_all = "camelCase")]
 pub fn run_panel_query(
     app: AppHandle,
     state: State<'_, AppState>,
     spec: Value,
     args: PanelQueryArgs,
-) -> Result<PanelQueryResultDto, CommandError> {
+) -> Result<PanelDataDto, CommandError> {
     let enabled = enabled_clients(&app)?;
     let spec = super::spec::parse_spec(spec).map_err(CommandError::new)?;
     let store = state.store()?;

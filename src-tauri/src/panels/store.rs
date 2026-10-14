@@ -2,6 +2,9 @@
 //!
 //! 存活语义（规格 ⑩①）：`clear_statistics` 与 `reset_settings` 均不触碰面板；
 //! `reset_panel_specs` 为独立重置入口。
+//!
+//! 契约：写命令（save / delete / reorder / reset）与 `get_panel_specs` 一律返回**更新后的完整
+//! 列表**；`get_panel_specs` 返回原始列表，由前端逐项校验（`readable=false` 表示高版本只读）。
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -38,30 +41,30 @@ fn stored(spec: &Value) -> StoredPanelDto {
     }
 }
 
+fn list_from(panels: &[Value]) -> Vec<StoredPanelDto> {
+    panels.iter().map(stored).collect()
+}
+
 fn panel_id(spec: &Value) -> Option<&str> {
     spec.get("id").and_then(Value::as_str)
 }
 
 pub(crate) fn list(store: &SettingsStore) -> Result<Vec<StoredPanelDto>, CommandError> {
-    Ok(store
-        .panels()
-        .map_err(CommandError::new)?
-        .iter()
-        .map(stored)
-        .collect())
+    Ok(list_from(&store.panels().map_err(CommandError::new)?))
 }
 
+/// 保存（相同 `id` 原位替换，否则追加）并返回更新后的完整列表。
 pub(crate) fn save(
     store: &SettingsStore,
     enabled: &[Client],
     raw: Value,
-) -> Result<StoredPanelDto, CommandError> {
+) -> Result<Vec<StoredPanelDto>, CommandError> {
     let parsed = parse_spec(raw).map_err(CommandError::new)?;
     validate_spec(parsed.clone(), enabled).map_err(CommandError::new)?;
     let id = parsed.id.clone();
     let normalized =
         serde_json::to_value(&parsed).map_err(|_| CommandError::new("无法序列化面板规格"))?;
-    store
+    let panels = store
         .transform_panels(|panels| {
             match panels
                 .iter_mut()
@@ -73,26 +76,25 @@ pub(crate) fn save(
             Ok(())
         })
         .map_err(CommandError::new)?;
-    Ok(StoredPanelDto {
-        spec_version: parsed.spec_version,
-        readable: true,
-        spec: normalized,
-    })
+    Ok(list_from(&panels))
 }
 
-pub(crate) fn delete(store: &SettingsStore, id: &str) -> Result<(), CommandError> {
+pub(crate) fn delete(store: &SettingsStore, id: &str) -> Result<Vec<StoredPanelDto>, CommandError> {
     let id = id.trim().to_string();
-    store
+    let panels = store
         .transform_panels(|panels| {
             panels.retain(|panel| panel_id(panel) != Some(id.as_str()));
             Ok(())
         })
         .map_err(CommandError::new)?;
-    Ok(())
+    Ok(list_from(&panels))
 }
 
-pub(crate) fn reorder(store: &SettingsStore, ids: &[String]) -> Result<(), CommandError> {
-    store
+pub(crate) fn reorder(
+    store: &SettingsStore,
+    ids: &[String],
+) -> Result<Vec<StoredPanelDto>, CommandError> {
+    let panels = store
         .transform_panels(|panels| {
             if ids.len() != panels.len() {
                 return Err("面板顺序与现有面板数量不一致".into());
@@ -119,17 +121,17 @@ pub(crate) fn reorder(store: &SettingsStore, ids: &[String]) -> Result<(), Comma
             Ok(())
         })
         .map_err(CommandError::new)?;
-    Ok(())
+    Ok(list_from(&panels))
 }
 
-pub(crate) fn reset(store: &SettingsStore) -> Result<(), CommandError> {
-    store
+pub(crate) fn reset(store: &SettingsStore) -> Result<Vec<StoredPanelDto>, CommandError> {
+    let panels = store
         .transform_panels(|panels| {
             panels.clear();
             Ok(())
         })
         .map_err(CommandError::new)?;
-    Ok(())
+    Ok(list_from(&panels))
 }
 
 /// 写入 `layout.order`；高版本（只读）面板不改写。
@@ -156,26 +158,29 @@ pub fn get_panel_specs(app: AppHandle) -> Result<Vec<StoredPanelDto>, CommandErr
 }
 
 #[tauri::command]
-pub fn save_panel_spec(app: AppHandle, spec: Value) -> Result<StoredPanelDto, CommandError> {
+pub fn save_panel_spec(app: AppHandle, spec: Value) -> Result<Vec<StoredPanelDto>, CommandError> {
     let enabled = super::query::enabled_clients(&app)?;
     let store = app.state::<SettingsStore>();
     save(&store, &enabled, spec)
 }
 
 #[tauri::command]
-pub fn delete_panel_spec(app: AppHandle, id: String) -> Result<(), CommandError> {
+pub fn delete_panel_spec(app: AppHandle, id: String) -> Result<Vec<StoredPanelDto>, CommandError> {
     let store = app.state::<SettingsStore>();
     delete(&store, &id)
 }
 
 #[tauri::command]
-pub fn reorder_panels(app: AppHandle, ids: Vec<String>) -> Result<(), CommandError> {
+pub fn reorder_panels(
+    app: AppHandle,
+    ids: Vec<String>,
+) -> Result<Vec<StoredPanelDto>, CommandError> {
     let store = app.state::<SettingsStore>();
     reorder(&store, &ids)
 }
 
 #[tauri::command]
-pub fn reset_panel_specs(app: AppHandle) -> Result<(), CommandError> {
+pub fn reset_panel_specs(app: AppHandle) -> Result<Vec<StoredPanelDto>, CommandError> {
     let store = app.state::<SettingsStore>();
     reset(&store)
 }
