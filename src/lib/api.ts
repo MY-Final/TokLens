@@ -36,6 +36,12 @@ export function openProjectPage(): Promise<void> {
 }
 import type { AppInfo, CloseBehavior, SettingsPatch, SettingsSnapshot } from "@/lib/settings-types";
 import type { DesktopStatus } from "@/lib/usage-types";
+import {
+  adaptPanelCatalog,
+  type PanelCatalog,
+  type PanelQueryArgs,
+  type PanelSpec,
+} from "@/lib/panel-spec";
 
 export function getDesktopStatus(): Promise<DesktopStatus> {
   return invoke<DesktopStatus>("get_desktop_status");
@@ -257,6 +263,37 @@ export function getSessions(
 
 export function getDataSourceStatus(): Promise<DataSourceStatus> {
   return invoke<DataSourceStatus>("get_data_source_status");
+}
+
+/** 生成式面板：目录为白名单单一事实来源；查询只读、无状态；定义存于版本化设置。 */
+export async function getPanelCatalog(): Promise<PanelCatalog> {
+  return adaptPanelCatalog(await invoke("get_panel_catalog"));
+}
+
+/**
+ * 单一查询咽喉：Rust 按 `spec.type` / `timeBasis` 分发到 `usage::analytics` 既有只读查询。
+ * 返回值形状由 `spec.type` 决定（见 `panel-spec.ts` 的适配器），此处保持 `unknown`。
+ */
+export function runPanelQuery(spec: PanelSpec, args: PanelQueryArgs): Promise<unknown> {
+  return invoke("run_panel_query", { spec, args });
+}
+
+/** 以下命令返回更新后的完整面板列表（与 settings 快照模式一致）。 */
+export function getPanelSpecs(): Promise<unknown> {
+  return invoke("get_panel_specs");
+}
+export function savePanelSpec(spec: PanelSpec): Promise<unknown> {
+  return invoke("save_panel_spec", { spec });
+}
+export function deletePanelSpec(id: string): Promise<unknown> {
+  return invoke("delete_panel_spec", { id });
+}
+export function reorderPanels(ids: string[]): Promise<unknown> {
+  return invoke("reorder_panels", { ids });
+}
+/** 独立「重置面板」入口：清空用户面板，不影响统计与其它偏好。 */
+export function resetPanelSpecs(): Promise<unknown> {
+  return invoke("reset_panel_specs");
 }
 
 export function syncUsage(force = false): Promise<SyncState> {

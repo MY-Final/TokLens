@@ -11,7 +11,7 @@ mod error;
 pub mod export;
 pub mod maintenance;
 pub mod queries;
-mod request_dto;
+pub(crate) mod request_dto;
 pub mod request_queries;
 pub mod scheduler;
 pub mod settings;

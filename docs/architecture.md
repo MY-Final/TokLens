@@ -5,6 +5,17 @@
 
 ## 1. 现状
 
+### 生成式面板（P1 手动自定义，零 AI）（2026-10-14）
+
+新增 `src-tauri/src/panels/`（`spec` 规格模型与校验、`catalog` 编译期白名单目录、`query` 只读分发器、`store` 持久化、`tests` 合成回归），
+前端 `src/lib/panel-spec.ts`（纯类型、目录 DTO、镜像校验与 `run_panel_query` 派生参数）、`src/hooks/use-panels/`（定义加载 / 保存 / 排序与取数）、
+`src/components/panels/`（`PanelShell` / `PanelRenderer` / `registry` / `panel-bodies` / `PanelEditor` / `panel-layout`）与页面 `src/pages/CustomPanelsPage.tsx`。
+规格为纯数据、封闭白名单、`#[serde(deny_unknown_fields)]`，不含 SQL / 字段名 / 公式 / 提示词 / 文件路径；`PanelSpec.specVersion` 独立于设置文件版本，高版本保留只读、低版本走 `migrate_spec`。
+`get_panel_catalog` 是类型 / 参数 / 上限的单一事实来源（SSOT），`run_panel_query` 是唯一查询咽喉，按 `type` + `timeBasis` 分发到既有 `usage/analytics` 只读查询；
+分发器不写库 / 文件 / 网络、不含 SQL，`PanelDataDto` 与既有命令 DTO 逐字相同，前端只搬运与格式化、不重算口径。
+持久化复用 `settings::Document.panels`（独立数组），`settings.json` schema 由 1 升 2（仅补 `panels: []`）；`clear_statistics` 与 `reset_settings` 均不触碰面板，`reset_panel_specs` 为独立重置入口。
+侧栏新增「自定义面板」导航（`PageKey "custom"`），面板渲染在主内容区 12 列网格、`colSpan` 走静态类映射，不在 208px 侧栏渲染图表。无新增依赖、权限或网络能力；分发器只读、默认离线。
+
 ### 页级固定筛选栏（2026-10-14）
 
 `AppShell.secondaryToolbar` 承载总览统计口径、分析客户端和会话筛选，与主工具栏组成同一顶部固定区域。`App` 继续使用既有 React 状态保存选择；筛选展示拆到 `ClientAnalysisTabs` 与 `SessionFiltersToolbar`，页面组件负责查询与数据呈现，不重复发起查询。分析的 Tab 列表与内容通过 `App` 中的同一 Tabs 根组件保持关联。会话筛选变化回到首页并重置已打开的会话详情，同一筛选下的后台刷新仍保留原数据。页数与本页计数由会话页在正文中呈现，不将查询结果提升到导航组件。无新目录、依赖、权限、DTO 或统计口径变更。
@@ -171,6 +182,9 @@ collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
 usage/normalize ─────→ usage/model / tokens / time
 usage/store ─────────→ usage/model / client / time
 usage/tokens ────────→ usage/client
+panels/query ────────→ usage/analytics ──→ usage/store
+panels/store ────────→ settings (settings::Document.panels)
+React pages / hooks ──→ lib/panel-spec.ts（纯类型 / 镜像校验）──→ lib/api.ts ──→ panels commands
 ```
 
 - 前端只消费 DTO；不得直接读文件或自行推算统计口径。`api.ts` 是 Tauri 调用和事件订阅入口，
@@ -216,6 +230,13 @@ usage/tokens ────────→ usage/client
 | `sync_client`            | `client` / `force?`                                                  | 仅重扫指定的启用客户端，沿用后台同步互斥和进度事件                      |
 | `sync_codex`             | `force`                                                              | 仅触发 Codex 后台同步；完成后广播 `usage-sync` 事件                     |
 | `app_info`               | —                                                                    | 应用名与版本（连通性检查）                                              |
+| `get_panel_catalog`      | —                                                                    | 面板白名单目录（类型 / 参数 / 上限，SSOT）                              |
+| `run_panel_query`        | `spec` / `args`                                                      | 单一只读分发器，按类型 / 口径返回既有命令 DTO                           |
+| `get_panel_specs`        | —                                                                    | 面板定义原始列表（逐项含 `readable` 只读标记）                          |
+| `save_panel_spec`        | `spec`                                                               | 严格校验后原位保存 / 追加，返回更新后的完整列表                         |
+| `delete_panel_spec`      | `id`                                                                 | 删除并返回更新后的完整列表                                              |
+| `reorder_panels`         | `ids`                                                                | 重排 `layout.order`，返回更新后的完整列表                               |
+| `reset_panel_specs`      | —                                                                    | 独立重置入口，清空面板并返回空列表                                      |
 
 桌面扩展命令：`get_settings` / `update_settings` 返回 SettingsSnapshot（AppSettings + 可恢复警告）；
 更新使用字段 patch，防止覆盖并发保存的后台字段。`get_desktop_status` / `get_close_pending` / `resolve_close`
@@ -401,6 +422,21 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-11 | 日期时间选择器复用 shadcn Popover 与原生分钟输入，根级 Hook 统一滚动预设时间      | 已采纳 | 自定义确认后固定，精确范围与每日显示桶独立；日期范围计算复用 `date-fns`（见下一行）                                                       |
 | 2026-10-11 | 引入 `date-fns` 处理日期范围与相对时间计算                                        | 已采纳 | 替代原生 `Date` 手工实现，减少日历边界与夏令时偏差；按需具名导入（`startOfDay` / `addDays` 等），实际体积影响小于整包，以生产构建产物为准 |
 | 2026-10-12 | Token 展示偏好复用原生设置，通过 React 内置 Context 传递给展示组件                | 已采纳 | 默认自动单位，支持用户选择；仅改变格式，无新增状态库或统计计算                                                                            |
+
+### 生成式面板规格与持久化（2026-10-14）
+
+采用「声明式面板规格（纯 JSON 数据）」形态：AI 只产 spec、不产代码，所有数值经 `run_panel_query` 从本地 Rust 查询取得，默认离线。
+新增 `src-tauri/src/panels/`（spec / catalog / query / store）与前端 `lib/panel-spec.ts`、`hooks/use-panels/`、`components/panels/`；复用现有 7 类展示组件与 Recharts 封装，不引第二套图表库。
+`get_panel_catalog` 为白名单 SSOT，`run_panel_query` 为单一只读咽喉；`PanelSpec` 与参数严格拒绝未知字段，越界值拒绝而不改写，查询边界保留既有 `clamp` 作纵深防御。
+面板定义存入 `settings::Document.panels`（独立数组），`settings.json` schema 1→2 仅补 `panels: []`；`clear_statistics` / `reset_settings` 不删面板，另设 `reset_panel_specs`。
+不新增 Tauri 权限（自有 command 经 `invoke_handler` 注册，`capabilities` 保持 `core:default` + 固定 opener）；不新增依赖、数据库表、迁移或联网能力。
+
+| 日期       | 决策                                                                                       | 状态   | 理由 / 影响                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------ | ------ | ---------------------------------------------------------------------------------- |
+| 2026-10-14 | 面板规格纯数据白名单 + `run_panel_query` 单一只读分发器                                    | 已采纳 | AI 只产 spec 不产代码；数值 100% 来自本地 Rust，分发器无 SQL、只读、可合成测试     |
+| 2026-10-14 | 面板定义复用 `settings::Document`，`settings.json` schema 1→2                              | 已采纳 | 用户内容与统计库分离；`clear_statistics` / `reset_settings` 不误删面板，随存储迁移 |
+| 2026-10-14 | 双层校验：Rust 权威 + 前端镜像，`get_panel_catalog` 为 SSOT                                | 已采纳 | 前端仅做 UX 预校验并驱动合法控件；P2 AI 输出必须过同一校验器                       |
+| 2026-10-14 | 新增 `src-tauri/src/panels/`、`src/components/panels/`、`use-panels/`、`lib/panel-spec.ts` | 已采纳 | 与既有分层一致（前端只消费 DTO、口径集中在 Rust），不扩大公开接口                  |
 
 ### 可配置本地存储（2026-10-13）
 

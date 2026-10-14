@@ -11,6 +11,7 @@
 | [`data-metrics.md`](./data-metrics.md)                           | 数据来源分级、归一化模型、统计口径、估算规则、隐私                                                                                                                 | 新增指标、修改口径、调整价格表或估算公式       |
 | [`data-model.md`](./data-model.md)                               | 统一数据模型、Token 语义、去重键、SQLite 表结构                                                                                                                    | 修改模块映射、表结构、去重键、口径或迁移时     |
 | [`data-source-research.md`](./data-source-research.md)           | Codex / Claude Code / OpenCode / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / GitHub Copilot / Gemini CLI / Grok CLI / MCode 本机数据来源、字段映射与限制 | 数据源结构、字段或客户端版本行为变化时         |
+| [`generative-panel-spec.md`](./generative-panel-spec.md)         | 生成式面板（P1 手动自定义）规格：PanelSpec schema、类型目录、只读分发器、双层校验与 `settings` 持久化                                                              | 面板 schema、类型目录、校验或持久化口径变化时  |
 | [`product-review-2026-10-12.md`](./product-review-2026-10-12.md) | 优化建议与实施记录（审查记录，非强制规范）                                                                                                                         | 追加评审、实施与验收记录时                     |
 | [`health-check-2026-10-14.md`](./health-check-2026-10-14.md)     | 全面体检发现清单（审查记录，非强制规范）                                                                                                                           | 协调员维护                                     |
 

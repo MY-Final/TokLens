@@ -1,7 +1,7 @@
 /** 侧边导航 + 顶部工具栏。 */
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { BarChart3, Database, LayoutDashboard, ListTree, Settings } from "lucide-react";
+import { BarChart3, Database, LayoutDashboard, LayoutGrid, ListTree, Settings } from "lucide-react";
 
 import {
   Sidebar,
@@ -24,11 +24,12 @@ import type { DataSourceStatus } from "@/lib/usage-types";
 import type { DateRange } from "@/lib/ranges";
 import { cn } from "@/lib/utils";
 
-export type PageKey = "overview" | "analytics" | "sessions" | "sources" | "settings";
+export type PageKey = "overview" | "analytics" | "custom" | "sessions" | "sources" | "settings";
 
 const NAV_ITEMS: ReadonlyArray<{ key: PageKey; label: string; icon: typeof LayoutDashboard }> = [
   { key: "overview", label: "总览", icon: LayoutDashboard },
   { key: "analytics", label: "用量分析", icon: BarChart3 },
+  { key: "custom", label: "自定义面板", icon: LayoutGrid },
   { key: "sessions", label: "会话明细", icon: ListTree },
   { key: "sources", label: "数据源管理", icon: Database },
 ];
@@ -39,6 +40,7 @@ const NAV_BUTTON_CLASS_NAME =
 const PAGE_TITLES: Record<PageKey, string> = {
   overview: "总览",
   analytics: "用量分析",
+  custom: "自定义面板",
   sessions: "会话明细",
   sources: "数据源管理",
   settings: "设置",
