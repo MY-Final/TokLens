@@ -221,6 +221,62 @@ fn patches_and_update_timestamp_do_not_overwrite_each_other() {
 }
 
 #[test]
+fn schema_v1_document_migrates_to_v2_without_losing_settings_or_panels() {
+    let directory = Directory::new();
+    std::fs::write(
+        directory.0.join("settings.json"),
+        r#"{"schemaVersion":1,"settings":{"theme":"dark"}}"#,
+    )
+    .expect("fixture");
+    let store = SettingsStore::load(&directory.0);
+    let snapshot = store.snapshot().expect("settings");
+    assert!(snapshot.warning.is_none());
+    assert_eq!(snapshot.settings.theme, model::Theme::Dark);
+    assert!(store.panels().expect("panels").is_empty());
+
+    // 保存后写回 schemaVersion 2 且补齐 panels。
+    store
+        .update(SettingsPatch {
+            collection_paused: Some(true),
+            ..Default::default()
+        })
+        .expect("save");
+    let value: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(directory.0.join("settings.json")).expect("read"),
+    )
+    .expect("json");
+    assert_eq!(value["schemaVersion"], serde_json::json!(2));
+    assert_eq!(value["panels"], serde_json::json!([]));
+    assert_eq!(value["settings"]["theme"], serde_json::json!("dark"));
+}
+
+#[test]
+fn panels_survive_settings_updates_and_reload() {
+    let directory = Directory::new();
+    let store = SettingsStore::load(&directory.0);
+    store
+        .transform_panels(|panels| {
+            panels.push(serde_json::json!({ "specVersion": 1, "id": "p1" }));
+            Ok(())
+        })
+        .expect("save panel");
+    store
+        .update(SettingsPatch {
+            theme: Some(model::Theme::Dark),
+            ..Default::default()
+        })
+        .expect("update settings");
+    let reloaded = SettingsStore::load(&directory.0);
+    let panels = reloaded.panels().expect("panels");
+    assert_eq!(panels.len(), 1);
+    assert_eq!(panels[0]["id"], serde_json::json!("p1"));
+    assert_eq!(
+        reloaded.snapshot().expect("settings").settings.theme,
+        model::Theme::Dark
+    );
+}
+
+#[test]
 fn relocation_serializes_concurrent_preference_updates_and_keeps_new_path() {
     use std::sync::{Arc, mpsc};
     let directory = Directory::new();

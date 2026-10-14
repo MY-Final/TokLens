@@ -5,9 +5,13 @@ mod tests;
 
 pub use model::{AppSettings, CloseBehavior, SettingsPatch};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
+
+/// 当前设置文件结构版本。1→2 仅新增 `panels: []`（`#[serde(default)]` 容忍缺失字段）。
+pub(crate) const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -15,14 +19,17 @@ struct Document {
     schema_version: u32,
     settings: AppSettings,
     last_update_check_ms: Option<i64>,
+    /// 用户自定义面板定义（纯数据，只存面板规格与布局，不含会话正文与任何用量原始数据）。
+    panels: Vec<Value>,
 }
 
 impl Default for Document {
     fn default() -> Self {
         Self {
-            schema_version: 1,
+            schema_version: SCHEMA_VERSION,
             settings: AppSettings::default(),
             last_update_check_ms: None,
+            panels: Vec::new(),
         }
     }
 }
@@ -49,7 +56,12 @@ impl SettingsStore {
         let path = directory.join("settings.json");
         let (document, warning) = match std::fs::read(&path) {
             Ok(bytes) => match serde_json::from_slice::<Document>(&bytes) {
-                Ok(doc) if doc.schema_version == 1 && doc.settings.validate().is_ok() => {
+                Ok(mut doc)
+                    if (doc.schema_version == 1 || doc.schema_version == SCHEMA_VERSION)
+                        && doc.settings.validate().is_ok() =>
+                {
+                    // 1 → 2：仅补 `panels: []`，缺失字段已由 serde 默认值兜底；下次保存落盘。
+                    doc.schema_version = SCHEMA_VERSION;
                     (doc, None)
                 }
                 _ => (
@@ -107,6 +119,25 @@ impl SettingsStore {
             settings: inner.document.settings.clone(),
             warning: None,
         })
+    }
+
+    /// 读取面板定义原始 JSON。容忍更高 `specVersion` 的单条面板：个别面板损坏不应重置整份设置。
+    pub fn panels(&self) -> Result<Vec<Value>, String> {
+        Ok(self.lock()?.document.panels.clone())
+    }
+
+    /// 原子地修改面板定义，与 [`SettingsStore::transform`] 共用版本化文档与原子写、随存储迁移。
+    pub fn transform_panels(
+        &self,
+        change: impl FnOnce(&mut Vec<Value>) -> Result<(), String>,
+    ) -> Result<Vec<Value>, String> {
+        let mut inner = self.lock()?;
+        let mut document = inner.document.clone();
+        change(&mut document.panels)?;
+        Self::save(&inner.path, &document)?;
+        inner.document = document;
+        inner.warning = None;
+        Ok(inner.document.panels.clone())
     }
 
     pub fn last_update_check(&self) -> Result<Option<i64>, String> {
