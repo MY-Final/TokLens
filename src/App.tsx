@@ -22,7 +22,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { rangeScope, resolveRange, type DateRange } from "@/lib/ranges";
 import type { ClientKey, SessionBrowserState, SessionFilters } from "@/lib/usage-types";
-import type { UsageBasis } from "@/components/UsageBasisSelect";
+import { UsageBasisSelect, type UsageBasis } from "@/components/UsageBasisSelect";
 
 export default function App() {
   const [page, setPage] = useState<PageKey>("overview");
@@ -193,6 +193,11 @@ export default function App() {
               <span className="truncate">{updateLabel}</span>
             </Button>
           }
+          secondaryToolbar={
+            page === "overview" ? (
+              <UsageBasisSelect value={overviewBasis} onChange={setOverviewBasis} />
+            ) : undefined
+          }
           onSync={handleSync}
         >
           {page === "overview" ? (
@@ -203,7 +208,6 @@ export default function App() {
               onNavigate={handleNavigate}
               onOpenSessions={openSessions}
               basis={overviewBasis}
-              onBasisChange={setOverviewBasis}
             />
           ) : null}
           {page === "analytics" ? (

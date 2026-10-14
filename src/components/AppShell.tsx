@@ -58,6 +58,7 @@ export function AppShell({
   error,
   onRetry,
   updateControl,
+  secondaryToolbar,
 }: {
   page: PageKey;
   collectionPaused: boolean;
@@ -72,6 +73,7 @@ export function AppShell({
   error: string | null;
   onRetry: () => void;
   updateControl?: ReactNode;
+  secondaryToolbar?: ReactNode;
 }) {
   const sync = status?.sync;
   const toolbarRef = useRef<HTMLElement>(null);
@@ -80,7 +82,10 @@ export function AppShell({
     const content = toolbar?.parentElement;
     if (!toolbar || !content) return;
     const updateHeight = () =>
-      content.style.setProperty("--app-header-height", `${toolbar.getBoundingClientRect().height}px`);
+      content.style.setProperty(
+        "--app-header-height",
+        `${toolbar.getBoundingClientRect().height}px`,
+      );
     updateHeight();
     const observer = new ResizeObserver(updateHeight);
     observer.observe(toolbar);
@@ -155,40 +160,46 @@ export function AppShell({
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-background">
-        <header
-          ref={toolbarRef}
-          className="sticky top-0 z-20 grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 bg-background px-3 py-2 lg:gap-3 lg:px-5"
-        >
-          <div className="flex shrink-0 items-center gap-2">
-            <h1 className="truncate text-base font-semibold tracking-tight">{PAGE_TITLES[page]}</h1>
-          </div>
-          {page !== "settings" && page !== "sources" ? (
-            <DateRangePicker
-              range={range}
-              firstEventMs={status?.firstEventMs ?? null}
-              nowMs={nowMs}
-              onChange={onRangeChange}
-            />
-          ) : (
-            <div />
-          )}
-          <div className="flex shrink-0 items-center gap-2">
-            {page !== "settings" && page !== "sources" && (
-              <ExportReportDialog
+        <header ref={toolbarRef} className="sticky top-0 z-20 bg-background">
+          <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 px-3 py-2 lg:gap-3 lg:px-5">
+            <div className="flex shrink-0 items-center gap-2">
+              <h1 className="truncate text-base font-semibold tracking-tight">
+                {PAGE_TITLES[page]}
+              </h1>
+            </div>
+            {page !== "settings" && page !== "sources" ? (
+              <DateRangePicker
                 range={range}
-                nowMs={nowMs}
                 firstEventMs={status?.firstEventMs ?? null}
+                nowMs={nowMs}
+                onChange={onRangeChange}
               />
+            ) : (
+              <div />
             )}
-            <SyncControl
-              sync={sync}
-              busy={syncBusy}
-              onSync={onSync}
-              paused={collectionPaused}
-              onOpenSettings={() => onNavigate("settings")}
-              compact
-            />
+            <div className="flex shrink-0 items-center gap-2">
+              {page !== "settings" && page !== "sources" && (
+                <ExportReportDialog
+                  range={range}
+                  nowMs={nowMs}
+                  firstEventMs={status?.firstEventMs ?? null}
+                />
+              )}
+              <SyncControl
+                sync={sync}
+                busy={syncBusy}
+                onSync={onSync}
+                paused={collectionPaused}
+                onOpenSettings={() => onNavigate("settings")}
+                compact
+              />
+            </div>
           </div>
+          {secondaryToolbar ? (
+            <div className="border-b border-border/50">
+              <div className="mx-auto max-w-[1600px] px-5 py-2 lg:px-7">{secondaryToolbar}</div>
+            </div>
+          ) : null}
         </header>
         <div
           className={cn(
