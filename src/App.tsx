@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { AppShell, type PageKey } from "@/components/AppShell";
 import { useDataSourceStatus } from "@/hooks/use-data-source-status";
 import { AnalyticsPage } from "@/pages/AnalyticsPage";
+import { CustomPanelsPage } from "@/pages/CustomPanelsPage";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { SessionsPage } from "@/pages/SessionsPage";
 import { SourcesPage } from "@/pages/SourcesPage";
@@ -239,6 +240,15 @@ export default function App() {
                   range={range}
                   refreshToken={refreshToken}
                   client={analyticsClient}
+                  onOpenSessions={openSessions}
+                />
+              ) : null}
+              {page === "custom" ? (
+                <CustomPanelsPage
+                  range={range}
+                  nowMs={nowMs}
+                  firstEventMs={status?.firstEventMs ?? null}
+                  refreshToken={refreshToken}
                   onOpenSessions={openSessions}
                 />
               ) : null}

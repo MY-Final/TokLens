@@ -67,6 +67,7 @@ export function TokenTrendChart({
   description,
   rangeLabel,
   selectedRange,
+  defaultMode = "client",
 }: {
   buckets: DailyTokenBucket[] | null;
   loading: boolean;
@@ -75,10 +76,11 @@ export function TokenTrendChart({
   description?: string;
   rangeLabel: string;
   selectedRange?: DailyRange;
+  defaultMode?: "client" | "tokens";
 }) {
   const { formatTokens } = useTokenFormat();
   const syncing = useSyncing();
-  const [mode, setMode] = useState("client");
+  const [mode, setMode] = useState(defaultMode);
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const gradientId = useId().replace(/:/g, "");
   const clientValue = (bucket: DailyTokenBucket, key: ClientKey) => {
@@ -123,7 +125,11 @@ export function TokenTrendChart({
             {rangeLabel} · 本地时区 · 单位 Token
           </CardDescription>
         </div>
-        <Tabs value={mode} onValueChange={setMode} aria-label="趋势展示方式">
+        <Tabs
+          value={mode}
+          onValueChange={(value) => setMode(value === "tokens" ? "tokens" : "client")}
+          aria-label="趋势展示方式"
+        >
           <TabsList className="h-8 bg-muted/70">
             <TabsTrigger value="client" className="text-xs">
               客户端对比
