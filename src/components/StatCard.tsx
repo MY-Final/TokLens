@@ -49,7 +49,7 @@ export function StatCard({ label, value, unit, hint, tooltip, icon: Icon, detail
           <span className="font-mono text-2xl font-bold tracking-tight tabular-nums" title={detail}>
             {value}
           </span>
-          {unit ? <span className="text-[10px] text-muted-foreground">{unit}</span> : null}
+          {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
         </div>
         {hint ? (
           <p className="min-h-4 text-xs leading-relaxed text-muted-foreground tabular-nums">

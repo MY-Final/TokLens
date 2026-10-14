@@ -45,7 +45,7 @@ export function HeatmapCell({
           onClick={onClick}
           aria-label={label}
           className={cn(
-            "relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-border/60 text-xs text-muted-foreground transition-[outline-color] hover:outline-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+            "relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-border/60 text-xs text-muted-foreground transition-[outline-color] after:absolute after:-inset-1 after:content-[''] hover:outline-2 hover:outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
             intensityClass(value, maxValue),
             value === null || partial ? "border-dashed border-foreground/50" : "",
             className,

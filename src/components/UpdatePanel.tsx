@@ -69,7 +69,7 @@ export function UpdatePanel({
         </div>
       )}
       {error && !busy && (
-        <p role="alert" className="text-sm break-words text-muted-foreground">
+        <p role="alert" className="text-sm break-words text-destructive">
           {error}
         </p>
       )}

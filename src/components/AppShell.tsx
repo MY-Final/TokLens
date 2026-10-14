@@ -161,38 +161,40 @@ export function AppShell({
 
       <SidebarInset className="min-w-0 bg-background">
         <header ref={toolbarRef} className="sticky top-0 z-20 bg-background">
-          <div className="grid min-h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/50 px-3 py-2 lg:gap-3 lg:px-5">
-            <div className="flex shrink-0 items-center gap-2">
-              <h1 className="truncate text-base font-semibold tracking-tight">
-                {PAGE_TITLES[page]}
-              </h1>
-            </div>
-            {page !== "settings" && page !== "sources" ? (
-              <DateRangePicker
-                range={range}
-                firstEventMs={status?.firstEventMs ?? null}
-                nowMs={nowMs}
-                onChange={onRangeChange}
-              />
-            ) : (
-              <div />
-            )}
-            <div className="flex shrink-0 items-center gap-2">
-              {page !== "settings" && page !== "sources" && (
-                <ExportReportDialog
+          <div className="border-b border-border/50">
+            <div className="mx-auto grid min-h-16 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-5 py-2 lg:gap-3 lg:px-7">
+              <div className="flex shrink-0 items-center gap-2">
+                <h1 className="truncate text-base font-semibold tracking-tight">
+                  {PAGE_TITLES[page]}
+                </h1>
+              </div>
+              {page !== "settings" && page !== "sources" ? (
+                <DateRangePicker
                   range={range}
-                  nowMs={nowMs}
                   firstEventMs={status?.firstEventMs ?? null}
+                  nowMs={nowMs}
+                  onChange={onRangeChange}
                 />
+              ) : (
+                <div />
               )}
-              <SyncControl
-                sync={sync}
-                busy={syncBusy}
-                onSync={onSync}
-                paused={collectionPaused}
-                onOpenSettings={() => onNavigate("settings")}
-                compact
-              />
+              <div className="flex shrink-0 items-center gap-2">
+                {page !== "settings" && page !== "sources" && (
+                  <ExportReportDialog
+                    range={range}
+                    nowMs={nowMs}
+                    firstEventMs={status?.firstEventMs ?? null}
+                  />
+                )}
+                <SyncControl
+                  sync={sync}
+                  busy={syncBusy}
+                  onSync={onSync}
+                  paused={collectionPaused}
+                  onOpenSettings={() => onNavigate("settings")}
+                  compact
+                />
+              </div>
             </div>
           </div>
           {secondaryToolbar ? (

@@ -210,6 +210,7 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
             calendarPeriod === "year" ? calendarStart : (range.fromMs ?? day),
           );
           const to = Math.min(addDays(day, 1).getTime(), range.toMs);
+          if (from >= to) return;
           onOpenSessions({}, createCustomRange(from, to));
         }}
         selectedRange={
@@ -278,6 +279,7 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
             error={sessions.error}
             onRetry={sessions.reload}
             onOpenAll={() => onOpenSessions()}
+            ariaLabel="最近会话"
           />
         </CardContent>
       </DashboardCard>

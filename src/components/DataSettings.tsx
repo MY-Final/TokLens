@@ -200,7 +200,7 @@ export function DataSettings({ controller }: { controller: SettingsController })
                 id="storage-directory"
                 value={directory}
                 disabled={moving}
-                placeholder="D:\TokLensData"
+                placeholder="D:\\TokLensData"
                 onChange={(event) => {
                   setDirectory(event.target.value);
                   setMoveError(null);

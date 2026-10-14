@@ -58,6 +58,7 @@ export function SessionTable({
   onRetry,
   onOpenAll,
   onOpenSession,
+  ariaLabel = "会话明细",
 }: {
   sessions: SessionSummary[] | null;
   loading: boolean;
@@ -65,6 +66,7 @@ export function SessionTable({
   onRetry: () => void;
   onOpenAll?: () => void;
   onOpenSession?: (session: SessionSummary) => void;
+  ariaLabel?: string;
 }) {
   const { formatTokensOrDash } = useTokenFormat();
   const rows = sessions ?? [];
@@ -82,7 +84,7 @@ export function SessionTable({
       ) : (
         <div className="min-w-0">
           <Table
-            aria-label="会话明细"
+            aria-label={ariaLabel}
             className={cn("table-fixed text-xs", onOpenSession ? "min-w-6xl" : "min-w-[1056px]")}
           >
             <colgroup>

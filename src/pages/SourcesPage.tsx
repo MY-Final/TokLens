@@ -17,7 +17,7 @@ import { SyncControl } from "@/components/SyncControl";
 import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
-import { GROK_USAGE_NOTE } from "@/lib/client-labels";
+import { GROK_USAGE_NOTE, clientLabel } from "@/lib/client-labels";
 import { sourceDiagnosticSummary, sourceStatusLabel } from "@/lib/source-diagnostics";
 
 const CLIENT_HINTS: Record<string, string> = {
@@ -175,7 +175,7 @@ export function SourcesPage({
                   <ClientIdentity client={client.client} compact />
                   <Switch
                     className="ml-auto"
-                    aria-label={`采集 ${client.client}`}
+                    aria-label={`采集 ${clientLabel(client.client)}`}
                     checked={
                       settingsController.settings?.enabledClients.includes(client.client) ?? false
                     }

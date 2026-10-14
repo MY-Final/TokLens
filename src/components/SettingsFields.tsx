@@ -110,7 +110,7 @@ export function SettingsSelect<T extends string>({
         }}
       >
         <SelectTrigger
-          className="w-44 pr-1.25"
+          className="w-44 pr-1"
           aria-label={title}
           aria-describedby={description ? descriptionId : undefined}
         >

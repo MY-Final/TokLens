@@ -174,7 +174,7 @@ export function RequestAnalysisDetails({
                       />
                     </button>
                     {metrics.totals.requestsWithoutUsage > 0 ? (
-                      <p className="mt-1 pl-5.5 text-muted-foreground">
+                      <p className="mt-1 pl-6 text-muted-foreground">
                         {total === null
                           ? "用量未知"
                           : `已知子集 · ${formatNumber(metrics.totals.requestsWithoutUsage)} 条未知`}
