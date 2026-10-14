@@ -142,7 +142,7 @@ pub(super) fn read(path: &Path) -> std::io::Result<Parsed> {
             )],
         };
         for (key, usage_model, raw) in expanded {
-            let message = request_ledger::request(
+            let mut message = request_ledger::request(
                 Client::PiDesktop,
                 &parsed.meta.id,
                 RequestMeta {
@@ -156,6 +156,9 @@ pub(super) fn read(path: &Path) -> std::io::Result<Parsed> {
                 },
                 &raw,
             );
+            // No client-reported total: an operation total derived from complete
+            // buckets is a deterministic conversion, not measured.
+            request_ledger::classify_request_source(&mut message);
             parsed.requests.push(Candidate { message, raw });
         }
     }

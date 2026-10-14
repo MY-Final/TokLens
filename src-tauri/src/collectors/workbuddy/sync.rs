@@ -6,7 +6,7 @@ use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
 use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
 use crate::usage::time::now_ms;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub struct WorkBuddyCollector {
@@ -65,11 +65,17 @@ impl WorkBuddyCollector {
             return Ok(report);
         }
         let mut sessions: BTreeMap<String, Rollup> = BTreeMap::new();
+        // Files that contained at least one corrupt line; only sessions which actually
+        // drew records from them are marked partial.
+        let mut dirty_sources: BTreeSet<String> = BTreeSet::new();
         for (path, source) in paths.iter().zip(&mut sources) {
             let parsed = parser::read(path)?;
             report.files_parsed += 1;
             report.unparsed_lines += parsed.unparsed;
             source.unparsed_records = parsed.unparsed as i64;
+            if parsed.unparsed > 0 {
+                dirty_sources.insert(source.path.clone());
+            }
             for record in parsed.records {
                 if let Some(id) = record.session_id.clone() {
                     sessions.entry(id).or_default().push(record, &source.path);
@@ -88,7 +94,7 @@ impl WorkBuddyCollector {
         }
         let sessions = sessions
             .into_iter()
-            .map(|(id, rollup)| rollup.finish(&id, report.unparsed_lines > 0))
+            .map(|(id, rollup)| rollup.finish(&id, &dirty_sources))
             .collect::<Vec<_>>();
         let imported = store.replace_client_snapshot(Client::WorkBuddy, &sources, &sessions)?;
         report.sessions_imported = sessions.len();

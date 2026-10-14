@@ -323,3 +323,106 @@ fn read_interruption_never_returns_a_partial_success() {
     };
     assert!(parser::read_from(reader).is_err());
 }
+
+fn usage_item(id: &str, session: &str, usage: Value) -> Value {
+    json!({"type":"message","id":id,"sessionId":session,"timestamp":1791799200000i64,
+        "cwd":"/synthetic-project",
+        "providerData":{"model":"synthetic-model","agent":"craft","usage":usage},
+        "message":{"usage":{}}})
+}
+
+#[test]
+fn derived_totals_are_derived_and_reported_totals_stay_measured() {
+    let dir = TempDir::new();
+    // No totalTokens: the total is a deterministic conversion from complete buckets.
+    let derived = usage_item(
+        "derived",
+        "s-derived",
+        json!({"inputTokens":10,"outputTokens":20,
+            "inputTokensDetails":[{"cached_tokens":0}],
+            "outputTokensDetails":[{"reasoning_tokens":0}]}),
+    );
+    // Client-reported total: keeps the measured level.
+    let reported = usage_item(
+        "reported",
+        "s-reported",
+        json!({"inputTokens":10,"outputTokens":20,"totalTokens":30}),
+    );
+    dir.write("a.jsonl", &log(&[derived, reported]));
+    let store = store();
+    WorkBuddyCollector::new(&dir.0)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    let conn = store.connection_for_tests();
+    let request_kinds: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT s.client_session_id, m.source_kind FROM messages m
+             JOIN sessions s ON s.id = m.session_id ORDER BY s.client_session_id",
+        )
+        .expect("query")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("values");
+    assert_eq!(
+        request_kinds,
+        vec![
+            ("s-derived".into(), "derived".into()),
+            ("s-reported".into(), "measured".into()),
+        ]
+    );
+    let session_kinds: Vec<(String, String)> = conn
+        .prepare("SELECT client_session_id, source_kind FROM sessions ORDER BY client_session_id")
+        .expect("query")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("values");
+    assert_eq!(
+        session_kinds,
+        vec![
+            ("s-derived".into(), "derived".into()),
+            ("s-reported".into(), "measured".into()),
+        ]
+    );
+}
+
+#[test]
+fn one_corrupt_line_only_marks_its_own_file_session_partial() {
+    let dir = TempDir::new();
+    let clean = usage_item(
+        "clean",
+        "s-clean",
+        json!({"inputTokens":10,"outputTokens":20,"totalTokens":30}),
+    );
+    let dirty = usage_item(
+        "dirty",
+        "s-dirty",
+        json!({"inputTokens":10,"outputTokens":20,"totalTokens":30}),
+    );
+    dir.write("clean.jsonl", &log(&[clean]));
+    // Non-JSON complete line: counted as unparsed without aborting the file.
+    dir.write("dirty.jsonl", &(log(&[dirty]) + "not-json\n"));
+    let store = store();
+    let report = WorkBuddyCollector::new(&dir.0)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert_eq!(report.unparsed_lines, 1);
+    let coverage: Vec<(String, String)> = store
+        .connection_for_tests()
+        .prepare(
+            "SELECT client_session_id, message_coverage FROM sessions ORDER BY client_session_id",
+        )
+        .expect("query")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("values");
+    assert_eq!(
+        coverage,
+        vec![
+            ("s-clean".into(), "complete".into()),
+            ("s-dirty".into(), "partial".into()),
+        ]
+    );
+}

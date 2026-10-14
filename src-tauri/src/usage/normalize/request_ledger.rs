@@ -114,6 +114,26 @@ pub fn session(
     }
 }
 
+/// 总量由完整分桶确定性换算（无客户端自报 total）时，请求来源等级应为 `derived`；
+/// 有客户端自报总量时保持 `measured`（见 `docs/data-metrics.md` 第 3 节）。
+///
+/// `request` 默认按 `measured` 落地，由调用方在需要时按 `total_basis` 改写。
+pub fn classify_request_source(record: &mut MessageRecord) {
+    if record.usage.total_basis == UsageTotalBasis::DerivedFromBuckets {
+        record.source_kind = SourceKind::Derived;
+    }
+}
+
+/// 会话总量包含任一派生请求时，会话来源等级同步为 `derived`；否则保持 `measured`。
+pub fn classify_session_source(session: &mut SessionRecord, messages: &[MessageRecord]) {
+    if messages
+        .iter()
+        .any(|message| message.source_kind == SourceKind::Derived)
+    {
+        session.source_kind = SourceKind::Derived;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,5 +241,66 @@ mod tests {
         );
         assert_eq!(result.usage.total_tokens, None);
         assert_eq!(result.usage.total_basis, UsageTotalBasis::Unavailable);
+    }
+
+    #[test]
+    fn derived_totals_are_reclassified_but_reported_totals_stay_measured() {
+        // 无自报 total、但必需分桶完整：确定性换算 → derived。
+        let derived = RawTokenCounts {
+            input: Some(10),
+            output: Some(5),
+            reasoning: Some(0),
+            cache_read: Some(0),
+            cache_write: Some(0),
+            client_total: None,
+        };
+        let mut derived_request = request(Client::MimoCode, "s", meta("a"), &derived);
+        classify_request_source(&mut derived_request);
+        assert_eq!(derived_request.source_kind, SourceKind::Derived);
+
+        // 会话总量由派生请求求和 → 会话同步标 derived。
+        let mut derived_session = session(
+            Client::MimoCode,
+            SessionMeta {
+                id: "s".to_string(),
+                parent: None,
+                project: None,
+                start_ms: None,
+                end_ms: None,
+            },
+            std::slice::from_ref(&derived_request),
+            &[derived],
+            false,
+        );
+        classify_session_source(&mut derived_session, std::slice::from_ref(&derived_request));
+        assert_eq!(derived_session.source_kind, SourceKind::Derived);
+
+        // 有客户端自报 total：保持 measured。
+        let reported = RawTokenCounts {
+            client_total: Some(20),
+            ..derived
+        };
+        let mut reported_request = request(Client::MimoCode, "s", meta("b"), &reported);
+        classify_request_source(&mut reported_request);
+        assert_eq!(reported_request.source_kind, SourceKind::Measured);
+
+        let mut reported_session = session(
+            Client::MimoCode,
+            SessionMeta {
+                id: "s2".to_string(),
+                parent: None,
+                project: None,
+                start_ms: None,
+                end_ms: None,
+            },
+            std::slice::from_ref(&reported_request),
+            &[reported],
+            false,
+        );
+        classify_session_source(
+            &mut reported_session,
+            std::slice::from_ref(&reported_request),
+        );
+        assert_eq!(reported_session.source_kind, SourceKind::Measured);
     }
 }

@@ -52,7 +52,8 @@ pub struct ClaudeSessionRollup<'a> {
     pub ended_at: Option<&'a str>,
     /// 去重后的消息数。
     pub message_count: usize,
-    /// 去重后的用量求和（[`RawTokenCounts::sum`]）。
+    /// 去重后的用量求和（[`sum_complete_counts`](super::sum_complete_counts)）：
+    /// 任一请求缺少某字段时，会话该字段保持未知，不被当成 0 累加。
     pub usage: RawTokenCounts,
 }
 

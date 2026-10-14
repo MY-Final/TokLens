@@ -244,3 +244,61 @@ fn snapshots_append_shrink_delete_and_reopen() {
         .expect("delete");
     assert_eq!(store.session_count().expect("empty"), 0);
 }
+
+#[test]
+fn derived_bucket_totals_are_derived_and_reported_totals_stay_measured() {
+    let dir = TempDir::new();
+    let header = |id: &str| {
+        format!(
+            r#"{{"type":"session","schema":1,"sessionId":"{id}","createdAt":"2026-10-11T10:00:00Z"}}"#
+        )
+    };
+    // No totalTokens: the total is a deterministic conversion from complete buckets.
+    let derived = r#"{"inputTokens":10,"outputTokens":5,"reasoningTokens":2}"#;
+    // Client-reported total: keeps the measured level.
+    let reported = r#"{"inputTokens":10,"outputTokens":5,"reasoningTokens":2,"totalTokens":15}"#;
+    dir.write(
+        "derived.jsonl",
+        &(header("s-derived") + "\n" + &message("m-derived", derived) + "\n"),
+    );
+    dir.write(
+        "reported.jsonl",
+        &(header("s-reported") + "\n" + &message("m-reported", reported) + "\n"),
+    );
+    let store = UsageStore::open_in_memory().expect("store");
+    PiDesktopCollector::new(&dir.0)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    let conn = store.connection_for_tests();
+    let request_kinds: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT s.client_session_id, m.source_kind FROM messages m
+             JOIN sessions s ON s.id = m.session_id ORDER BY s.client_session_id",
+        )
+        .expect("query")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("values");
+    assert_eq!(
+        request_kinds,
+        vec![
+            ("s-derived".into(), "derived".into()),
+            ("s-reported".into(), "measured".into()),
+        ]
+    );
+    let session_kinds: Vec<(String, String)> = conn
+        .prepare("SELECT client_session_id, source_kind FROM sessions ORDER BY client_session_id")
+        .expect("query")
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("values");
+    assert_eq!(
+        session_kinds,
+        vec![
+            ("s-derived".into(), "derived".into()),
+            ("s-reported".into(), "measured".into()),
+        ]
+    );
+}

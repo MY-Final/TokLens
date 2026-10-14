@@ -115,14 +115,19 @@ impl PiDesktopCollector {
                 counts.push(candidate.raw);
                 messages.push(candidate.message);
             }
+            let mut session = crate::usage::normalize::request_ledger::session(
+                Client::PiDesktop,
+                meta,
+                &messages,
+                &counts,
+                partial,
+            );
+            crate::usage::normalize::request_ledger::classify_session_source(
+                &mut session,
+                &messages,
+            );
             sessions.push(crate::usage::store::SessionImport {
-                session: crate::usage::normalize::request_ledger::session(
-                    Client::PiDesktop,
-                    meta,
-                    &messages,
-                    &counts,
-                    partial,
-                ),
+                session,
                 messages,
                 source_path: path,
                 message_source_paths,
