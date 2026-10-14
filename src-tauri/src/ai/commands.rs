@@ -28,6 +28,7 @@ pub struct LlmConnectionDto {
 #[serde(rename_all = "camelCase")]
 pub struct GeneratedPanelSpecDto {
     pub spec: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<LlmUsageDto>,
 }
 
