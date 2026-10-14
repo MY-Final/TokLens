@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default"]
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://github.com/MY-Final/TokLens" }]
+    }
+  ]
 }
