@@ -13,9 +13,18 @@ import { EmptyBlock, ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer } from "@/components/ui/chart";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { clientLabel } from "@/lib/client-labels";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CLIENT_KEYS, clientLabel } from "@/lib/client-labels";
+import {
+  dayTotalLabel,
   formatDateTime,
   formatNumber,
   formatTokensOrDash as formatExactOrDash,
@@ -28,20 +37,7 @@ import type {
 } from "@/lib/usage-types";
 
 type Metric = "tokens" | "requests";
-const CLIENTS: ClientKey[] = [
-  "codex",
-  "claude_code",
-  "opencode",
-  "dsh",
-  "kimi_code",
-  "mimocode",
-  "pi_desktop",
-  "workbuddy",
-  "copilot",
-  "gemini_cli",
-  "grok",
-  "mcode",
-];
+const CLIENTS = CLIENT_KEYS;
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 const CHART_CONFIG = { value: { label: "已记录请求", color: "var(--chart-1)" } };
 const NO_RECORDED_REQUESTS: RequestTotals = {
@@ -126,6 +122,7 @@ function ActivityCell({
   selectedRange?: DailyRange;
 }) {
   const note = description(totals, metric);
+  const scope = dailyScope(ms, selectedRange);
   return (
     <HeatmapCell
       value={metricValue(totals, metric)}
@@ -135,7 +132,8 @@ function ActivityCell({
       className={className}
     >
       <UsageTooltip
-        title={`${prefix}${dateLabel(ms)} · ${dailyScope(ms, selectedRange)}`}
+        title={`${prefix}${dateLabel(ms)} · ${scope}`}
+        totalLabel={dayTotalLabel(scope)}
         total={metricValue(totals, "tokens")}
         requests={totals?.requests}
         sessions={totals?.sessions}
@@ -335,7 +333,11 @@ export function RequestActivityPanel({
                             <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
                               <UsageTooltip
                                 title={bucket ? trendScope(bucket.startMs) : "本地时间"}
-                                totalLabel={hasHourly ? "本时段已知 Token" : undefined}
+                                totalLabel={
+                                  hasHourly
+                                    ? "本时段已知 Token"
+                                    : dayTotalLabel(dailyScope(bucket?.startMs ?? 0, selectedRange))
+                                }
                                 total={metricValue(bucket?.totals, "tokens")}
                                 requests={bucket?.totals.requests}
                                 sessions={bucket?.totals.sessions}
@@ -375,35 +377,39 @@ export function RequestActivityPanel({
                       : ""}
                   </p>
                   {hasHourly ? (
-                    <div
-                      className="flex gap-4 overflow-x-auto py-2"
-                      aria-label="每小时统计，精确值可聚焦查看"
-                    >
-                      {hours.map((hour) => (
-                        <div
-                          key={hour.hourStartMs}
-                          className="shrink-0 space-y-1 text-xs"
-                          tabIndex={0}
-                          aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                          title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                        >
-                          <p className="text-muted-foreground">{trendLabel(hour.hourStartMs)}</p>
-                          <p className="font-mono tabular-nums">
-                            {metric === "tokens"
-                              ? formatTokensOrDash(metricValue(hour.totals, metric))
-                              : formatExactOrDash(metricValue(hour.totals, metric))}
-                          </p>
-                          <p className="text-muted-foreground">
-                            {hour.totals.requests === 0
-                              ? "未记录"
-                              : hour.totals.requestsWithUsage === 0
-                                ? "Token 未知"
-                                : hour.totals.requestsWithoutUsage > 0
-                                  ? "已知子集"
-                                  : "已知记录"}
-                          </p>
-                        </div>
-                      ))}
+                    <div className="@container/hourly">
+                      <div
+                        role="list"
+                        aria-label="每小时统计，精确值可聚焦查看"
+                        className="grid grid-cols-4 gap-x-2 gap-y-3 py-2 @sm/hourly:grid-cols-6 @2xl/hourly:grid-cols-8 @4xl/hourly:grid-cols-12"
+                      >
+                        {hours.map((hour) => (
+                          <div
+                            key={hour.hourStartMs}
+                            role="listitem"
+                            tabIndex={0}
+                            className="min-w-0 space-y-1 rounded-sm text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                            title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                          >
+                            <p className="text-muted-foreground">{trendLabel(hour.hourStartMs)}</p>
+                            <p className="font-mono tabular-nums">
+                              {metric === "tokens"
+                                ? formatTokensOrDash(metricValue(hour.totals, metric))
+                                : formatExactOrDash(metricValue(hour.totals, metric))}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {hour.totals.requests === 0
+                                ? "未记录"
+                                : hour.totals.requestsWithUsage === 0
+                                  ? "Token 未知"
+                                  : hour.totals.requestsWithoutUsage > 0
+                                    ? "已知子集"
+                                    : "已知记录"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex gap-1 overflow-x-auto py-2">
@@ -469,38 +475,44 @@ export function RequestActivityPanel({
                   <HeatmapLegend maxValue={maxValue} unit={unit} />
                 </TabsContent>
                 <TabsContent value="clients" className="space-y-3">
-                  <div className="overflow-x-auto pb-2">
-                    <table
+                  <div className="pb-2">
+                    <Table
                       className="w-max min-w-full text-xs"
                       aria-label={`${rangeLabel} 客户端请求发生日期${unit}`}
                     >
-                      <thead>
-                        <tr>
-                          <th scope="col" className="sticky left-0 bg-card pr-4 text-left">
+                      <TableHeader className="[&_tr]:border-0">
+                        <TableRow className="border-0 hover:bg-transparent">
+                          <TableHead
+                            scope="col"
+                            className="sticky left-0 h-auto bg-card p-0 pr-4 text-left"
+                          >
                             客户端 / 日期
-                          </th>
+                          </TableHead>
                           {days.map((day, index) => (
-                            <th
+                            <TableHead
                               key={day.dayStartMs}
                               scope="col"
-                              className="min-w-8 text-left font-normal text-muted-foreground"
+                              className="h-auto min-w-8 p-0 text-left font-normal text-muted-foreground"
                               aria-label={dateLabel(day.dayStartMs)}
                             >
                               {index % (days.length > 31 ? 7 : 3) === 0
                                 ? dateLabel(day.dayStartMs).slice(5)
                                 : ""}
-                            </th>
+                            </TableHead>
                           ))}
-                        </tr>
-                      </thead>
-                      <tbody>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {clients.map((key) => (
-                          <tr key={key}>
-                            <th scope="row" className="sticky left-0 bg-card py-1 pr-4 text-left">
+                          <TableRow key={key} className="border-0 hover:bg-transparent">
+                            <TableHead
+                              scope="row"
+                              className="sticky left-0 h-auto bg-card p-0 py-1 pr-4 text-left"
+                            >
                               <ClientIdentity client={key} compact />
-                            </th>
+                            </TableHead>
                             {days.map((day) => (
-                              <td key={day.dayStartMs} className="py-1 pr-1">
+                              <TableCell key={day.dayStartMs} className="p-0 py-1 pr-1">
                                 <ActivityCell
                                   selectedRange={selectedRange}
                                   ms={day.dayStartMs}
@@ -513,12 +525,12 @@ export function RequestActivityPanel({
                                   prefix={`${clientLabel(key)} · `}
                                   className="size-7"
                                 />
-                              </td>
+                              </TableCell>
                             ))}
-                          </tr>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                   <HeatmapLegend maxValue={clientMax} unit={unit} />
                   <p className="text-xs text-muted-foreground">所有客户端共享同一强度标尺。</p>
