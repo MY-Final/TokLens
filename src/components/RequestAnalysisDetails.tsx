@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { formatNumber, shortenPath } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { formatBasisPoints, knownRequestTokens } from "@/lib/request-analysis";
 import type { RequestAnalysis, RequestAnalysisMetrics, SessionFilters } from "@/lib/usage-types";
 
@@ -144,8 +145,8 @@ export function RequestAnalysisDetails({
             const rowId = `${detailId}-${index}`;
             return (
               <Fragment key={key}>
-                <TableRow className="border-border/60">
-                  <TableCell className="py-3">
+                <TableRow className="border-border/60 hover:bg-muted/30">
+                  <TableCell className="py-3.5">
                     <button
                       type="button"
                       className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
@@ -168,6 +169,7 @@ export function RequestAnalysisDetails({
                         model={entry.key}
                         compact
                         unknownLabel="未记录模型"
+                        iconClassName="size-7"
                         labelClassName="font-mono text-xs"
                       />
                     </button>
@@ -179,7 +181,7 @@ export function RequestAnalysisDetails({
                       </p>
                     ) : null}
                   </TableCell>
-                  <TableCell className="py-3 text-right">
+                  <TableCell className="py-3.5 text-right">
                     <span
                       className="block truncate font-mono tabular-nums"
                       title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
@@ -189,7 +191,11 @@ export function RequestAnalysisDetails({
                     {metrics.shareBps !== null ? (
                       <Progress
                         value={metrics.shareBps / 100}
-                        className="mt-2 ml-auto h-1 max-w-40 bg-muted [&_[data-slot=progress-indicator]]:bg-chart-1"
+                        className={cn(
+                          "mt-2 ml-auto h-1.5 max-w-40 rounded-full bg-border/70 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-chart-1",
+                          metrics.shareBps > 7000 &&
+                            "[&_[data-slot=progress-indicator]]:bg-linear-to-r [&_[data-slot=progress-indicator]]:from-chart-1 [&_[data-slot=progress-indicator]]:to-chart-2",
+                        )}
                         aria-label={`${label} 占所选客户端已知 Token 的比例`}
                       />
                     ) : null}
@@ -248,7 +254,7 @@ export function RequestAnalysisDetails({
               const total = knownRequestTokens(entry.metrics);
               const label = entry.key === null ? "未记录项目" : shortenPath(entry.key);
               return (
-                <TableRow key={JSON.stringify(entry.key)}>
+                <TableRow key={JSON.stringify(entry.key)} className="hover:bg-muted/30 [&>td]:py-3">
                   <TableCell>
                     {onOpenSessions ? (
                       <Button

@@ -2,25 +2,16 @@
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { DataExplanation } from "@/components/DataExplanation";
-import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 import { useState } from "react";
-import { Input } from "@/components/ui/input";
 
-import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SessionTable } from "@/components/SessionTable";
 import { SessionDetailPanel } from "@/components/SessionDetailPanel";
 import { useAsyncData } from "@/hooks/use-async-data";
 import { getSessionDetail, getSessions } from "@/lib/api";
-import type {
-  SessionBrowserState,
-  SessionFilters,
-  SessionSort,
-  SessionSummary,
-} from "@/lib/usage-types";
-import { CLIENT_LABELS, clientLabel, isClientKey } from "@/lib/client-labels";
+import type { SessionBrowserState, SessionSummary } from "@/lib/usage-types";
 import { formatNumber } from "@/lib/format";
 import { rangeScope, type DateRange } from "@/lib/ranges";
 
@@ -75,7 +66,15 @@ export function SessionsPage({
 }) {
   return (
     <SessionBrowser
-      key={rangeScope(range)}
+      key={JSON.stringify({
+        range: rangeScope(range),
+        client: state.client,
+        search: state.search,
+        sort: state.sort,
+        model: state.model,
+        projectPath: state.projectPath,
+        requestTime: state.requestTime,
+      })}
       range={range}
       refreshToken={refreshToken}
       state={state}
@@ -103,14 +102,9 @@ function SessionBrowser({
 }) {
   const [selectedSession, setSelectedSession] = useState<SessionSummary | null>(null);
   const { client, search, sort } = state;
-  const clientValue = client ?? "all";
   const scope = rangeScope(range);
   const offset = state.rangeScope === scope ? state.offset : 0;
   const setOffset = (value: number) => onChange({ ...state, offset: value, rangeScope: scope });
-  const changeFilters = (patch: Partial<SessionFilters>) => {
-    setSelectedSession(null);
-    onChange({ ...state, ...patch, offset: 0, rangeScope: scope });
-  };
   const normalizedSearch = search.trim();
   const keySuffix = `${range.key}:${JSON.stringify(state)}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
 
@@ -144,82 +138,12 @@ function SessionBrowser({
           {returnLabel ?? "返回统计"}
         </Button>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          value={search}
-          onChange={(event) => changeFilters({ search: event.target.value })}
-          placeholder="搜索项目、模型或会话 ID"
-          aria-label="搜索项目、模型或会话 ID"
-          className="w-72"
-        />
-        <Select
-          value={sort}
-          onValueChange={(value) => changeFilters({ sort: value as SessionSort })}
-        >
-          <SelectTrigger size="sm" className="w-40" aria-label="会话排序">
-            <SelectValue />
-          </SelectTrigger>
-          <FilterSelectContent>
-            <SelectItem value="newest">最近开始</SelectItem>
-            <SelectItem value="oldest">最早开始</SelectItem>
-            <SelectItem value="tokens_desc">Token 最高</SelectItem>
-            <SelectItem value="requests_desc">请求最多</SelectItem>
-          </FilterSelectContent>
-        </Select>
-        <Select
-          value={clientValue}
-          onValueChange={(value) => {
-            changeFilters({ client: isClientKey(value) ? value : null });
-            setSelectedSession(null);
-          }}
-        >
-          <SelectTrigger size="sm" className="w-44" aria-label="选择客户端">
-            <SelectValue />
-          </SelectTrigger>
-          <FilterSelectContent>
-            <SelectItem value="all">全部客户端</SelectItem>
-            {Object.keys(CLIENT_LABELS)
-              .filter(isClientKey)
-              .map((entry) => (
-                <SelectItem key={entry} value={entry}>
-                  {clientLabel(entry)}
-                </SelectItem>
-              ))}
-          </FilterSelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
-          {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
-          {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
-          {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{state.requestTime ? "区间内有已记录请求的会话" : "按会话开始时间"}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => changeFilters({ requestTime: !state.requestTime })}
-        >
-          切换为{state.requestTime ? "会话开始时间" : "请求发生时间"}
-        </Button>
-        {state.model !== undefined ? (
-          <Button size="sm" variant="outline" onClick={() => changeFilters({ model: undefined })}>
-            模型：{state.model ?? "未记录"} ×
-          </Button>
-        ) : null}
-        {state.projectPath !== undefined ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="max-w-sm"
-            onClick={() => changeFilters({ projectPath: undefined })}
-            title={state.projectPath ?? "未记录项目"}
-          >
-            <span className="truncate">项目：{state.projectPath ?? "未记录"}</span> ×
-          </Button>
-        ) : null}
-      </div>
+      <p className="text-xs leading-relaxed text-muted-foreground tabular-nums">
+        第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
+        {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
+        {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
+        {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
+      </p>
 
       <DashboardCard>
         <CardContent className="px-5">

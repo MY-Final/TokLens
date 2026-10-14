@@ -86,7 +86,7 @@ export function SettingsPage({
     <div className="flex min-h-[calc(100svh-4rem)] items-start">
       <nav
         aria-label="设置分类"
-        className="sticky top-0 min-h-[calc(100svh-4rem)] w-44 shrink-0 border-r border-border/60 bg-sidebar/50 px-3 py-6 xl:w-52 xl:px-4"
+        className="sticky top-[var(--app-header-height,4rem)] min-h-[calc(100svh-4rem)] w-44 shrink-0 border-r border-border/60 bg-sidebar/50 px-3 py-6 xl:w-52 xl:px-4"
       >
         <h2 className="mb-6 px-3 text-base font-semibold">偏好设置</h2>
         {["应用", "管理"].map((group) => (
@@ -111,7 +111,7 @@ export function SettingsPage({
         ))}
       </nav>
       <div className="min-w-0 flex-1 px-5 py-6 lg:px-8 xl:px-10">
-        <div className="max-w-3xl space-y-4">
+        <div className="mx-auto max-w-3xl space-y-4">
           {error && (
             <ErrorBlock
               message={error}
@@ -129,6 +129,7 @@ export function SettingsPage({
             <SettingsSection title="通用">
               <SettingsSelect
                 title="关闭主窗口时"
+                description="选择继续在托盘运行、退出应用或每次询问。"
                 value={settings.closeBehavior}
                 options={CLOSE_OPTIONS}
                 disabled={busy}
@@ -138,6 +139,7 @@ export function SettingsPage({
               />
               <SettingsSwitch
                 title="开机自启"
+                description="登录系统后自动启动 TokLens。"
                 checked={settings.autostart}
                 disabled={busy}
                 onChange={(autostart) => {
@@ -146,6 +148,7 @@ export function SettingsPage({
               />
               <SettingsSwitch
                 title="开机启动时隐藏到托盘"
+                description="自启时在托盘运行，不打开主窗口。"
                 checked={settings.autostartHidden}
                 disabled={busy || !settings.autostart}
                 onChange={(autostartHidden) => {
@@ -154,6 +157,7 @@ export function SettingsPage({
               />
               <SettingsSwitch
                 title="记住窗口尺寸与位置"
+                description="下次打开时恢复上次的窗口大小和位置。"
                 checked={settings.rememberWindow}
                 disabled={busy}
                 onChange={(rememberWindow) => {

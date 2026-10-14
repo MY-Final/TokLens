@@ -168,6 +168,24 @@
   }
 }
 
+@layer components {
+  .client-tabs-scroll {
+    scrollbar-width: none;
+    scroll-padding-inline: 0.75rem;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 12px,
+      #000 calc(100% - 12px),
+      transparent
+    );
+  }
+
+  .client-tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -9,13 +9,11 @@ export function AnalyticsPage({
   range,
   refreshToken,
   client,
-  onClientChange,
   onOpenSessions,
 }: {
   range: DateRange;
   refreshToken: number;
   client: ClientKey | null;
-  onClientChange: (client: ClientKey | null) => void;
   onOpenSessions: (filters: Partial<SessionFilters>) => void;
 }) {
   const analysis = useAsyncData(
@@ -34,7 +32,6 @@ export function AnalyticsPage({
       loading={analysis.loading}
       error={analysis.error}
       onRetry={analysis.reload}
-      onSelectClient={onClientChange}
       onOpenSessions={(filters) => onOpenSessions({ ...filters, client, requestTime: true })}
     />
   );

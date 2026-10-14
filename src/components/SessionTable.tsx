@@ -17,6 +17,7 @@ import { ClientIdentity } from "@/components/ClientIdentity";
 import { ModelIdentity } from "@/components/ModelIdentity";
 import type { SessionSummary } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, shortenPath } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 function CoverageBadge({ session }: { session: SessionSummary }) {
   if (session.totalTokens === null) {
@@ -79,44 +80,70 @@ export function SessionTable({
           description="调整时间范围或筛选条件，或在数据源管理里执行一次同步。"
         />
       ) : (
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
+        <div className="min-w-0">
+          <Table
+            aria-label="会话明细"
+            className={cn("table-fixed text-xs", onOpenSession ? "min-w-6xl" : "min-w-[1056px]")}
+          >
+            <colgroup>
+              <col className="w-40" />
+              <col className="w-40" />
+              <col className="w-48" />
+              <col />
+              <col className="w-20" />
+              <col className="w-28" />
+              <col className="w-32" />
+              {onOpenSession ? <col className="w-24" /> : null}
+            </colgroup>
+            <TableHeader className="[&_th]:font-medium [&_th]:text-muted-foreground">
               <TableRow>
-                <TableHead className="w-40">开始时间</TableHead>
-                <TableHead className="w-24">客户端</TableHead>
-                <TableHead>模型</TableHead>
+                <TableHead className="pl-4">开始时间</TableHead>
+                <TableHead>客户端</TableHead>
+                <TableHead className="min-w-40">模型</TableHead>
                 <TableHead>项目</TableHead>
-                <TableHead className="w-20 text-right">明细</TableHead>
-                <TableHead className="w-24 text-right">Token</TableHead>
-                <TableHead className="w-32">状态</TableHead>
-                {onOpenSession ? <TableHead className="w-24">操作</TableHead> : null}
+                <TableHead className="text-right tabular-nums">明细</TableHead>
+                <TableHead className="text-right tabular-nums">Token</TableHead>
+                <TableHead>状态</TableHead>
+                {onOpenSession ? <TableHead className="pr-4 text-right">操作</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((session) => (
                 <TableRow
                   key={`${session.client}:${session.clientSessionId}`}
-                  className="border-border/40 transition-colors hover:bg-muted/50"
+                  className="border-border/40 transition-colors duration-150 hover:bg-muted/60"
                 >
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
+                  <TableCell className="pl-4 text-xs text-muted-foreground tabular-nums">
                     {formatDateTime(session.startedAtMs)}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
                     <ClientIdentity client={session.client} compact />
                   </TableCell>
-                  <TableCell className="text-xs">
-                    <ModelIdentity
-                      model={session.model}
-                      compact
-                      labelClassName="font-mono text-xs"
-                    />
+                  <TableCell className="min-w-40 whitespace-nowrap">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          tabIndex={0}
+                          className="block max-w-full rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        >
+                          <ModelIdentity
+                            model={session.model}
+                            compact
+                            truncate
+                            className="flex w-full"
+                            labelClassName="font-mono text-xs"
+                          />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-80 font-mono text-xs break-all">
+                        {session.model?.trim() ? session.model : "模型未记录"}
+                      </TooltipContent>
+                    </Tooltip>
                   </TableCell>
-                  <TableCell
-                    className="max-w-48 truncate font-mono text-xs text-muted-foreground"
-                    title={session.projectPath ?? undefined}
-                  >
-                    {shortenPath(session.projectPath)}
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    <span className="block truncate" title={session.projectPath ?? undefined}>
+                      {shortenPath(session.projectPath)}
+                    </span>
                   </TableCell>
                   <TableCell className="text-right font-mono text-xs tabular-nums">
                     {formatNumber(session.messages)}
@@ -135,10 +162,11 @@ export function SessionTable({
                     <CoverageBadge session={session} />
                   </TableCell>
                   {onOpenSession ? (
-                    <TableCell>
+                    <TableCell className="pr-4 text-right">
                       <Button
                         size="sm"
                         variant="ghost"
+                        className="h-8 px-2 text-xs"
                         aria-label={`查看会话 ${session.clientSessionId} 的详情`}
                         onClick={() => onOpenSession(session)}
                       >

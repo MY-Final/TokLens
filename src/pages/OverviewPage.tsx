@@ -13,7 +13,6 @@ import type { PageKey } from "@/components/AppShell";
 import { ClientUsageCard } from "@/components/ClientUsageCard";
 import { CalendarHeatmap } from "@/components/CalendarHeatmap";
 import { RequestActivityView } from "@/components/RequestActivityView";
-import { UsageBasisSelect } from "@/components/UsageBasisSelect";
 import type { UsageBasis } from "@/components/UsageBasisSelect";
 import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -44,14 +43,12 @@ type OverviewPageProps = {
   onNavigate: (page: PageKey) => void;
   onOpenSessions: (filters?: Partial<SessionFilters>, range?: DateRange) => void;
   basis: UsageBasis;
-  onBasisChange: (basis: UsageBasis) => void;
 };
 
 export function OverviewPage(props: OverviewPageProps) {
-  const { basis, onBasisChange } = props;
+  const { basis } = props;
   return (
     <div className="space-y-4">
-      <UsageBasisSelect value={basis} onChange={onBasisChange} />
       {basis === "requests" ? (
         <RequestActivityView
           range={props.range}
