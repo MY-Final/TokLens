@@ -144,81 +144,92 @@ function SessionBrowser({
           {returnLabel ?? "返回统计"}
         </Button>
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Input
-          value={search}
-          onChange={(event) => changeFilters({ search: event.target.value })}
-          placeholder="搜索项目、模型或会话 ID"
-          aria-label="搜索项目、模型或会话 ID"
-          className="w-72"
-        />
-        <Select
-          value={sort}
-          onValueChange={(value) => changeFilters({ sort: value as SessionSort })}
-        >
-          <SelectTrigger size="sm" className="w-40" aria-label="会话排序">
-            <SelectValue />
-          </SelectTrigger>
-          <FilterSelectContent>
-            <SelectItem value="newest">最近开始</SelectItem>
-            <SelectItem value="oldest">最早开始</SelectItem>
-            <SelectItem value="tokens_desc">Token 最高</SelectItem>
-            <SelectItem value="requests_desc">请求最多</SelectItem>
-          </FilterSelectContent>
-        </Select>
-        <Select
-          value={clientValue}
-          onValueChange={(value) => {
-            changeFilters({ client: isClientKey(value) ? value : null });
-            setSelectedSession(null);
-          }}
-        >
-          <SelectTrigger size="sm" className="w-44" aria-label="选择客户端">
-            <SelectValue />
-          </SelectTrigger>
-          <FilterSelectContent>
-            <SelectItem value="all">全部客户端</SelectItem>
-            {Object.keys(CLIENT_LABELS)
-              .filter(isClientKey)
-              .map((entry) => (
-                <SelectItem key={entry} value={entry}>
-                  {clientLabel(entry)}
-                </SelectItem>
-              ))}
-          </FilterSelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
-          {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
-          {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
-          {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{state.requestTime ? "区间内有已记录请求的会话" : "按会话开始时间"}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => changeFilters({ requestTime: !state.requestTime })}
-        >
-          切换为{state.requestTime ? "会话开始时间" : "请求发生时间"}
-        </Button>
-        {state.model !== undefined ? (
-          <Button size="sm" variant="outline" onClick={() => changeFilters({ model: undefined })}>
-            模型：{state.model ?? "未记录"} ×
-          </Button>
-        ) : null}
-        {state.projectPath !== undefined ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="max-w-sm"
-            onClick={() => changeFilters({ projectPath: undefined })}
-            title={state.projectPath ?? "未记录项目"}
-          >
-            <span className="truncate">项目：{state.projectPath ?? "未记录"}</span> ×
-          </Button>
-        ) : null}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Input
+            value={search}
+            onChange={(event) => changeFilters({ search: event.target.value })}
+            placeholder="搜索项目、模型或会话 ID"
+            aria-label="搜索项目、模型或会话 ID"
+            className="h-9 w-72 max-w-full min-w-0 flex-1 basis-64"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Select
+              value={sort}
+              onValueChange={(value) => changeFilters({ sort: value as SessionSort })}
+            >
+              <SelectTrigger className="h-9 w-40 shrink-0" aria-label="会话排序">
+                <SelectValue />
+              </SelectTrigger>
+              <FilterSelectContent>
+                <SelectItem value="newest">最近开始</SelectItem>
+                <SelectItem value="oldest">最早开始</SelectItem>
+                <SelectItem value="tokens_desc">Token 最高</SelectItem>
+                <SelectItem value="requests_desc">请求最多</SelectItem>
+              </FilterSelectContent>
+            </Select>
+            <Select
+              value={clientValue}
+              onValueChange={(value) => {
+                changeFilters({ client: isClientKey(value) ? value : null });
+                setSelectedSession(null);
+              }}
+            >
+              <SelectTrigger className="h-9 w-44 shrink-0" aria-label="选择客户端">
+                <SelectValue />
+              </SelectTrigger>
+              <FilterSelectContent>
+                <SelectItem value="all">全部客户端</SelectItem>
+                {Object.keys(CLIENT_LABELS)
+                  .filter(isClientKey)
+                  .map((entry) => (
+                    <SelectItem key={entry} value={entry}>
+                      {clientLabel(entry)}
+                    </SelectItem>
+                  ))}
+              </FilterSelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs leading-relaxed text-muted-foreground tabular-nums">
+            第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
+            {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
+            {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
+            {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
+            <span>{state.requestTime ? "区间内有已记录请求的会话" : "按会话开始时间"}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => changeFilters({ requestTime: !state.requestTime })}
+            >
+              切换为{state.requestTime ? "会话开始时间" : "请求发生时间"}
+            </Button>
+            {state.model !== undefined ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => changeFilters({ model: undefined })}
+              >
+                模型：{state.model ?? "未记录"} ×
+              </Button>
+            ) : null}
+            {state.projectPath !== undefined ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="max-w-full"
+                onClick={() => changeFilters({ projectPath: undefined })}
+                title={state.projectPath ?? "未记录项目"}
+              >
+                <span className="truncate">项目：{state.projectPath ?? "未记录"}</span> ×
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <DashboardCard>
