@@ -135,18 +135,18 @@ impl Dimension {
     }
 }
 
-/// 趋势堆叠方式。
+/// 趋势堆叠方式（前端 `TokenTrendChart` 固定用 `client` / `tokens`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stack {
-    Total,
+    Tokens,
     Client,
 }
 
 impl Stack {
     pub fn as_str(self) -> &'static str {
         match self {
-            Stack::Total => "total",
+            Stack::Tokens => "tokens",
             Stack::Client => "client",
         }
     }

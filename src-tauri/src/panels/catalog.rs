@@ -218,7 +218,7 @@ const TOKEN_TREND_PARAMS: &[ParamSpec] = &[
         required: false,
         min: None,
         max: None,
-        values: &["total", "client"],
+        values: &["tokens", "client"],
     },
 ];
 
