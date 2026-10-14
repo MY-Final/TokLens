@@ -494,3 +494,29 @@ TokLens 不使用 emoji picker；保留真实提示，不降级 React 或伪造 
 Codex 根目录优先使用非空 CODEX_HOME，其次 USERPROFILE / HOME 下的 .codex；仅扫描 sessions。路径发现仍位于 collectors，command 为 ClientSourceStatus DTO 附加 sourcePath；不在 usage 领域读取环境或源文件。
 解析 I/O 失败或未完成的无换行 JSON 尾行返回失败，整文件放弃提交；读后与汇总提交前复核大小 / 修改时间，失败保留已有统计与成功水位。完整损坏行仍计数并忽略，合法无换行末行可导入。
 StatsBucket 增加 cacheHitBps / cacheEligibleSessions；ClientUsage 和 RankingEntry 增加 sessionsWithoutUsage；SyncReport 透传 directoriesFailed。数据库 schema、权限、依赖不变。会话列表复用 offset，50 条一页并多取一条判断下一页；排序补客户端作为同时间同 ID 的稳定次序。
+
+### 主题强调色与颜色校验（2026-10-14）
+
+前端颜色 token 按三层职责解耦：**交互强调簇**（`primary` / `primary-foreground` / `ring` / `sidebar-primary` / `sidebar-primary-foreground` / `sidebar-ring` / `accent` / `accent-foreground` / `sidebar-accent` / `sidebar-accent-foreground`）、**身份色簇**（`client-*`）与**图表簇**（`chart-1..5`）。强调簇只表达主操作与选中态，身份色只标识客户端，图表簇只表达指标系列；三层互不复用同一色值，避免品牌色变化波及身份与图表语义。强调簇主色采用莓紫 335（亮 `oklch(0.52 0.19 335)` / 暗 `oklch(0.75 0.15 335)`），`accent` 系列为同色相低强度 tint；本次不引入多主题或主题切换 UI。
+新增零依赖校验工具 `scripts/check-color.mjs`（Node 20+，仅用 `node:fs` / `node:url` / `node:path`，无第三方依赖）：解析 `src/index.css` 的 `:root` 与 `.dark`（支持 hex 与 oklch），自行实现 oklch→sRGB、WCAG 对比度、OKLab ΔE，以及 Machado 等 2009 严重度 1.0 线性 RGB 矩阵的 protan / deutan / tritan 模拟。
+校验分级：L0（WCAG `*-foreground/*` 与 `primary ↔ client-*`、`primary ↔ chart-*`、`chart-1 ↔ codex`、`chart-5 ↔ claude`、`chart-* 两两`）失败即 `exit 1`；L1（其余 client×chart、身份色两两）仅告警；L2 为显式豁免登记表（每条含双方与理由，禁止静默放过）。
+接入 `package.json`：新增 `color:check`，`check` 改为 `lint + typecheck + format:check + color:check`。
+前端仍无测试框架（无 Vitest），本脚本属颜色校验工具而非测试运行器，不引入任何依赖。
+偏离由来：`chart-2` 色相 / `chart-4`（亮+暗）/ `chart-3`（暗）的微调与 `chart-5` 暗色亮度（0.80→0.72）属“为通过 L0 校验的最小偏离”——原值下 `chart-3~chart-4` 常态 ΔE 0.077、`chart-2~chart-3` tritan 0.032、`chart-5~claude` 常态 0.054 不达标；亮色 `chart-3` 未动。
+
+| 日期       | 决策                                                                      | 状态   | 理由 / 影响                                                                                         |
+| ---------- | ------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| 2026-10-14 | 新增零依赖 `scripts/check-color.mjs` 并接入 `pnpm check`（`color:check`） | 已采纳 | 用可复算的 WCAG + OKLab ΔE + 色觉模拟守住颜色可读性与可辨识度；不引入依赖，前端仍无测试框架         |
+| 2026-10-14 | 颜色 token 三层解耦：交互强调簇 / 身份色簇 / 图表簇                       | 已采纳 | 主色变更只影响交互与选中态，不再与 `client-*`、`chart-*` 共用色值；避免语义串色，便于分别演进与校验 |
+
+### 加载骨架与采集窗口期（2026-10-14）
+
+加载态由统一的三行灰条升级为**形状化骨架**：`StateBlocks` 提供 `ChartSkeleton` / `HeatmapSkeleton` / `ClientListSkeleton` / `RankingSkeleton` / `TableSkeleton` / `StatCardsSkeleton` / `DetailSkeleton`，各视图按目标内容的形状与尺寸组合（图表同高、表格按列、卡片按行），避免加载完成后的布局跳变；`LoadingRows` 保留给设置 / 数据源等行式内容。
+**采集窗口期行为**：仅当视图数据为空且仍在加载或采集中（`!data && (loading || syncing)`）时显示骨架；数据非空时始终保持现有数据，后台刷新与同筛选更新不闪回骨架；已安定（不在加载且不在采集）且确实为空时仍显示原有 `EmptyBlock` 文案，不改变"为什么没有数据"的解释。
+新增 React 内置 Context `SyncStatusContext`（`src/hooks/use-sync-status.ts`，`useSyncing()`），由 `App` 用 `syncBusy || status.sync.running` 提供跨视图"正在采集"信号；不使用新的状态管理库或依赖，默认值为 `false`，组件在无 Provider 时安全。
+骨架仅用 `bg-muted` 语义色与 4px 网格尺寸；装饰块对读屏隐藏，容器保留 `aria-busy` / `aria-live` 与 `sr-only` 文本。`index.css` 的 `prefers-reduced-motion` 兜底（`animation-duration: 0.01ms`）已覆盖 `animate-pulse`，无需新增。
+
+| 日期       | 决策                                                                       | 状态   | 理由 / 影响                                                                                  |
+| ---------- | -------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| 2026-10-14 | 加载态采用形状化骨架 + 采集窗口期判定（`!data && (loading \|\| syncing)`） | 已采纳 | 骨架与目标内容同尺度，避免布局跳变；采集期间不把"尚未统计"误报为"暂无数据"，有数据时不闪骨架 |
+| 2026-10-14 | 新增 React 内置 `SyncStatusContext`（`use-sync-status.ts`）跨视图采集信号  | 已采纳 | 避免逐层透传 prop；无新依赖，默认 `false`，无 Provider 时安全                                |
