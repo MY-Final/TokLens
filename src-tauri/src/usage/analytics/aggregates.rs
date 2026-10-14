@@ -173,8 +173,17 @@ impl UsageStore {
         &self,
         filter: &AnalyticsFilter<'_>,
     ) -> Result<Vec<ClientUsage>, UsageError> {
+        // 明细计数并入同一分组查询（相关子查询），避免逐客户端再发起一次 JOIN 查询。
+        // 子查询保持与 `count_messages` 相同的条件：客户端 + 会话开始时间 + 项目。
         let sql = format!(
-            "SELECT client, COUNT(*), SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END), {SUM_COLUMNS}
+            "SELECT client, COUNT(*), SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END), {SUM_COLUMNS},
+                    (SELECT COUNT(*)
+                       FROM messages AS m
+                       JOIN sessions AS s ON s.id = m.session_id
+                      WHERE s.client = sessions.client
+                        AND (?1 IS NULL OR s.started_at_ms >= ?1)
+                        AND (?2 IS NULL OR s.started_at_ms < ?2)
+                        AND (?3 IS NULL OR s.project_path = ?3))
              FROM sessions
              WHERE (?1 IS NULL OR started_at_ms >= ?1)
                AND (?2 IS NULL OR started_at_ms < ?2)
@@ -182,18 +191,22 @@ impl UsageStore {
              ORDER BY client"
         );
         let mut statement = self.conn.prepare(&sql)?;
-        let rows = statement.query_map(rusqlite::params![filter.from_ms, filter.to_ms], |row| {
-            let client: String = row.get(0)?;
-            Ok((
-                client,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
-                read_sums(row, 3)?,
-            ))
-        })?;
+        let rows = statement.query_map(
+            rusqlite::params![filter.from_ms, filter.to_ms, filter.project_path],
+            |row| {
+                let client: String = row.get(0)?;
+                Ok((
+                    client,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    read_sums(row, 3)?,
+                    row.get::<_, i64>(10)?,
+                ))
+            },
+        )?;
         let mut usage = Vec::new();
         for row in rows {
-            let (client, sessions, sessions_without_usage, sums) = row?;
+            let (client, sessions, sessions_without_usage, sums, messages) = row?;
             let Some(parsed) = Client::parse(&client) else {
                 continue;
             };
@@ -202,10 +215,7 @@ impl UsageStore {
                 share_bps: 0,
                 client: parsed,
                 sessions,
-                messages: self.count_messages(&AnalyticsFilter {
-                    client: Some(parsed),
-                    ..*filter
-                })?,
+                messages,
                 sums,
             });
         }

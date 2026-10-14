@@ -205,4 +205,40 @@ mod tests {
             assert!(!semantics.basis.is_empty());
         }
     }
+
+    /// 提取 `CASE WHEN <col> IN ('claude_code', ...) THEN ... cache_write_tokens` 字面量中的客户端集合。
+    fn counted_cache_write_clients(sql: &str) -> Vec<&str> {
+        let marker = "'claude_code'";
+        let marker_at = sql.find(marker).expect("cache-write client list");
+        let end = marker_at + marker.len();
+        let start = sql[..end].rfind("IN (").expect("IN list start") + "IN (".len();
+        let close = sql[end..].find(')').expect("IN list end") + end;
+        sql[start..close]
+            .split(',')
+            .map(|entry| entry.trim().trim_matches('\''))
+            .collect()
+    }
+
+    #[test]
+    fn counted_cache_write_sql_lists_exactly_the_semantics_flagged_clients() {
+        // 两处 SQL 字面量（analytics/sql.rs 与 analytics/requests.rs）必须与
+        // `cache_write_counts_in_total == true` 的客户端集合一致，避免口径漂移。
+        let mut expected: Vec<&str> = Client::ALL
+            .iter()
+            .filter(|client| semantics_for(**client).cache_write_counts_in_total)
+            .map(|client| client.as_str())
+            .collect();
+        expected.sort_unstable();
+        for source in [
+            include_str!("../analytics/sql.rs"),
+            include_str!("../analytics/requests.rs"),
+        ] {
+            let mut found = counted_cache_write_clients(source);
+            found.sort_unstable();
+            assert_eq!(
+                found, expected,
+                "counted cache-write client list drifted from TokenSemantics"
+            );
+        }
+    }
 }

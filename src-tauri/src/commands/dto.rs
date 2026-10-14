@@ -127,22 +127,9 @@ pub struct SessionQuery {
 }
 
 /// 已实现本地采集器的客户端；实际发现状态由逐客户端同步结果提供。
+/// 单一事实来源为 `Client::ALL`，避免新增客户端时两处漏改。
 pub fn is_supported(client: Client) -> bool {
-    matches!(
-        client,
-        Client::Codex
-            | Client::ClaudeCode
-            | Client::OpenCode
-            | Client::Dsh
-            | Client::KimiCode
-            | Client::MimoCode
-            | Client::PiDesktop
-            | Client::WorkBuddy
-            | Client::Copilot
-            | Client::GeminiCli
-            | Client::Grok
-            | Client::Mcode
-    )
+    Client::ALL.contains(&client)
 }
 
 /// token 分桶（互不重叠，可直接相加得到规范总量）。

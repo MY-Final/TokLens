@@ -12,6 +12,27 @@ use tauri::{AppHandle, Emitter, Manager};
 /// 同步开始、进度变化与结束时广播给前端的事件名。
 pub const SYNC_EVENT: &str = "usage-sync";
 
+/// 在后台同步线程结束时释放进程级同步标志（`activity.syncing`）。
+///
+/// 与作用域守卫等价：正常结束会触发，采集器 panic 导致线程展开时同样触发，
+/// 因此 `shutdown()` 与后续同步不会因一次失败而永久阻塞。用可测试的闭包承载
+/// 释放动作，生产路径传入 `AppHandle` 闭包，单测直接注入断言。
+struct FinishSyncGuard(Option<Box<dyn FnOnce() + Send + 'static>>);
+
+impl FinishSyncGuard {
+    fn new(release: impl FnOnce() + Send + 'static) -> Self {
+        Self(Some(Box::new(release)))
+    }
+}
+
+impl Drop for FinishSyncGuard {
+    fn drop(&mut self) {
+        if let Some(release) = self.0.take() {
+            release();
+        }
+    }
+}
+
 /// 触发一次全部客户端同步。已有同步在跑时直接返回当前状态（幂等）。
 ///
 /// 同步在后台线程执行，并使用**独立数据库连接**：WAL 模式下 UI 查询不会被同步阻塞。
@@ -93,6 +114,12 @@ fn request_sync_for(
 
 fn spawn_sync(app: AppHandle, force: bool, clients: Vec<Client>) {
     std::thread::spawn(move || {
+        // Drop guard releases the sync flag on every exit path, including a panic
+        // unwinding out of a collector. Dropped last, so the final event is emitted first.
+        let _finish = FinishSyncGuard::new({
+            let app = app.clone();
+            move || app.state::<AppState>().activity.finish_sync()
+        });
         let outcome = run_sync(&app, force, &clients);
         let state = app.state::<AppState>();
         {
@@ -127,8 +154,8 @@ fn spawn_sync(app: AppHandle, force: bool, clients: Vec<Client>) {
         }
         let dto = state.sync_state();
         let _ = app.emit(SYNC_EVENT, dto);
-        // Clear/exit must not overtake the final event and publish an older snapshot afterwards.
-        state.activity.finish_sync();
+        // Clear/exit must not overtake the final event and publish an older snapshot afterwards;
+        // `_finish` releases the flag when this closure returns or unwinds.
     });
 }
 
@@ -159,4 +186,34 @@ fn run_sync(app: &AppHandle, force: bool, clients: &[Client]) -> Result<SyncBatc
             let _ = app.emit(SYNC_EVENT, snapshot);
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FinishSyncGuard;
+    use crate::commands::activity::ActivityGate;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::sync::Arc;
+
+    #[test]
+    fn finish_guard_releases_the_sync_flag_while_unwinding() {
+        let gate = Arc::new(ActivityGate::default());
+        assert_eq!(gate.start_sync(), Ok(true));
+        assert_eq!(
+            gate.start_sync(),
+            Ok(false),
+            "an active scan blocks re-entry"
+        );
+        let worker = Arc::clone(&gate);
+        let outcome = catch_unwind(AssertUnwindSafe(move || {
+            let _finish = FinishSyncGuard::new(move || worker.finish_sync());
+            panic!("synthetic collector failure");
+        }));
+        assert!(outcome.is_err(), "the synthetic panic must unwind");
+        assert_eq!(
+            gate.start_sync(),
+            Ok(true),
+            "the flag is released even after a panic"
+        );
+    }
 }

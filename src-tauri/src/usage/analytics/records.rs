@@ -68,10 +68,15 @@ impl UsageStore {
                 options.request_time,
             ],
             |row| {
-                let client: String = row.get(0)?;
+                let client_id: String = row.get(0)?;
+                // 无法识别的客户端字符串（来自更新版本或外部数据）不得被伪装成其他客户端；
+                // 跳过该行，与 requests.rs 的 `if let Some` 处理保持一致。
+                let Some(client) = Client::parse(&client_id) else {
+                    return Ok(None);
+                };
                 let unknown: Option<String> = row.get(15)?;
-                Ok(SessionSummary {
-                    client: Client::parse(&client).unwrap_or(Client::Codex),
+                Ok(Some(SessionSummary {
+                    client,
                     client_session_id: row.get(1)?,
                     model: row.get(2)?,
                     project_path: row.get(3)?,
@@ -89,12 +94,14 @@ impl UsageStore {
                     unknown_relations: crate::usage::model::decode_unknown_relations(
                         unknown.as_deref(),
                     ),
-                })
+                }))
             },
         )?;
         let mut sessions = Vec::new();
         for row in rows {
-            sessions.push(row?);
+            if let Some(summary) = row? {
+                sessions.push(summary);
+            }
         }
         Ok(sessions)
     }

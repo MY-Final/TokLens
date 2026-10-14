@@ -27,9 +27,13 @@ impl UsageStore {
     }
 }
 
-/// Token 计数在库中以 i64 存储（SQLite 整数列），u64 不会出现在绑定参数里。
+/// Token 计数在库中以 i64 存储（SQLite 整数列）。超出 i64 上限的 u64 无法表达，
+/// 统一写 NULL（未知），与 `rollup.rs` / `request_ledger.rs` 的溢出即未知规则一致，
+/// 不用 `as i64` 静默回绕成负值。
 fn opt_i64(value: Option<u64>) -> Option<i64> {
-    value.map(|value| value as i64)
+    value
+        .filter(|value| *value <= i64::MAX as u64)
+        .map(|value| value as i64)
 }
 
 pub(super) fn upsert_source_file_conn(
@@ -297,4 +301,19 @@ pub(super) fn upsert_message_conn(
     } else {
         UpsertOutcome::Updated
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::opt_i64;
+
+    #[test]
+    fn token_counts_beyond_i64_are_stored_as_unknown_not_wrapped() {
+        assert_eq!(opt_i64(None), None);
+        assert_eq!(opt_i64(Some(0)), Some(0));
+        assert_eq!(opt_i64(Some(12_345)), Some(12_345));
+        assert_eq!(opt_i64(Some(i64::MAX as u64)), Some(i64::MAX));
+        assert_eq!(opt_i64(Some(i64::MAX as u64 + 1)), None);
+        assert_eq!(opt_i64(Some(u64::MAX)), None);
+    }
 }

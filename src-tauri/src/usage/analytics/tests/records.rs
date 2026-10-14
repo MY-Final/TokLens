@@ -244,6 +244,34 @@ fn source_diagnostics_keep_zero_usage_known_and_exclude_estimated_or_untimed_req
 }
 
 #[test]
+fn session_list_skips_rows_with_unrecognized_client_ids() {
+    let store = UsageStore::open_in_memory().expect("store");
+    store
+        .conn
+        .execute(
+            "INSERT INTO sessions
+                (id, client, client_session_id, semantics_id, total_basis, message_coverage,
+                 source_kind, cost_source, imported_at_ms, updated_at_ms)
+             VALUES ('future:1', 'future_client', 'future-1', 'future.usage.v1',
+                     'sum_of_messages', 'complete', 'measured', 'none', 0, 0)",
+            [],
+        )
+        .expect("synthetic unrecognized client");
+    let sessions = store
+        .session_summaries(
+            &AnalyticsFilter::default(),
+            &SessionListOptions::default(),
+            50,
+            0,
+        )
+        .expect("sessions");
+    assert!(
+        sessions.is_empty(),
+        "unrecognized clients are skipped, not relabeled as codex"
+    );
+}
+
+#[test]
 fn session_pagination_reaches_beyond_two_hundred_with_stable_ties() {
     let store = UsageStore::open_in_memory().expect("store");
     for index in 0..205 {

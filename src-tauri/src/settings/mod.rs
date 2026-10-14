@@ -98,8 +98,8 @@ impl SettingsStore {
     ) -> Result<SettingsSnapshot, String> {
         let mut inner = self.lock()?;
         let mut document = inner.document.clone();
+        // `change`（经 `AppSettings::patched`）已在应用补丁时校验，无需重复校验。
         document.settings = change(&document.settings)?;
-        document.settings.validate()?;
         Self::save(&inner.path, &document)?;
         inner.document = document;
         inner.warning = None;
