@@ -34,6 +34,15 @@
 
 `collectors/sync` 通过回调报告实际处理的数据源数、总数与当前客户端；command 存入现有同步状态并复用 `usage-sync` 广播，查询状态也携带同一进度用于轮询兜底。仅统计本轮启用的客户端；缺失与失败来源仍算已处理，失败继续沿用独立报告。前端复用 shadcn Progress，在主工具栏与数据源页显示进度；进度事件只更新内存状态，结束后重读来源与统计，不在每次进度变化时查询数据库。无新依赖、目录、权限、网络能力、迁移或统计口径变更。
 
+### Cline 接入决策（2026-10-20）
+
+新增 `collectors/cline/`，按 discovery / parser / rollup / sync / tests 拆分；纯归一化位于 `usage/normalize/cline.rs`。
+客户端标识为 `cline`，语义 ID 为 `cline.messages.v1`；客户端集合由十二个扩展为十三个，不新增数据库表或依赖。
+只读 `~/.cline/data/sessions/<sessionId>/` 下的会话清单与消息文件（目录根按 Cline 自身的 `CLINE_SESSION_DATA_DIR` > `CLINE_DATA_DIR/sessions` > `CLINE_DIR/data/sessions` > `~/.cline/data/sessions` 解析）；不读 `db/sessions.db`（只有会话索引，无独立 Token 账本）、不读 `hooks.jsonl`、不读正文与系统提示词。
+会话总量取清单 `metadata.usage`（会话自身累计值），**不叠加** `metadata.aggregateUsage`：后者含子代理用量，而子代理有独立会话目录，相加会重复计数。逐轮明细求和与累计值不一致时保留累计值并把明细标记为 `partial`。
+一条用量明细对应一轮调用而不是单次 HTTP 请求，界面与文档都按"轮"表述；落盘格式不提供推理计数，客户端也不自报总量，规范总量由四个互不重叠的分桶换算。
+复用已登记 LobeHub `Cline` 单色本地图标，新增 `client-cline` 身份色（`oklch(0.48 0.12 140)` / `oklch(0.76 0.18 140)`），已通过 `pnpm color:check` 的 L0 校验；不新增运行时依赖、权限或网络访问。
+
 ### Gemini CLI / Grok CLI / MCode 接入决策（2026-10-13）
 
 新增 `collectors/gemini_cli/`、`collectors/grok/`、`collectors/mcode/`，各按 discovery / parser / sync / tests 拆分；纯归一化位于 `usage/normalize/{gemini_cli,grok,mcode}.rs`。
@@ -153,7 +162,7 @@ DSH（deepseek-hermes）新增 `collectors/dsh/`：只读 `~/.dsh/sessions/**/se
 已落地：Rust 侧的统一用量数据模型与本地 SQLite 存储（`src-tauri/src/usage/`）、Codex 采集器
 （`src-tauri/src/collectors/codex/`）、Tauri command 层（`src-tauri/src/commands/`），以及前端总览界面
 （`src/pages/`，侧边导航：总览 / 用量分析 / 会话明细 / 数据源管理）。
-Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode 采集器已接入；费用换算未实现（不展示统一金额）。
+Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode、Cline 采集器已接入；费用换算未实现（不展示统一金额）。
 新增架构组件时按第 8 节的 ADR 登记。
 
 ## 2. 分层与依赖方向
@@ -164,7 +173,7 @@ Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、G
 React pages / hooks ──→ lib/api.ts ──→ Tauri commands
 React components ────→ lib/usage-types.ts (纯 DTO 类型)
 commands/queries + request_queries ────→ usage/analytics ──→ usage/store
-commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy / copilot / gemini_cli / grok / mcode
+commands/sync ───────→ collectors/sync ──→ codex / claude_code / opencode / dsh / kimi_code / mimocode / pi_desktop / workbuddy / copilot / gemini_cli / grok / mcode / cline
 collectors/codex/sync ──→ discovery / parser / thread
 collectors/codex/parser + thread ──→ usage/normalize
 collectors/codex/sync ──→ usage/store (只写 TokLens 自有库)
@@ -205,7 +214,7 @@ usage/tokens ────────→ usage/client
 | ------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `get_overview_stats`     | `fromMs` / `toMs` / `todayFromMs` / `client`                         | 区间与今日的会话数、明细数、token 分桶、未知/不完整计数                 |
 | `get_daily_token_trend`  | `fromMs` / `dayCount` / `dayStartMs?` / `toMs?` / `client`           | 每日分桶（缺失日期补 0）                                                |
-| `get_client_usage`       | `fromMs` / `toMs`                                                    | 十二个客户端的会话/明细/token 与后端占比（支持不等于已发现数据）        |
+| `get_client_usage`       | `fromMs` / `toMs`                                                    | 十三个客户端的会话/明细/token 与后端占比（支持不等于已发现数据）        |
 | `get_rankings`           | `fromMs` / `toMs` / `client` / `limit`                               | 模型与项目排行                                                          |
 | `get_sessions`           | `args: SessionQuery`                                                 | 会话元数据搜索、精确模型 / 项目筛选、开始 / 请求时间筛选与稳定分页排序  |
 | `get_request_analysis`   | `fromMs` / `toMs` / `client`                                         | 完整区间客户端对比、已知请求均量、缓存命中及模型 / 项目归因             |
@@ -361,6 +370,7 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | `collectors/kimi_code/`   | 会话目录发现、v2 / 旧版元数据、wire 1.4 / 1.5 白名单解析与原子快照同步                                                                                                                                                             |
 | `collectors/mimocode/`    | SQLite WAL 只读事务、统计白名单投影、排除外部导入与快照替换                                                                                                                                                                        |
 | `collectors/pi_desktop/`  | schema 1 JSONL 白名单、物理操作账本 / legacy 残差、指纹与原子快照                                                                                                                                                                  |
+| `collectors/cline/`       | 会话目录发现、清单 / 消息文件类型化投影、清单与逐轮明细合成、原子快照同步                                                                                                                                                          |
 | `collectors/` 公共模块    | `files` 发现与指纹；`sqlite_snapshot` 只读 SQLite/WAL 内存快照；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                                                                                       |
 | `commands/`               | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验                                                                                                     |
 | `src/lib/usage-types.ts`  | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                                                                                                                      |
@@ -438,9 +448,10 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 
 ### AI 品牌图标（2026-10-11）
 
-| 日期       | 决策                                                                  | 状态   | 理由 / 影响                                |
-| ---------- | --------------------------------------------------------------------- | ------ | ------------------------------------------ |
-| 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文 |
+| 日期       | 决策                                                                                                                  | 状态   | 理由 / 影响                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现                                                 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文                                                     |
+| 2026-10-20 | 接入 Cline：新增 `collectors/cline/` 与 `usage/normalize/cline.rs`，注册 `client-cline` 身份色与 LobeHub `Cline` 图标 | 已采纳 | 复用既有完整快照与去重机制，不新增依赖、权限、联网或费用换算；子代理累计值不叠加，避免重复计数 |
 
 按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
 由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode`、`DeepSeek`（DSH）的单色 SVG 组件。

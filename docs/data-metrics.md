@@ -80,14 +80,14 @@
 
 | 指标                   | 单位  | 时间范围 | 等级                   | 计算方式                                                                                    | 状态                                 |
 | ---------------------- | ----- | -------- | ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
-| 会话数                 | 个    | 选定区间 | measured               | 去重后的 `session_id` 数量                                                                  | 十二客户端采集与查询已实现           |
-| 请求数                 | 次    | 选定区间 | measured               | 事件条数（去重后）                                                                          | 十二客户端采集与查询已实现           |
-| 输入 token             | token | 选定区间 | measured / derived     | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 十二客户端采集与查询已实现           |
-| 输出 token             | token | 选定区间 | measured / derived     | 非推理输出分桶求和（Codex / DSH 扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现         | 十二客户端采集与查询已实现           |
-| 缓存 token             | token | 选定区间 | measured               | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 十二客户端采集与查询已实现           |
+| 会话数                 | 个    | 选定区间 | measured               | 去重后的 `session_id` 数量                                                                  | 十三客户端采集与查询已实现           |
+| 请求数                 | 次    | 选定区间 | measured               | 事件条数（去重后）                                                                          | 十三客户端采集与查询已实现           |
+| 输入 token             | token | 选定区间 | measured / derived     | 未命中缓存的输入分桶求和（Codex 需扣除 `cache_read`）                                       | 十三客户端采集与查询已实现           |
+| 输出 token             | token | 选定区间 | measured / derived     | 非推理输出分桶求和（Codex / DSH 扣除 `reasoning`）；缺失保持未知，第 7 节估算未实现         | 十三客户端采集与查询已实现           |
+| 缓存 token             | token | 选定区间 | measured               | `cache_read_tokens` / `cache_write_tokens` 独立分桶；`cache_write` 是否计入总量按客户端口径 | 十三客户端采集与查询已实现           |
 | 成本                   | USD   | 选定区间 | measured（客户端自报） | 仅 OpenCode 客户端自报值；TokLens 价格换算未实现（见 `docs/data-model.md` 第 6 节）         | OpenCode 自报值已采集；UI 金额未开放 |
 | 活跃时长               | 小时  | 选定区间 | estimated              | 相邻事件间隔去尾求和（见第 7 节）                                                           | 未实现                               |
-| 按客户端/模型/项目分布 | %     | 选定区间 | derived                | 已知规范用量（measured / derived，排除 estimated）子集 ÷ 已知总量                           | 十二客户端采集与查询已实现           |
+| 按客户端/模型/项目分布 | %     | 选定区间 | derived                | 已知规范用量（measured / derived，排除 estimated）子集 ÷ 已知总量                           | 十三客户端采集与查询已实现           |
 
 已接入 Codex、Claude Code、OpenCode、DSH、Kimi Code、MiMoCode、Pi Desktop、WorkBuddy、GitHub Copilot、Gemini CLI、Grok CLI、MCode。新采集器的格式、快照 / 去重与限制见 `data-model.md` 第 10–17 节。
 默认使用请求时间口径，详见第 9 节 2.3；保留的会话累计口径按会话开始时间过滤，
@@ -207,7 +207,7 @@ Pi Desktop input / 两个缓存独立，reasoning 包含于 output；物理 oper
 6. **可清除**：设置页提供统计缓存清除：等待当前扫描结束后，事务删除 messages / sessions / source_files，保留迁移、设置和客户端原始数据。清除前持久化暂停采集，重启保持暂停；用户恢复后可从原记录幂等重建。
 7. **导出**：导出属于用户显式操作，导出内容默认不含会话正文，并提示文件名与保存位置。
 
-采集控制（2026-10-11）：十二个客户端独立启停，停用仅停止未来采集，不过滤或删除历史统计。
+采集控制（2026-10-11）：十三个客户端独立启停，停用仅停止未来采集，不过滤或删除历史统计。
 默认启动采集及每 5 分钟后台采集；间隔可为关闭 / 1 / 5 / 15 / 30 分钟。暂停优先于启动、定时和手动采集。
 同一时间仅允许一个扫描；恢复系统休眠后最多触发一次，不补跑积压任务。此行为不修改 Token 口径，版本仍为 1.3。
 
@@ -363,3 +363,13 @@ Codex parser_version 升到 2，下一次同步自动重读原日志，历史展
 - 模型 NULL 保持未知，不回读 messages/llm-call/manifest 补造归属；只使用 SQLite 账本，正文 activeRevision/generation 不参与采集，因此不跨多代重复计数。cost/raw/正文不读取、不换算。
 - 主库只读样本 1会话/17请求：input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770；17模型均NULL。客户端 fresh/goal summary 为67544，明确排除缓存，差814226来自口径，不能把它当完整用量。最终 WAL 可见对账在验收后登记，不把主库数字冒充 WAL 结果。
 - 三客户端采用原子完整快照：重复同步幂等，稳定成功扫描可反映修正/删除；源缺失、格式失败、扫描变化不推进水位或删除历史。单客户端失败不阻塞其他来源。无迁移、依赖、权限、联网、费用或估算新增；旧客户端历史规则不变。
+
+### 口径 2.13（2026-10-20）：Cline 会话清单与逐轮明细
+
+- `cline.messages.v1`，只读 `~/.cline/data/sessions/<sessionId>/` 下的清单 `<sessionId>.json` 与消息文件 `<sessionId>.messages.json`（格式版本 1）；目录根按 Cline 自身的 `CLINE_SESSION_DATA_DIR` > `CLINE_DATA_DIR/sessions` > `CLINE_DIR/data/sessions` > `~/.cline/data/sessions` 解析。不读 `db/sessions.db`（仅会话索引，无独立 Token 账本）、不读 `hooks.jsonl`、不读正文与系统提示词。
+- 字段关系：清单 `metadata.usage` 与消息 `metrics` 的 `inputTokens` 都已包含缓存读写（客户端用 `tokensIn = inputTokens − cacheRead − cacheWrite` 生成旧口径汇总），`outputTokens` 已在写盘前扣掉推理且客户端不提供独立推理计数。归一化后 `input = input − cacheRead − cacheWrite`、`output = output`、`reasoning = NULL`、`cache_read`、`cache_write` 四桶互不重叠，规范总量等于客户端的 `input + output`（`derived_from_buckets`）。缓存写入计入总量，计入的是被扣除后的那一份，不会与输入重复。
+- 会话总量取清单 `metadata.usage`（会话自身累计值，`client_cumulative`），**不使用** `metadata.aggregateUsage`：后者还包含子代理用量，而子代理有独立会话目录，把两者相加会重复计数。清单累计值缺失时才回退到逐轮明细求和（`sum_of_messages`）。
+- 去重：会话键为客户端会话 id，消息键为落盘消息 `id`（`sessionId + message id`）。一条用量明细对应一轮调用（Cline 把该轮 `metrics` 写在最后一条 assistant 消息上），**不是**单次 HTTP 请求；重试与同轮多次模型调用无法逐次拆开，因此不宣称覆盖全部物理请求。
+- 明细求和与清单累计值不一致时，会话总量仍取客户端累计值，`message_coverage = partial` 并记录 `cline.detail_mismatch`；没有消息文件时 `message_coverage = none`，总量仍来自清单。落盘文件若出现当前格式不提供的推理计数，该条记录总量置 NULL 并记录 `cline.reasoning_unverified`，不猜测推理与输出的关系。
+- 本机只读样本（Cline 4.1.25）1 会话 / 10 条用量记录：客户端 input167871（含 cacheRead142776、cacheWrite0）、output3460；归一化后未缓存 input25095、cache_read142776、cache_write0、output3460，规范总量 171331 = 客户端 input + output。逐条求和与清单累计值完全一致，`message_coverage = complete`。子代理、缓存写入非零与多会话聚合关系本机尚无样本，未验证前不外推。
+- 采集为原子完整快照：重复同步幂等，源文件被改写不发布快照，读失败的文件不推进水位并保留历史数据，单个客户端失败不阻塞其他来源。无迁移、新依赖、新权限、联网、费用或估算新增；旧客户端历史规则不变。

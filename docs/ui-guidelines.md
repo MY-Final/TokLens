@@ -188,7 +188,7 @@ TokLens 是长时间驻留的桌面工具型应用：界面应安静、克制、
 
 ### Codex 总览重构（2026-10-11）
 
-顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持十二客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
+顶部同步状态用 outline Badge 与 ghost Button，四项指标使用等宽数字及实测辅助信息（未实现同比接口时不伪造涨跌）。趋势用 shadcn ChartTooltipContent，支持十三客户端对比与按客户端口径归一化的 Token 构成切换，明确时间区间、本地时区、精确 Token 和口径。客户端分布采用 shadcn Progress；模型和项目排行使用 Table，条形仅表示相对榜首大小，不宣称全局占比。
 
 业务组件通过 props 消费 `src/lib/usage-types.ts` 中的纯 DTO 类型；页面 / Hook 调用 `src/lib/api.ts` 获取数据。
 展示组件与纯格式化工具不依赖 Tauri 运行时，统计规则继续由 Rust 提供。
@@ -213,7 +213,7 @@ DSH 使用已有 LobeHub DeepSeek 标识与 `client-dsh` 语义色，文本标�
 
 Kimi Code 使用已有 LobeHub `Kimi` 单色图标和 `client-kimi` 蓝色语义 token；所有筛选、分布、趋势与来源页统一使用 `kimi_code` 标识。未发现来源时显示未发现，不以 0 伪造已连接状态。
 
-MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。十二客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
+MiMoCode 使用 LobeHub `XiaomiMiMo` 和 `client-mimo` 橙色；Pi Desktop 使用 lucide `TerminalSquare` 和 `client-pi` 紫色。图标库的 `Pi` 表示 Inflection AI，不能用于此客户端。十三客户端图例允许自动换行，筛选菜单继续使用触发器下方对齐的 `FilterSelectContent`。
 
 ### 采集的部分失败状态
 
@@ -294,9 +294,17 @@ Agent Host 整轮用量显示在会话视图；请求视图只显示独立调用
 
 Copilot 桌面验收（2026-10-12）：以独立应用标识运行 pnpm tauri dev，只开启 Copilot 来源；实际只读导入 3 个会话、0 条用量，来源路径正确且无解析失败。今天空态、全部范围的未知 Token 会话、Copilot 筛选、元数据详情、来源状态和加载态均正常；本机无正数用量样本，正数分桶通过合成 Rust 测试验证。
 
+### Cline 展示（2026-10-20）
+
+Cline 使用 LobeHub `Cline` 单色本地图标与 `client-cline` 身份色（亮 `oklch(0.48 0.12 140)` / 暗 `oklch(0.76 0.18 140)`），标签显示 Cline；筛选、图例、分布、趋势、会话详情与来源开关统一使用 `cline` 标识。
+新安装默认启用十三个来源；已有设置保留原启停选择，Cline 可在数据源管理手动开启。
+一条用量明细对应一轮调用而不是单次 HTTP 请求，来源页与说明文案按"轮"表述，不把轮级明细说成独立模型调用。
+会话总量取客户端累计值；缓存读写都包含在客户端输入内，界面不把缓存再次加到输入上，明细与累计值不一致时按既有"明细不完整"提示展示，不静默改数。
+Token 构成按口径把计入总量的缓存写入计入 Cline（缓存写入已从输入中扣除，不会重复）；缺失与未知项沿用现有显式提示；不新增估算值或费用。
+
 ### Gemini CLI / Grok CLI / MCode 展示（2026-10-13）
 
-来源页、会话筛选、趋势、热力图与模型用量统一支持十二客户端；ClientIdentity 使用既有 LobeHub GeminiCLI / Grok / Minimax 本地图标与 client-gemini / client-grok / client-mcode 语义色，不加载远程资源。
+来源页、会话筛选、趋势、热力图与模型用量统一支持十三客户端；ClientIdentity 使用既有 LobeHub GeminiCLI / Grok / Minimax 本地图标与 client-gemini / client-grok / client-mcode 语义色，不加载远程资源。
 新安装默认启用十二来源；已有设置保留原启停选择，新增来源由用户手动开启，不重置其它偏好。客户端分析 Tab 保持单行横向滚动及下划线激活。
 Grok 来源页、请求总览、模型分析和会话详情直接提示“请求数表示轮数，均量为每轮 Token”；全部客户端包含 Grok 时仍提示，不能把轮数称为独立模型调用数。明细未提供调用拆分时显示 partial。
 Gemini 未确认工具用量不冒充 cache_write，来源提示分项可能不等于自报总量；MCode 模型缺失为 —，推理关系无法确认则输出与总量保持未知。来源等级、未知、未解析记录和失败文件沿用现有显式提示；不新增估算值或费用。

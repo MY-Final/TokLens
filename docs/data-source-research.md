@@ -1,6 +1,6 @@
-# 数据来源调研：十二个本地 AI 编程客户端
+# 数据来源调研：十三个本地 AI 编程客户端
 
-本文记录 TokLens 分阶段调研工作的**实际结果**：十二个客户端（分阶段补充）在本机（Windows）落地的本地用量数据来源、文件格式、
+本文记录 TokLens 分阶段调研工作的**实际结果**：十三个客户端（分阶段补充）在本机（Windows）落地的本地用量数据来源、文件格式、
 可获取字段、口径与限制。所有结论均来自本机真实数据的只读检查，未联网核实官方文档。
 
 ## 0. 调研方法与合规说明
@@ -250,7 +250,7 @@
 4. **旧版 JSON 存储已迁移**：本机没有历史 JSON 存储可读；若目标机器是旧版本 OpenCode，需要额外适配 `storage/session|message|part` 目录结构（本机无样本，**未验证**）。
 5. **`event` 表覆盖不全**（仅 2 个聚合），不能作为增量水位；应使用 `session.time_updated` 与 `message.time_updated`。
 
-## 5. 字段可得性总结（十二个客户端；本节为初始 Codex / Claude Code / OpenCode 三客户端对照）
+## 5. 字段可得性总结（十三个客户端；本节为初始 Codex / Claude Code / OpenCode 三客户端对照）
 
 | 能力             | Codex                                                     | Claude Code                                          | OpenCode                             |
 | ---------------- | --------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
@@ -450,3 +450,14 @@ cacheCreation无正样本，headless projector的独立cache creation语义不�
 缓存正样本：主库17请求中16条cache_read>input；全部reasoning/cache_write为0，17模型均NULL。reasoning的非零包含关系未确认，不能把hasUsage的五桶“是否非空”判断冒充total契约；非零/缺失reasoning时output与total未知。
 主库时点统计：1会话/17请求，input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770。usage/repo/drizzle.js:132–136的fresh/goal summary total=input+output+reasoning、排除缓存，67544与TokLens差814226是已解释口径差，不是重复计数。
 当时WAL非空，上述仅immutable主库研究值；最终运行对账使用collectors/sqlite_snapshot.rs校验已提交WAL内存镜像。SQLite账本无需正文activeRevision/generation，不复制多代历史、不回读正文补NULL模型。源主库/WAL/SHM只读，测试全部合成。
+
+## Cline — 会话清单与逐轮明细（2026-10-20）
+
+本机安装 Cline 4.1.25（VS Code 扩展 `saoudrizwan.claude-dev-4.1.25`，`dist/extension.js`）。只读 `~/.cline/data/sessions/<sessionId>/` 下的会话清单与消息文件，以及安装包内的目录解析与用量换算契约；不读会话正文、系统提示词、工具参数与 `db/sessions.db` 的正文列。
+目录解析（安装包内 `nv()` / `dL()` / `xJ()`）：`CLINE_SESSION_DATA_DIR` > `CLINE_DATA_DIR/sessions` > `CLINE_DIR/data/sessions` > `~/.cline/data/sessions`；SQLite 索引在 `CLINE_DB_DATA_DIR`（默认 `<data>/db`），只含会话索引与父子关系，没有独立 Token 账本，因此不作为用量来源。
+清单 `<sessionId>.json`：`session_id`、`started_at` / `ended_at`（UTC `Z`）、`provider`、`model`、`cwd` / `workspace_root`，以及 `metadata.usage`（`inputTokens` / `outputTokens` / `cacheReadTokens` / `cacheWriteTokens`）与 `metadata.aggregateUsage`（含子代理）。
+消息文件 `<sessionId>.messages.json`（格式版本 1，`sdk/packages/core/docs/messages-contract-v1.md`）：每轮只有**最后一条 assistant 消息**带 `metrics`（`inputTokens` / `outputTokens` / `cacheReadTokens` / `cacheWriteTokens` / `cost`）与 `modelInfo.id`；`origin.parentThreadId` 给出父子会话；`agent` 取 `lead` / `subagent` / `teammate`。
+字段关系（安装包证据）：客户端用 `tokensIn = inputTokens − cacheRead − cacheWrite` 生成旧口径汇总，说明缓存读写都在 `inputTokens` 内；换算输出时先扣掉推理再写盘（`outputTokens: Math.max(0, v.outputTokens − b)`），且不落盘独立推理计数，所以 `outputTokens` 是不含推理的文本输出。`inputTokenDetails` 同样把 `noCache` / `cacheRead` / `cacheWrite` 列为 `inputTokens.total` 的分项。
+聚合语义（安装包证据）：`usage` 为会话自身累计值，`aggregateUsage = usage + 各子代理用量`，子代理另有独立会话目录；因此统计只用 `usage`，绝不再叠加 `aggregateUsage`。
+时点样本（1 会话 / 10 条用量记录，模型 `cline-free/minimax-m3.1-flash`）：客户端 input167871（含 cacheRead142776、cacheWrite0）、output3460；逐条求和与清单累计值完全一致。归一化后未缓存 input25095、cache_read142776、cache_write0、output3460，规范总量 171331 = 客户端 input + output。
+限制：一条用量明细对应一轮调用而非单次 HTTP 请求，重试与同轮多次模型调用无法逐次拆开；落盘格式不含推理计数，客户端也不自报总量；本机没有子代理与非零缓存写入样本，相关关系尚未本机验证。

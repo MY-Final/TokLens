@@ -41,6 +41,7 @@
 | Gemini CLI  | `gemini_cli.response.v1`         | 包含（安装包契约）        | 独立                      | 不提供                       | 是（保留客户端 total；tool 关系未知）                   |
 | Grok CLI    | `grok.turn.v1`                   | 包含（正样本与展示契约）  | 包含（正样本与展示契约）  | 未知、不计入                 | 是（会话与轮级 totalTokens）                            |
 | MCode       | `mcode.request.v1`               | 独立                      | 未知                      | 独立、计入                   | 否（reasoning 明确为 0 时四桶换算）                     |
+| Cline       | `cline.messages.v1`              | 包含（子集）              | 客户端不提供              | 包含（子集）、计入           | 否（由四个互不重叠的分桶换算）                          |
 
 由此得到的**互不重叠分桶**（任意两项相加都不会重复计入同一批 token）：
 
@@ -55,6 +56,7 @@
 规范总量 `total_tokens`：
 
 新增客户端规范分桶：Gemini input=input−cached、output=output、reasoning=thoughts、cache_read=cached、cache_write=NULL；tool 没有已验证对应桶，不冒充缓存写入。Grok input=inputTokens−cachedReadTokens、output=outputTokens−reasoningTokens；两者缺少拆分字段或扣除矛盾时为 NULL；缓存写入只保留自报值且不计入总量。MCode input/两缓存保持独立；reasoning 明确为 0 时保留 output，否则 output=NULL，不能把未知输出关系画成可相加的桶。三者均保留缺失与实测零的区别。
+Cline input=input−cacheRead−cacheWrite、output=output（客户端写盘前已扣掉推理）、reasoning=NULL、cache_read=cacheRead、cache_write=cacheWrite（计入总量）：缓存读写都在输入内，扣除后四个桶互不重叠，规范总量等于客户端的 input+output。
 
 1. 客户端提供总量时（Codex、OpenCode、MiMoCode、Pi Desktop、WorkBuddy、Gemini CLI、Grok CLI）直接采用客户端值（`total_basis = client_reported`），
    并与分桶求和做一致性校验，不一致时置 `client_total_mismatch = 1`，不静默修正。
@@ -62,6 +64,7 @@
 3. 必需分桶缺失（NULL）时总量为 `NULL`（`total_basis = unavailable`）并记录未知项，**不把缺失当 0**。
 4. `cache_write` 是否计入总量由口径决定：Codex/OpenCode 的客户端总量本身不含它，故不计入且标注未知；
    Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop 的 cache_write 与 input 独立，故计入。Copilot CLI 原生缓存已含于输入，拆分后计入；DSH 缓存字段省略时按协议默认 0，详见第 10 节。
+   Cline 的 cache_write 同样含于输入：口径把它从 input 中扣除后再计入总量，保证缓存写入既不被漏掉也不被重复计入。
 
 ## 2. 未确认的语义（明确标注，不推断）
 
@@ -72,32 +75,36 @@
 | `reasoning.missing`                                           | 客户端未提供 `reasoning`，无法把 output 拆成"非推理"部分                               | 同上                                                   |
 | `total.unavailable_due_to_missing_fields`                     | 字段缺失导致总量未知                                                                   | `total_tokens` 为 NULL                                 |
 | `anomaly.cache_read_gt_input` / `anomaly.reasoning_gt_output` | 与声明的包含关系矛盾的数据                                                             | 分桶取 0 并标注，不 panic、不回绕                      |
+| `cline.detail_mismatch`                                       | 逐轮明细求和与清单累计值不一致（客户端尚未落盘或历史被截断）                           | 会话总量仍取客户端累计值，`message_coverage = partial` |
+| `cline.reasoning_unverified`                                  | 落盘文件出现了当前格式不提供的推理计数，字段关系需要重新确认                           | 该条记录总量置为 NULL，不猜测                          |
+| `anomaly.cache_write_gt_input`                                | `cache_write` 大于扣除缓存读取后的输入，与声明的包含关系矛盾                           | 分桶取 0 并标注，不 panic、不回绕                      |
 
 ## 3. 去重标识
 
-| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                         | 说明                                                                                                  |
-| ----------- | --------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id` → `token_count:<ordinal>` → 累计快照 → 文件行号 | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节 |
-| Claude Code | `sessionId`                                         | `message.id`                                                  | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                     |
-| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                                  | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**             |
-| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                            | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                          |
-| Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                         | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                |
-| MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                |
-| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                    |
-| WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                               |
-| Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                           | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                          |
-| Gemini CLI  | `sessionId`                                         | 最终 `gemini.id`                                              | 日志回放全记录替换、$set.messages 全量替换与 $rewindTo 后去重；会话镜像择一                           |
-| Grok CLI    | `usage.sessionId`                                   | `turnNumber`                                                  | 轮级快照，不把 modelCalls 展开为虚构独立调用；session 与 turns 不相加                                 |
-| MCode       | `local_runtime_sessions.session_id`                 | `local_runtime_token_usage.id`                                | 主键标识物理请求，同 turn 多次调用不合并；不读取正文 revision                                         |
+| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                         | 说明                                                                                                                      |
+| ----------- | --------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id` → `token_count:<ordinal>` → 累计快照 → 文件行号 | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节                     |
+| Claude Code | `sessionId`                                         | `message.id`                                                  | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                                         |
+| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                                  | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**                                 |
+| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                            | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                                              |
+| Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                         | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                                    |
+| MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                                    |
+| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                                        |
+| WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                                                   |
+| Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                           | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                                              |
+| Gemini CLI  | `sessionId`                                         | 最终 `gemini.id`                                              | 日志回放全记录替换、$set.messages 全量替换与 $rewindTo 后去重；会话镜像择一                                               |
+| Grok CLI    | `usage.sessionId`                                   | `turnNumber`                                                  | 轮级快照，不把 modelCalls 展开为虚构独立调用；session 与 turns 不相加                                                     |
+| MCode       | `local_runtime_sessions.session_id`                 | `local_runtime_token_usage.id`                                | 主键标识物理请求，同 turn 多次调用不合并；不读取正文 revision                                                             |
+| Cline       | 清单 / 消息文件的 `session_id`                      | 落盘消息 `id`                                                 | 会话键取客户端会话 id；一条用量明细对应一轮调用，不是单次 HTTP 请求；子代理有独立会话，不与父会话的 `aggregateUsage` 相加 |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
-- `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）。
+- `client_cumulative`：Codex，取该线程的累计值最大值（新旧两个累计计数器取最大，见第 8 节）；Cline 取清单 `metadata.usage` 的会话累计值（不含子代理），缺失时才回退到明细求和。
 - `client_reported`：OpenCode / Grok CLI，直接使用会话聚合列；Copilot Agent Host 在 CLI 求和基础上覆盖为 `client_reported`。
 - `sum_of_messages`：Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI / Gemini CLI / MCode，由去重后的消息求和得出。
 
 `sessions.message_coverage` 记录请求明细完整度：Codex 的
-分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI / Gemini CLI / MCode 按完整扫描汇总；OpenCode 由会话聚合与请求明细的已知总量校验、Grok CLI 由轮次计数对应关系校验，无法确认时标记 `partial`；Copilot Agent Host 明细始终为 `partial`，会话总量与请求求和可以不同。
+分页/续接文件（`ordinal` 不从 0 开始）标记为 `partial`，明细不完整但会话总量仍取累计值；Claude Code / DSH / Kimi Code / MiMoCode / Pi Desktop / WorkBuddy / Copilot CLI / Gemini CLI / MCode 按完整扫描汇总；Cline 逐轮明细求和与清单累计值一致时为 `complete`，不一致时为 `partial`（总量仍取客户端累计值），没有消息文件时为 `none`；OpenCode 由会话聚合与请求明细的已知总量校验、Grok CLI 由轮次计数对应关系校验，无法确认时标记 `partial`；Copilot Agent Host 明细始终为 `partial`，会话总量与请求求和可以不同。
 
 ## 4. SQLite 表结构（v1）
 
@@ -109,14 +116,14 @@
 
 ### `source_files`（增量同步水位）
 
-| 列                        | 说明                                                   |
-| ------------------------- | ------------------------------------------------------ |
-| `client` / `path`         | 唯一约束 `(client, path)`                              |
-| `kind`                    | `jsonl`（文本 JSON 家族，含 state sidecar） / `sqlite` |
-| `size_bytes` / `mtime_ms` | 上次扫描时的文件特征，用于判断是否变化                 |
-| `content_offset`          | 已消费字节偏移；Codex 当前用于变化判定，不用于追加续读 |
-| `parser_version`          | 解析器版本，变化时应重新解析                           |
-| `unparsed_records`        | 未识别记录数，供 UI 提示（不静默丢弃）                 |
+| 列                        | 说明                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| `client` / `path`         | 唯一约束 `(client, path)`                                                     |
+| `kind`                    | `jsonl`（文本 JSON 家族，含 state sidecar 与单文档 JSON 会话文件） / `sqlite` |
+| `size_bytes` / `mtime_ms` | 上次扫描时的文件特征，用于判断是否变化                                        |
+| `content_offset`          | 已消费字节偏移；Codex 当前用于变化判定，不用于追加续读                        |
+| `parser_version`          | 解析器版本，变化时应重新解析                                                  |
+| `unparsed_records`        | 未识别记录数，供 UI 提示（不静默丢弃）                                        |
 
 ### `sessions`（统计总量的唯一事实来源）
 
