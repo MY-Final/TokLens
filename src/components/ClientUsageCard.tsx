@@ -75,7 +75,7 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
       <CardHeader className="gap-1.5 px-5">
         <CardTitle className="text-sm">客户端用量分布</CardTitle>
         <CardDescription className="text-xs">
-          {props.basis === "requests" ? "按请求时间" : "按会话开始日"} · 已知 Token 占比
+          {props.basis === "requests" ? "按请求时间" : "按请求时间归集"} · 已知 Token 占比
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5">

@@ -6,12 +6,16 @@ fn daily_exact_range_filters_sessions_and_requests_with_independent_buckets() {
     let from = ms("2026-10-05T10:30:00.000Z");
     // An inclusive minute selection ends immediately before this exclusive boundary.
     let to = ms("2026-10-06T11:46:00.000Z");
-    for (id, at) in [
-        ("before", from - 1),
-        ("start", from),
-        ("last-minute", to - 1),
-        ("end", to),
-        ("outside-buckets", ms(D0) + 4 * 86_400_000),
+    for (id, at_iso, at) in [
+        ("before", "2026-10-05T10:29:00.000Z", from - 60_000),
+        ("start", "2026-10-05T10:30:00.000Z", from),
+        ("last-minute", "2026-10-06T11:45:00.000Z", to - 60_000),
+        ("end", "2026-10-06T11:46:00.000Z", to),
+        (
+            "outside-buckets",
+            "2026-10-09T00:00:00.000Z",
+            ms(D0) + 4 * 86_400_000,
+        ),
     ] {
         let mut record = codex_record(
             id,
@@ -26,7 +30,8 @@ fn daily_exact_range_filters_sessions_and_requests_with_independent_buckets() {
             .import_session(
                 &source(Client::Codex, id),
                 &record,
-                &[message(id, id, 1, "2026-10-10T00:00:00.000Z")],
+                // 请求时间与会话开始时间一致：区间与桶边界都作用在归集时间上。
+                &[message(id, id, 1, at_iso)],
             )
             .expect("synthetic session");
     }
@@ -91,6 +96,46 @@ fn daily_exact_range_filters_sessions_and_requests_with_independent_buckets() {
 }
 
 #[test]
+fn a_session_that_spans_days_is_attributed_to_the_days_its_requests_happened() {
+    let store = UsageStore::open_in_memory().expect("store");
+    // 会话在 D0 开始，D1 仍有请求：用量按请求发生时间落桶，不堆在会话开始那天。
+    let record = codex_record(
+        "thread-cross",
+        D0,
+        D1,
+        Some("gpt-5.6-luna"),
+        Some(PROJECT_ALPHA),
+        counts(Some(30), Some(3), Some(0), Some(0), Some(0), Some(33)),
+    );
+    store
+        .import_session(
+            &source(Client::Codex, "C:\\sessions\\cross.jsonl"),
+            &record,
+            &[
+                message("thread-cross", "resp-x1", 1, D0),
+                message("thread-cross", "resp-x2", 2, D1),
+            ],
+        )
+        .expect("cross-day session");
+    let buckets = store
+        .daily_token_trend(ms(D0), 2, Some(Client::Codex))
+        .expect("cross-day trend");
+    assert_eq!(buckets[0].messages, 1);
+    assert_eq!(buckets[0].sums.total_tokens, 12, "第一天的请求计入第一天");
+    assert_eq!(buckets[1].messages, 1);
+    assert_eq!(
+        buckets[1].sums.total_tokens, 12,
+        "第二天的请求计入第二天，而不是会话开始那天"
+    );
+    // 区间总量等于各天之和。
+    let totals = store
+        .range_totals(&AnalyticsFilter::default())
+        .expect("totals");
+    assert_eq!(totals.sessions, 1);
+    assert_eq!(totals.sums.total_tokens, 24);
+}
+
+#[test]
 fn range_totals_respect_range_and_client_filters() {
     let store = seeded_store();
     let all = store
@@ -103,12 +148,14 @@ fn range_totals_respect_range_and_client_filters() {
         "测试数据的分项之和与客户端总量一致"
     );
     assert_eq!(all.sessions_without_usage, 1, "没有用量数据的会话单独计数");
-    assert_eq!(all.sums.input_tokens, 600 + 2_000 + 500);
-    assert_eq!(all.sums.output_tokens, 80 + 300 + 50);
-    assert_eq!(all.sums.reasoning_tokens, 20);
-    assert_eq!(all.sums.cache_read_tokens, 500);
-    assert_eq!(all.sums.cache_write_tokens, 5);
-    assert_eq!(all.sums.total_tokens, 1_100 + 2_300 + 650);
+    // 有请求明细的会话按明细求和（thread-a 两条 12 + thread-b 一条 12），
+    // 没有请求明细的会话按客户端自报的会话累计（Claude Code 650）。
+    assert_eq!(all.sums.input_tokens, 20 + 10 + 500);
+    assert_eq!(all.sums.output_tokens, 4 + 2 + 50);
+    assert_eq!(all.sums.reasoning_tokens, 0);
+    assert_eq!(all.sums.cache_read_tokens, 100);
+    assert_eq!(all.sums.cache_write_tokens, 0);
+    assert_eq!(all.sums.total_tokens, 24 + 12 + 650);
 
     let codex_only = store
         .range_totals(&AnalyticsFilter {
@@ -118,7 +165,7 @@ fn range_totals_respect_range_and_client_filters() {
         .expect("codex totals");
     assert_eq!(codex_only.sessions, 3);
     assert_eq!(codex_only.messages, 3);
-    assert_eq!(codex_only.sums.total_tokens, 1_100 + 2_300);
+    assert_eq!(codex_only.sums.total_tokens, 24 + 12);
 
     let last_day = store
         .range_totals(&AnalyticsFilter {
@@ -132,18 +179,22 @@ fn range_totals_respect_range_and_client_filters() {
 }
 
 #[test]
-fn daily_trend_buckets_by_session_start_and_fills_gaps() {
+fn daily_trend_buckets_by_request_time_and_fills_gaps() {
     let store = seeded_store();
     let buckets = store
         .daily_token_trend(ms("2026-10-05T00:00:00.000Z"), 4, Some(Client::Codex))
         .expect("trend");
     assert_eq!(buckets.len(), 4, "缺失日期补 0");
     assert_eq!(buckets[0].day_start_ms, ms("2026-10-05T00:00:00.000Z"));
+    // thread-a 的两条请求都在 D0。
     assert_eq!(buckets[0].sessions, 1);
     assert_eq!(buckets[0].messages, 2);
-    assert_eq!(buckets[0].sums.total_tokens, 1_100);
+    assert_eq!(buckets[0].sums.total_tokens, 24);
+    // thread-b 的请求在 D1。
     assert_eq!(buckets[1].sessions, 1);
-    assert_eq!(buckets[1].sums.total_tokens, 2_300);
+    assert_eq!(buckets[1].messages, 1);
+    assert_eq!(buckets[1].sums.total_tokens, 12);
+    // thread-c 没有请求也没有用量。
     assert_eq!(buckets[2].sessions, 1);
     assert_eq!(buckets[2].sums.total_tokens, 0);
     assert_eq!(buckets[3].sessions, 0);
@@ -163,14 +214,14 @@ fn client_usage_groups_by_client() {
         .expect("codex usage");
     assert_eq!(codex.sessions, 3);
     assert_eq!(codex.messages, 3);
-    assert_eq!(codex.sums.total_tokens, 3_400);
-    assert_eq!(codex.share_bps, 8_395);
+    assert_eq!(codex.sums.total_tokens, 24 + 12);
+    assert_eq!(codex.share_bps, 524);
     let claude = usage
         .iter()
         .find(|entry| entry.client == Client::ClaudeCode)
         .expect("claude usage");
     assert_eq!(claude.sums.total_tokens, 650);
-    assert_eq!(claude.share_bps, 1_604);
+    assert_eq!(claude.share_bps, 9_475);
 }
 
 #[test]
@@ -183,6 +234,17 @@ fn counted_cache_writes_include_claude_and_dsh_but_exclude_codex() {
         &counts(Some(10), Some(5), Some(0), Some(4), None, None),
     );
     store.upsert_session(&claude).expect("claude cache write");
+    // Codex 会话没有请求明细，按会话累计归集，缓存写入照常计入总量但不计入"已计数"口径。
+    let mut codex = codex_record(
+        "codex-cache-write",
+        D0,
+        D0,
+        None,
+        None,
+        counts(Some(10), Some(0), Some(0), Some(5), None, None),
+    );
+    codex.client_session_id = "codex-cache-write".into();
+    store.upsert_session(&codex).expect("codex cache write");
     let dsh =
         crate::usage::normalize::dsh::dsh_session(&crate::usage::normalize::dsh::DshSession {
             id: "cache-write-fixture",
@@ -323,23 +385,20 @@ fn daily_completeness_distinguishes_unknown_zero_mixed_and_partial() {
             codex[2].sessions_without_usage,
             codex[2].sums.total_tokens
         ),
-        (2, 1, 12)
+        (1, 1, 0)
     );
-    assert_eq!(
-        codex[2].sessions_partial, 1,
-        "known cumulative total can have partial request coverage"
-    );
-    assert_eq!(codex[2].messages, 1);
-    assert_eq!(codex[3].messages, 0);
+    assert_eq!(codex[2].messages, 0);
+    // mixed-known 的请求发生在 10-08，落到第 4 个桶而不是会话开始那天。
     assert_eq!(
         (
             codex[3].sessions,
             codex[3].sessions_without_usage,
             codex[3].sessions_partial
         ),
-        (0, 0, 0)
+        (1, 0, 1)
     );
-    assert_eq!(codex[3].sums, TokenSums::default());
+    assert_eq!(codex[3].messages, 1);
+    assert_eq!(codex[3].sums.total_tokens, 12);
 
     let all = store.daily_token_trend(ms(D0), 4, None).expect("all days");
     assert_eq!(
@@ -408,30 +467,52 @@ fn cache_ratio_uses_only_sessions_with_both_fields_known() {
 #[test]
 fn client_and_rankings_distinguish_unknown_zero_and_mixed_totals() {
     let store = UsageStore::open_in_memory().expect("store");
-    for (id, model, known) in [
-        ("unknown", "unknown", false),
-        ("zero", "zero", true),
-        ("mixed-unknown", "mixed", false),
-        ("mixed-zero", "mixed", true),
+    let unknown_usage = RawTokenCounts::default();
+    let zero_usage = counts(Some(0), Some(0), Some(0), None, None, Some(0));
+    let known_usage = counts(Some(10), Some(2), Some(0), Some(0), Some(0), Some(12));
+    for (id, model, session_usage, requests) in [
+        (
+            "unknown",
+            "unknown",
+            RawTokenCounts::default(),
+            vec![unknown_usage],
+        ),
+        (
+            "zero",
+            "zero",
+            counts(Some(0), Some(0), Some(0), None, None, Some(0)),
+            vec![zero_usage],
+        ),
+        (
+            "mixed-unknown",
+            "mixed",
+            RawTokenCounts::default(),
+            vec![known_usage, unknown_usage],
+        ),
+        (
+            "mixed-zero",
+            "mixed",
+            counts(Some(0), Some(0), Some(0), None, None, Some(0)),
+            vec![known_usage, zero_usage],
+        ),
     ] {
-        let raw = if known {
-            counts(Some(0), Some(0), Some(0), None, None, Some(0))
-        } else {
-            RawTokenCounts::default()
-        };
-        let session = codex_record(id, D0, D0, Some(model), Some(PROJECT_ALPHA), raw);
+        let session = codex_record(id, D0, D0, Some(model), Some(PROJECT_ALPHA), session_usage);
+        let details: Vec<_> = requests
+            .into_iter()
+            .enumerate()
+            .map(|(index, usage)| {
+                message_with_usage(id, &format!("{id}-{index}"), index as i64 + 1, D0, usage)
+            })
+            .collect();
         store
-            .import_session(
-                &source(Client::Codex, id),
-                &session,
-                &[message(id, id, 1, D0)],
-            )
+            .import_session(&source(Client::Codex, id), &session, &details)
             .expect("import");
     }
     let clients = store
         .client_usage(&AnalyticsFilter::default())
         .expect("clients");
     assert_eq!(clients[0].sessions_without_usage, 2);
+    assert_eq!(clients[0].messages, 6);
     let groups = store
         .model_ranking(&AnalyticsFilter::default(), 10)
         .expect("models");
@@ -446,8 +527,9 @@ fn client_and_rankings_distinguish_unknown_zero_and_mixed_totals() {
             mixed.messages,
             mixed.total_tokens
         ),
-        (2, 1, 2, 0)
+        (2, 1, 4, 24)
     );
+    // 用量未知的分组排在最后，但依然可见。
     assert_eq!(
         groups.last().expect("unknown last").key.as_deref(),
         Some("unknown")
@@ -457,6 +539,6 @@ fn client_and_rankings_distinguish_unknown_zero_and_mixed_totals() {
         .expect("projects");
     assert_eq!(
         (project[0].messages, project[0].sessions_without_usage),
-        (4, 2)
+        (6, 2)
     );
 }

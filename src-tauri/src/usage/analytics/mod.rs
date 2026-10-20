@@ -4,10 +4,12 @@
 //!
 //! - 所有 token 数值来自归一化后的**互不重叠分桶**，求和不会重复计入子集字段；
 //! - 缓存写入是否计入总量遵循各客户端的归一化口径；
-//! - 会话累计按 `started_at_ms` 筛选，请求统计按 `created_at_ms` 筛选；
+//! - 用量按**请求时间优先**归集：会话有请求明细时按明细时间落桶，没有明细时按会话开始时间落桶
+//!   （见 `attribution.rs`）；
 //! - 缺失值保持 `None`/`NULL`，聚合仅求和已知值，并分别提供缺失计数。
 
 mod aggregates;
+mod attribution;
 mod rankings;
 mod records;
 mod report;

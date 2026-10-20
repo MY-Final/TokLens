@@ -80,6 +80,23 @@ fn message(thread: &str, response: &str, ordinal: i64, at: &str) -> MessageRecor
     })
 }
 
+/// 带指定用量的请求明细。
+fn message_with_usage(
+    thread: &str,
+    response: &str,
+    ordinal: i64,
+    at: &str,
+    usage: RawTokenCounts,
+) -> MessageRecord {
+    codex_message(&CodexUsageRecord {
+        thread_id: thread,
+        response_id: Some(response),
+        identity: CodexRecordIdentity::Ordinal(ordinal),
+        timestamp: Some(at),
+        usage,
+    })
+}
+
 fn source(client: Client, path: &str) -> SourceFile {
     SourceFile {
         client,

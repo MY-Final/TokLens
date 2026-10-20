@@ -3,7 +3,7 @@ use crate::collectors::test_support::{TempDir, assert_private};
 use crate::collectors::{SyncError, SyncOptions};
 use crate::usage::analytics::AnalyticsFilter;
 use crate::usage::client::Client;
-use crate::usage::store::UsageStore;
+use crate::usage::store::{TotalsFilter, UsageStore};
 use serde_json::{Value, json};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -21,11 +21,20 @@ fn setup() -> (TempDir, UsageStore, ClineCollector) {
     (dir, store, collector)
 }
 
-fn totals(store: &UsageStore) -> crate::usage::analytics::TokenSums {
+/// 客户端自报的会话累计值：保存在 `sessions` 表，与聚合归集口径无关。
+fn session_totals(store: &UsageStore) -> crate::usage::store::UsageTotals {
+    store
+        .totals(&TotalsFilter::default())
+        .expect("session totals")
+}
+
+/// 聚合口径下计入总量的缓存写入。
+fn counted_cache_writes(store: &UsageStore) -> i64 {
     store
         .range_totals(&AnalyticsFilter::default())
         .expect("totals")
         .sums
+        .counted_cache_write_tokens
 }
 
 fn session_row(store: &UsageStore, column: &str) -> Value {
@@ -54,13 +63,13 @@ fn session_totals_subtract_caches_from_input_and_keep_every_bucket_once() {
     assert_eq!(report.sessions_imported, 1);
     assert_eq!(report.files_failed, 0);
     assert_eq!(store.message_count().expect("count"), 3);
-    let sums = totals(&store);
+    let sums = session_totals(&store);
     // The client reports input 350 (including 190 cache read and 5 cache write) and output 35.
     assert_eq!(sums.input_tokens, 155);
     assert_eq!(sums.output_tokens, 35);
     assert_eq!(sums.cache_read_tokens, 190);
     assert_eq!(sums.cache_write_tokens, 5);
-    assert_eq!(sums.counted_cache_write_tokens, 5);
+    assert_eq!(counted_cache_writes(&store), 5);
     // No bucket is counted twice: uncached input + both caches + output equals client input + output.
     assert_eq!(sums.total_tokens, 385);
     assert_eq!(
@@ -89,7 +98,7 @@ fn repeated_scans_do_not_duplicate_usage() {
         .expect("second sync");
     assert_eq!(report.files_skipped_unchanged, 2);
     assert_eq!(store.message_count().expect("count"), 3);
-    assert_eq!(totals(&store).total_tokens, 385);
+    assert_eq!(session_totals(&store).total_tokens, 385);
 }
 
 #[test]
@@ -108,7 +117,7 @@ fn rewritten_manifest_replaces_the_previous_totals() {
     collector
         .sync(&store, &SyncOptions::default())
         .expect("second sync");
-    let sums = totals(&store);
+    let sums = session_totals(&store);
     assert_eq!(sums.input_tokens, 195);
     assert_eq!(sums.cache_read_tokens, 200);
     assert_eq!(sums.total_tokens, 435);
@@ -136,7 +145,7 @@ fn detail_that_disagrees_with_the_cumulative_total_marks_the_session_partial() {
     let relations = relations.as_str().expect("relations");
     assert!(relations.contains("cline.detail_mismatch"), "{relations}");
     // The cumulative value stays authoritative.
-    assert_eq!(totals(&store).total_tokens, 449);
+    assert_eq!(session_totals(&store).total_tokens, 449);
 }
 
 #[test]
@@ -148,7 +157,7 @@ fn a_session_without_stored_turns_keeps_the_cumulative_total() {
         .sync(&store, &SyncOptions::default())
         .expect("sync");
     assert_eq!(store.message_count().expect("count"), 0);
-    assert_eq!(totals(&store).total_tokens, 385);
+    assert_eq!(session_totals(&store).total_tokens, 385);
     assert_eq!(
         session_row(&store, "message_coverage"),
         Value::String("none".into())
@@ -211,7 +220,7 @@ fn a_subagent_session_is_counted_on_its_own_and_never_twice() {
         .expect("sync");
     assert_eq!(store.message_count().expect("count"), 4);
     // The parent keeps its own cumulative value; the aggregate total is never added.
-    assert_eq!(totals(&store).total_tokens, 385 + 125);
+    assert_eq!(session_totals(&store).total_tokens, 385 + 125);
     let conn = store.connection_for_tests();
     let parent: String = conn
         .query_row(
@@ -239,7 +248,7 @@ fn an_unreadable_detail_keeps_the_previous_import() {
     assert_eq!(report.files_failed, 1);
     // The failed file keeps its watermark and the known data stays visible.
     assert_eq!(store.message_count().expect("count"), 3);
-    assert_eq!(totals(&store).total_tokens, 385);
+    assert_eq!(session_totals(&store).total_tokens, 385);
 }
 
 #[test]

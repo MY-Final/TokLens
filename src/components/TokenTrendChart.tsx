@@ -281,11 +281,11 @@ export function TokenTrendChart({
           ) : null}
         </div>
         <DataExplanation
-          summary={`按会话开始日 · 会话累计 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+          summary={`按请求时间归集 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
         >
           <p>
             {description ??
-              "按会话开始日期归属累计用量，不代表当天请求增量。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
+              "用量按请求时间归集，没有请求明细的会话按会话开始日归属。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
           </p>
         </DataExplanation>
       </CardContent>
