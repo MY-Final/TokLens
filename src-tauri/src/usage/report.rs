@@ -2,7 +2,7 @@
 use crate::usage::store::UsageError;
 use serde::{Deserialize, Serialize};
 
-pub const METRICS_VERSION: &str = "2.12";
+pub const METRICS_VERSION: &str = "2.15";
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
