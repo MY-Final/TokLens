@@ -34,6 +34,13 @@
 
 `collectors/sync` 通过回调报告实际处理的数据源数、总数与当前客户端；command 存入现有同步状态并复用 `usage-sync` 广播，查询状态也携带同一进度用于轮询兜底。仅统计本轮启用的客户端；缺失与失败来源仍算已处理，失败继续沿用独立报告。前端复用 shadcn Progress，在主工具栏与数据源页显示进度；进度事件只更新内存状态，结束后重读来源与统计，不在每次进度变化时查询数据库。无新依赖、目录、权限、网络能力、迁移或统计口径变更。
 
+### Kimi Code / Pi Desktop 目录与格式迁移（2026-10-20）
+
+两个客户端都换了数据目录与文件格式，采集器同步更新：Kimi Code 迁到 `~/.kimi/sessions`（协议 1.1，工作目录摘要命名父目录），
+Pi Desktop 迁到 `~/.pi/agent/sessions`（版本 3）。旧格式仍被支持，两种布局按目录形状识别。
+Kimi 的工作目录摘要反查需要 MD5，新增 `md5` 依赖（0.7.0，MIT，RustCrypto，无传递依赖，只用于路径反查，不参与统计口径）。
+Token 口径、去重键语义与数据库结构均不变；新增合成夹具与单测覆盖两种格式，缺口在验收时用本机只读数据对账。
+
 ### OpenCode 大库读取方式（2026-10-20）
 
 OpenCode 的本地库已增长到 2.17 GB，超过 SQLite 单次内存分配上限（`SQLITE_MAX_ALLOCATION_SIZE = 2 147 483 391`）。
@@ -466,6 +473,7 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现                                                 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文                                                          |
 | 2026-10-20 | 接入 Cline：新增 `collectors/cline/` 与 `usage/normalize/cline.rs`，注册 `client-cline` 身份色与 LobeHub `Cline` 图标 | 已采纳 | 复用既有完整快照与去重机制，不新增依赖、权限、联网或费用换算；子代理累计值不叠加，避免重复计数      |
 | 2026-10-20 | OpenCode 超过 2 GB 的本地库改为客户端运行时就地只读打开，内存快照保留为回退                                           | 已采纳 | 消除 `SQLITE_NOMEM` 导致的同步失败；峰值内存 2 078 MB → 75 MB；不改统计口径、不新增依赖、权限或联网 |
+| 2026-10-20 | Kimi Code 与 Pi Desktop 跟随客户端迁移数据目录与文件格式，新增 `md5` 反查工作目录摘要                                 | 已采纳 | 修回两个"已装已用但一条都没采到"的客户端；仅新增 `md5`（MIT、无传递依赖）用于路径反查，不改统计口径 |
 
 按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
 由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode`、`DeepSeek`（DSH）的单色 SVG 组件。

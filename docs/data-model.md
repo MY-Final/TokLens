@@ -81,21 +81,21 @@ Cline input=input−cacheRead−cacheWrite、output=output（客户端写盘前�
 
 ## 3. 去重标识
 
-| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                         | 说明                                                                                                                      |
-| ----------- | --------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id` → `token_count:<ordinal>` → 累计快照 → 文件行号 | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节                     |
-| Claude Code | `sessionId`                                         | `message.id`                                                  | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                                         |
-| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                                  | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**                                 |
-| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                            | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                                              |
-| Kimi Code   | state `id` / session_* 目录名                       | `agent:<folder>:line:<physical-line>`                         | 增量 usage 按 agent 与行号区分；快照替换幂等，正文相同不代表同一次调用                                                    |
-| MiMoCode    | session.id                                          | message.id                                                    | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                                    |
-| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                  | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                                        |
-| WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                             | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                                                   |
-| Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                           | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                                              |
-| Gemini CLI  | `sessionId`                                         | 最终 `gemini.id`                                              | 日志回放全记录替换、$set.messages 全量替换与 $rewindTo 后去重；会话镜像择一                                               |
-| Grok CLI    | `usage.sessionId`                                   | `turnNumber`                                                  | 轮级快照，不把 modelCalls 展开为虚构独立调用；session 与 turns 不相加                                                     |
-| MCode       | `local_runtime_sessions.session_id`                 | `local_runtime_token_usage.id`                                | 主键标识物理请求，同 turn 多次调用不合并；不读取正文 revision                                                             |
-| Cline       | 清单 / 消息文件的 `session_id`                      | 落盘消息 `id`                                                 | 会话键取客户端会话 id；一条用量明细对应一轮调用，不是单次 HTTP 请求；子代理有独立会话，不与父会话的 `aggregateUsage` 相加 |
+| 客户端      | 会话键                                              | 消息键（`dedup_key`）                                                | 说明                                                                                                                      |
+| ----------- | --------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Codex       | `thread_id`（唯一键 `(client, client_session_id)`） | `response_id` → `token_count:<ordinal>` → 累计快照 → 文件行号        | 同一 thread 的多个 rollout 文件（续接/分页）只取累计值最大值，**绝不相加**；新旧格式混排规则见第 8 节                     |
+| Claude Code | `sessionId`                                         | `message.id`                                                         | 同一 `(sessionId, message.id)` 会被重复写入（本机最多 15 次，值一致），只保留一行                                         |
+| OpenCode    | `session.id` / `session_v2.id`                      | `message.id`                                                         | `session` 与 `session_v2` 按 `time_updated` 取新、平局取 `session_v2`，**绝不把两表相加**                                 |
+| DSH         | header `id`                                         | `step:<turn>:<step>[:attempt:<n>]`                                   | 同一尝试最终 usage 替换早期样本；重试分开统计，排除继承 seed                                                              |
+| Kimi Code   | state `id` / session_* 目录名 / 当前版会话目录名    | `agent:<folder>:line:<physical-line>`；1.1 用 `message:<message_id>` | 增量 usage 按 agent 与行号区分；1.1 按消息 id 去重，重复只保留最后一次；快照替换幂等，正文相同不代表同一次调用            |
+| MiMoCode    | session.id                                          | message.id                                                           | 排除导入消息，保留本地续聊，按数据库主键去重，不读取 event / part 镜像                                                    |
+| Pi Desktop  | header.sessionId                                    | operationId；旧版 message.id                                         | 全客户端物理操作去重，汇总 operations 只展开一次；更完整的总量优先                                                        |
+| WorkBuddy   | `sessionId`                                         | 原生输出事件 `id`                                                    | usage 镜像不相加；跨文件按事件时间取新；不使用复用的 provider / 对话 ID                                                   |
+| Copilot CLI | `sessions.id`                                       | `usage:<assistant_usage_events.id>`                                  | 数据库主键标识单次用量，不以 turn_index 或 agent_id 合并请求                                                              |
+| Gemini CLI  | `sessionId`                                         | 最终 `gemini.id`                                                     | 日志回放全记录替换、$set.messages 全量替换与 $rewindTo 后去重；会话镜像择一                                               |
+| Grok CLI    | `usage.sessionId`                                   | `turnNumber`                                                         | 轮级快照，不把 modelCalls 展开为虚构独立调用；session 与 turns 不相加                                                     |
+| MCode       | `local_runtime_sessions.session_id`                 | `local_runtime_token_usage.id`                                       | 主键标识物理请求，同 turn 多次调用不合并；不读取正文 revision                                                             |
+| Cline       | 清单 / 消息文件的 `session_id`                      | 落盘消息 `id`                                                        | 会话键取客户端会话 id；一条用量明细对应一轮调用，不是单次 HTTP 请求；子代理有独立会话，不与父会话的 `aggregateUsage` 相加 |
 
 会话总量的取值依据记录在 `sessions.total_basis`：
 
@@ -317,13 +317,16 @@ v0–v4 修复后的本机只读对账（2026-10-11）：13 份规范候选日�
 
 ## 11. Kimi Code 采集器
 
-`collectors/kimi_code/` 读取 `KIMI_CODE_HOME/sessions` 或 `~/.kimi-code/sessions`。
-只接受 `sessions/<workspace>/session_*/state.json` 与 `agents/<agent>/wire.jsonl`；
-不读取配置、凭据、插件状态、历史正文缓存、服务端事件镜像。
+`collectors/kimi_code/` 读取 `KIMI_CODE_HOME/sessions`、`~/.kimi/sessions` 或 `~/.kimi-code/sessions`（优先用真实存在 `sessions` 的那个）。
+两种布局都接受：旧版 `sessions/<workspace>/session_*/state.json` 与 `agents/<agent>/wire.jsonl`，
+当前版 `sessions/<工作目录摘要>/<会话 id>/wire.jsonl`（没有 `state.json`）。
+不读取配置、凭据、插件状态、历史正文缓存、服务端事件镜像；当前版的 `context*.jsonl` 是会话正文与上下文长度估计，不读取。
 state 支持 version 2 和旧版无版本格式，createdAt / updatedAt 接受 Unix 毫秒或 ISO UTC。
-项目取 cwd / 旧版 workDir；旧版无 id 时使用 session_* 目录名。wire 必须以协议 1.4 / 1.5 的 metadata 开头。
-只归一化 `usage.record`，usageScope 为 turn / session（省略按客户端默认 session）；
+项目取 cwd / 旧版 workDir；旧版无 id 时使用 session_* 目录名。wire 必须以协议 1.1 / 1.4 / 1.5 的 metadata 开头。
+1.4 / 1.5 只归一化 `usage.record`，usageScope 为 turn / session（省略按客户端默认 session）；
 `token_counting.measured` / `token_counting.turn_recorded` 是上下文长度，不是调用用量。
+1.1 的用量在 `message.payload.token_usage`（下划线键名，与驼峰键等价），去重键取 `message_id`；该协议不落盘模型，模型保持未知。
+当前版没有会话元数据：会话标识取目录名，项目路径由 `kimi.json` 里工作目录路径的 MD5 摘要反查（摘要对不上时保持未知），时间取 wire 记录。
 inputOther 已排除缓存；output 不拆分 reasoning；四个 usage 字段均需真实存在才提供规范总量。
 agent 目录决定身份，main 之外标记 sidechain，保留每条请求对应的 wire 来源。
 
@@ -331,6 +334,7 @@ agent 目录决定身份，main 之外标记 sidechain，保留每条请求对�
 追加、缩短、删除通过原子替换纠正总量；根目录缺失、缺少 state、未知版本、读取失败或截断尾行保留上次快照和水位。
 完整非法行 / 未知事件计入 unparsed，并将会话覆盖标为 partial；无 usage 的会话保留未知，不展示为真实零用量。
 目前不支持未验证的 state / wire 协议，客户端成本未提供，不推算费用。
+`md5` 依赖只用于反查工作目录摘要，不参与任何统计口径。
 
 ## 12. MiMoCode / Pi Desktop 采集器
 

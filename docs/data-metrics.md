@@ -364,6 +364,19 @@ Codex parser_version 升到 2，下一次同步自动重读原日志，历史展
 - 主库只读样本 1会话/17请求：input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770；17模型均NULL。客户端 fresh/goal summary 为67544，明确排除缓存，差814226来自口径，不能把它当完整用量。最终 WAL 可见对账在验收后登记，不把主库数字冒充 WAL 结果。
 - 三客户端采用原子完整快照：重复同步幂等，稳定成功扫描可反映修正/删除；源缺失、格式失败、扫描变化不推进水位或删除历史。单客户端失败不阻塞其他来源。无迁移、依赖、权限、联网、费用或估算新增；旧客户端历史规则不变。
 
+### 口径 2.15（2026-10-20）：Kimi Code 1.1 协议与 Pi Desktop 版本 3
+
+- 两个客户端都换了目录与文件格式，采集根目录与解析规则同步更新；**Token 口径不变**（Kimi 仍是四个互不重叠的桶，Pi 仍是输入与缓存独立、推理含于输出）。
+- Kimi Code：根目录改为 `KIMI_CODE_HOME` > `~/.kimi/sessions` > `~/.kimi-code/sessions`；会话目录为 `<工作目录摘要>/<会话 id>/wire.jsonl`，没有 `state.json`。
+  会话标识取目录名，项目路径由 `kimi.json` 的 `work_dirs[].path` 的 MD5 摘要反查（摘要对不上时保持未知），时间取 wire 记录的时间戳。
+  1.1 协议不落盘模型，模型保持未知；用量键为下划线形式 `input_other` / `output` / `input_cache_read` / `input_cache_creation`，与 1.4 / 1.5 的驼峰键等价。
+  去重键为 `message:<message_id>`，同一 id 重复出现只保留最后一次，会话总量按去重后的明细求和。
+- Pi Desktop：根目录改为 `PI_DESKTOP_SESSIONS_DIR` > `~/.pi/agent/sessions` > `~/.pi-desktop/sessions`；会话头为 `version: 3`，消息行的 `timestamp` 是纪元毫秒整数。
+  用量键为 `input` / `output` / `cacheRead` / `cacheWrite` / `reasoning` / `totalTokens`，客户端总量仍等于四桶之和；模型取 `message.model`。
+  `model_change` / `thinking_level_change` 事件不携带用量，不计为未识别记录。
+- 本机只读样本：Kimi 13 个会话 / 1 070 条用量 / 规范总量 97 773 557；Pi 1 个会话 / 13 条用量 / 330 800（等于客户端 `totalTokens` 之和）。
+- 新增依赖 `md5`（0.7.0，MIT，RustCrypto，无传递依赖）：客户端用工作目录路径的 MD5 摘要命名会话父目录，反查项目路径需要它；其余依赖不变。
+
 ### 口径 2.14（2026-10-20）：OpenCode 大库读取方式
 
 - 只改读取方式：客户端正在持有该库时就地只读打开，客户端未运行时回退内存快照。统计口径、去重键、会话与请求的对应关系完全不变。

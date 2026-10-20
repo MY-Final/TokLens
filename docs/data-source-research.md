@@ -369,6 +369,27 @@ turn scope 也计入会话累计，故 `usage.record` 是增量而非累计；�
 缓存写入 0、规范总量 61,147；另一个会话无 usage，保留未知。没有未识别行。
 这些是本次采样结果，不是固定 fixture；自动测试仅使用合成数据。
 
+## Kimi Code — 当前版本 1.1 协议与工作目录摘要（2026-10-20）
+
+客户端已把配置与会话迁到 `~/.kimi`（旧版是 `~/.kimi-code`），根目录按 `KIMI_CODE_HOME` > `~/.kimi/sessions` > `~/.kimi-code/sessions` 解析，优先用真实存在 `sessions` 的那个。
+会话布局变为 `<工作目录摘要>/<会话 id>/wire.jsonl`，**没有** `state.json`，也没有旧版的 `agents/<agent>/` 分层。
+每行是 `{"timestamp": 秒(小数), "message": {"type": ..., "payload": {...}}}`，顶层没有 `type`；协议头是 `{"type":"metadata","protocol_version":"1.1"}`。
+用量在 `message.payload.token_usage`，键名是下划线形式 `input_other` / `output` / `input_cache_read` / `input_cache_creation`（1.4 / 1.5 是驼峰），语义不变：四个互不重叠的桶。
+每条用量带 `payload.message_id`（形如 `chatcmpl-…`）作为去重键；数值是每次请求的增量（缓存读取在一轮内随前缀增长而变大，跨轮不累加）。
+**1.1 不落盘模型**，也不记录项目路径；工作目录名是 `kimi.json` 里 `work_dirs[].path` 的 MD5 摘要，据此反查项目路径（4 个工作目录全部命中），摘要对不上时项目保持未知。
+`context*.jsonl` 是会话正文与上下文长度估计（`token_count` 单调递增），不是用量来源，不读取。
+本机只读样本：13 个会话目录、1 070 条用量，`input_other` 9 554 658、`output` 353 619、`input_cache_read` 87 865 280、`input_cache_creation` 0，规范总量 97 773 557，与逐条求和完全一致。
+已知非用量消息类型：ContentPart / StepBegin / StatusUpdate / ToolCall / ToolResult / TurnBegin / ToolCallPart / ApprovalRequest / ApprovalResponse / StepInterrupted / CompactionBegin / CompactionEnd。
+
+## Pi Desktop — 版本 3 会话文件（2026-10-20）
+
+会话迁到 `~/.pi/agent/sessions`（旧版是 `~/.pi-desktop/sessions`），根目录按 `PI_DESKTOP_SESSIONS_DIR` > `~/.pi/agent/sessions` > `~/.pi-desktop/sessions` 解析。
+文件头变成 `{"type":"session","version":3,"id":...,"timestamp":"ISO","cwd":...}`（旧版是 `schema:1` + `sessionId` + `createdAt`）。
+消息行是 `{"type":"message","id":...,"parentId":...,"timestamp":纪元毫秒整数,"message":{"role","model","usage":{...}}}`，**时间戳是整数毫秒**（旧版是 ISO 字符串）。
+用量键名也不同：`input` / `output` / `cacheRead` / `cacheWrite` / `reasoning` / `totalTokens`，`totalTokens = input + output + cacheRead + cacheWrite` 成立，推理是输出的子集。
+`model_change` / `thinking_level_change` 事件不携带用量。
+本机只读样本：1 个会话、13 条 assistant 用量，input 64 609、output 5 967（含推理 2 890）、cacheRead 260 224、cacheWrite 0、客户端总量 330 800，与四桶求和一致。
+
 ## MiMoCode — SQLite 与去重（2026-10-11）
 
 本机用户指定 ~/.local/share/mimocode/mimocode.db 包含 session / message / part；
