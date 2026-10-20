@@ -5,6 +5,7 @@
 //! 因此可以用合成数据完整覆盖去重、累计值、缺失字段等口径分支。
 
 mod claude_code;
+pub mod cline;
 mod codex;
 pub mod copilot;
 pub mod dsh;
@@ -19,6 +20,9 @@ pub use rollup::sum_complete_counts;
 
 pub use claude_code::{
     ClaudeMessage, ClaudeSessionRollup, claude_code_message, claude_code_session,
+};
+pub use cline::{
+    SessionInput as ClineSessionInput, UNKNOWN_DETAIL_MISMATCH as CLINE_DETAIL_MISMATCH,
 };
 pub use codex::{
     CodexRecordIdentity, CodexThreadSnapshot, CodexUsageRecord, codex_dedup_key, codex_message,

@@ -25,6 +25,7 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   gemini_cli: "[&_[data-slot=progress-indicator]]:bg-client-gemini",
   grok: "[&_[data-slot=progress-indicator]]:bg-client-grok",
   mcode: "[&_[data-slot=progress-indicator]]:bg-client-mcode",
+  cline: "[&_[data-slot=progress-indicator]]:bg-client-cline",
 };
 
 type ClientUsageCardProps = {

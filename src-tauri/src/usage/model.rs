@@ -196,6 +196,7 @@ pub fn dedup_key_note(client: Client) -> &'static str {
         Client::Dsh => {
             "turn + step (chunk sample replaced by completed message, excluding inherited seed)"
         }
+        Client::Cline => "session id + stored message id; per-turn metrics, not per HTTP request",
     }
 }
 

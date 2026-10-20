@@ -15,6 +15,7 @@ export const CLIENT_LABELS: Record<ClientKey, string> = {
   gemini_cli: "Gemini CLI",
   grok: "Grok CLI",
   mcode: "MCode",
+  cline: "Cline",
 };
 
 export function clientLabel(client: ClientKey): string {
@@ -30,3 +31,6 @@ export const CLIENT_KEYS: readonly ClientKey[] = Object.keys(CLIENT_LABELS).filt
 
 export const GROK_USAGE_NOTE =
   "Grok CLI 按轮记录用量：请求数表示轮数，均量为每轮 Token，按轮结束时间归属，无法拆分为独立模型调用。";
+
+export const CLINE_USAGE_NOTE =
+  "Cline 按轮记录用量：一轮对应一条落盘的用量明细，不是单次 HTTP 请求；会话总量取客户端累计值，输入已包含缓存读写。";

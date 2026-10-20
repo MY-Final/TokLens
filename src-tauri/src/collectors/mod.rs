@@ -1,6 +1,7 @@
 //! Read-only client collectors and shared synchronization contracts.
 
 pub mod claude_code;
+pub mod cline;
 pub mod codex;
 pub mod copilot;
 pub mod dsh;

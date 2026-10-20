@@ -18,7 +18,7 @@ import { ErrorBlock, LoadingRows } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
 import type { ClientKey, DataSourceStatus, SyncState } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
-import { GROK_USAGE_NOTE, clientLabel } from "@/lib/client-labels";
+import { CLINE_USAGE_NOTE, GROK_USAGE_NOTE, clientLabel } from "@/lib/client-labels";
 import { sourceDiagnosticSummary, sourceStatusLabel } from "@/lib/source-diagnostics";
 
 const CLIENT_HINTS: Record<string, string> = {
@@ -32,6 +32,7 @@ const CLIENT_HINTS: Record<string, string> = {
   gemini_cli: "Gemini CLI：tmp 项目会话（排除 Antigravity）",
   grok: "Grok CLI：GROK_HOME 下的 sessions 用量快照",
   mcode: "MCode：MINIMAX_DATA_DIR / MAVIS_DATA_DIR 下的 v2 用量数据库",
+  cline: "Cline：CLINE_DIR / CLINE_DATA_DIR 下的 data/sessions 会话文件",
   kimi_code: "Kimi Code：KIMI_CODE_HOME",
   opencode: "OpenCode：XDG_DATA_HOME",
 };
@@ -209,6 +210,8 @@ export function SourcesPage({
                 <p className="text-xs text-muted-foreground">实际读取位置</p>
                 {client.client === "grok" ? (
                   <p className="text-xs text-muted-foreground">{GROK_USAGE_NOTE}</p>
+                ) : client.client === "cline" ? (
+                  <p className="text-xs text-muted-foreground">{CLINE_USAGE_NOTE}</p>
                 ) : client.client === "mcode" ? (
                   <p className="text-xs text-muted-foreground">
                     缺失模型保持未知；推理关系未确认时，总量显示 —。

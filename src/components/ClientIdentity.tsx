@@ -1,5 +1,6 @@
 import {
   ClaudeCode,
+  Cline,
   Codex,
   GithubCopilot,
   GeminiCLI,
@@ -30,6 +31,7 @@ const CLIENT_STYLES = {
   gemini_cli: { icon: GeminiCLI, className: "bg-client-gemini/10 text-client-gemini" },
   grok: { icon: Grok, className: "bg-client-grok/10 text-client-grok" },
   mcode: { icon: Minimax, className: "bg-client-mcode/10 text-client-mcode" },
+  cline: { icon: Cline, className: "bg-client-cline/10 text-client-cline" },
 } satisfies Record<ClientKey, { icon: ComponentType<{ size: number }>; className: string }>;
 
 export function ClientIdentity({

@@ -20,6 +20,7 @@
   --color-client-gemini: var(--client-gemini);
   --color-client-grok: var(--client-grok);
   --color-client-mcode: var(--client-mcode);
+  --color-client-cline: var(--client-cline);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -86,6 +87,7 @@
   --client-gemini: oklch(0.53 0.15 255);
   --client-grok: oklch(0.48 0.04 250);
   --client-mcode: oklch(0.57 0.18 15);
+  --client-cline: oklch(0.48 0.12 140);
   --client-opencode: #6366f1;
   --chart-1: oklch(0.565 0.136 121);
   --chart-2: oklch(0.68 0.12 205);
@@ -133,6 +135,7 @@
   --client-gemini: oklch(0.76 0.13 255);
   --client-grok: oklch(0.76 0.04 250);
   --client-mcode: oklch(0.76 0.14 15);
+  --client-cline: oklch(0.76 0.18 140);
   --client-opencode: #a3a5ff;
   --chart-1: oklch(0.788 0.136 125);
   --chart-2: oklch(0.693 0.104 207);

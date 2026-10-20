@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "session_id": "synthetic-session-1",
+  "source": "vscode",
+  "pid": 4242,
+  "started_at": "2026-01-02T03:04:05.000Z",
+  "ended_at": "2026-01-02T03:09:05.000Z",
+  "exit_code": 0,
+  "status": "completed",
+  "interactive": true,
+  "provider": "cline",
+  "model": "synthetic/model-a",
+  "cwd": "C:\\synthetic\\workspace",
+  "workspace_root": "C:\\synthetic\\workspace",
+  "enable_tools": true,
+  "enable_spawn": false,
+  "enable_teams": false,
+  "metadata": {
+    "usage": {
+      "inputTokens": 350,
+      "outputTokens": 35,
+      "cacheReadTokens": 190,
+      "cacheWriteTokens": 5,
+      "totalCost": 0
+    }
+  }
+}

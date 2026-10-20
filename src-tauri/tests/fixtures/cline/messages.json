@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "updated_at": "2026-01-02T03:09:05.000Z",
+  "agent": "lead",
+  "sessionId": "synthetic-session-1",
+  "origin": {
+    "source": "vscode",
+    "mode": "user",
+    "sessionId": "synthetic-session-1",
+    "version": "synthetic"
+  },
+  "messages": [
+    {
+      "id": "m1",
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "PRIVATE_SENTINEL"
+        }
+      ],
+      "ts": 1767322800000
+    },
+    {
+      "id": "m2",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "PRIVATE_SENTINEL"
+        }
+      ],
+      "ts": 1767322801000,
+      "modelInfo": {
+        "id": "synthetic/model-a",
+        "provider": "synthetic"
+      },
+      "metrics": {
+        "inputTokens": 100,
+        "outputTokens": 10,
+        "cacheReadTokens": 40,
+        "cacheWriteTokens": 0,
+        "cost": 0
+      }
+    },
+    {
+      "id": "m3",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "PRIVATE_SENTINEL"
+        }
+      ],
+      "ts": 1767322802000,
+      "modelInfo": {
+        "id": "synthetic/model-a",
+        "provider": "synthetic"
+      },
+      "metrics": {
+        "inputTokens": 200,
+        "outputTokens": 20,
+        "cacheReadTokens": 150,
+        "cacheWriteTokens": 5,
+        "cost": 0
+      }
+    },
+    {
+      "id": "m4",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "PRIVATE_SENTINEL"
+        }
+      ],
+      "ts": 1767322803000,
+      "modelInfo": {
+        "id": "synthetic/model-b",
+        "provider": "synthetic"
+      },
+      "metrics": {
+        "inputTokens": 50,
+        "outputTokens": 5,
+        "cacheReadTokens": 0,
+        "cacheWriteTokens": 0,
+        "cost": 0
+      }
+    }
+  ]
+}

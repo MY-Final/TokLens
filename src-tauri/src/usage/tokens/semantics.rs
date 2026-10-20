@@ -176,6 +176,22 @@ pub const MCODE_SEMANTICS: TokenSemantics = TokenSemantics {
     basis: "MCode local-runtime usage API sums four disjoint buckets; 16 local records cache read > input; nonzero reasoning relation unverified",
 };
 
+/// Cline 的 `metrics` 字段：输入已包含缓存读写，输出已由客户端扣掉推理。
+///
+/// 依据：Cline 4.1.25 用 `tokensIn = inputTokens - cacheRead - cacheWrite` 生成旧口径汇总，
+/// 说明缓存读写都是 `inputTokens` 的子集；同一份安装包在换算输出时先扣掉推理再写盘，
+/// 因此落盘的 `outputTokens` 不含推理，客户端也不提供独立的推理计数。
+/// 本机 1 个会话 / 10 条用量记录逐条求和与会话累计值完全一致。
+pub const CLINE_SEMANTICS: TokenSemantics = TokenSemantics {
+    id: "cline.messages.v1",
+    cache_read: FieldRelation::IncludedIn,
+    reasoning: FieldRelation::NotProvided,
+    cache_write_in_input: FieldRelation::IncludedIn,
+    cache_write_counts_in_total: true,
+    client_reports_total: false,
+    basis: "Cline 4.1.25 session usage contract: input = noCache + cacheRead + cacheWrite, output excludes reasoning; 1 local session / 10 usage records",
+};
+
 pub fn semantics_for(client: Client) -> &'static TokenSemantics {
     match client {
         Client::Codex => &CODEX_SEMANTICS,
@@ -190,6 +206,7 @@ pub fn semantics_for(client: Client) -> &'static TokenSemantics {
         Client::GeminiCli => &GEMINI_CLI_SEMANTICS,
         Client::Grok => &GROK_SEMANTICS,
         Client::Mcode => &MCODE_SEMANTICS,
+        Client::Cline => &CLINE_SEMANTICS,
     }
 }
 

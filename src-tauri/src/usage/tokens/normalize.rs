@@ -15,6 +15,8 @@ pub const UNKNOWN_TOTAL_INCOMPLETE: &str = "total.unavailable_due_to_missing_fie
 pub const ANOMALY_CACHE_READ_EXCEEDS_INPUT: &str = "anomaly.cache_read_gt_input";
 /// 数据异常标识：`reasoning` 大于 `output`，与声明的包含关系矛盾。
 pub const ANOMALY_REASONING_EXCEEDS_OUTPUT: &str = "anomaly.reasoning_gt_output";
+/// 数据异常标识：`cache_write` 大于 `input`，与声明的包含关系矛盾。
+pub const ANOMALY_CACHE_WRITE_EXCEEDS_INPUT: &str = "anomaly.cache_write_gt_input";
 
 /// 把客户端原始计数按口径换算成互不重叠的分桶与规范总量。
 pub fn normalize_usage(semantics: &TokenSemantics, raw: &RawTokenCounts) -> NormalizedUsage {
@@ -41,6 +43,22 @@ pub fn normalize_usage(semantics: &TokenSemantics, raw: &RawTokenCounts) -> Norm
             (Some(input), None)
         }
         (None, cache_read) => (None, cache_read),
+    };
+
+    // 缓存写入若也包含在 input 内，必须与缓存读取一起扣除，
+    // 否则"未命中缓存的输入"会重复包含缓存写入，规范总量也会多算一次。
+    let input_bucket = match (input_bucket, raw.cache_write) {
+        (Some(input), Some(cache_write))
+            if semantics.cache_write_in_input == FieldRelation::IncludedIn =>
+        {
+            if cache_write > input {
+                unknown.push(ANOMALY_CACHE_WRITE_EXCEEDS_INPUT);
+                Some(0)
+            } else {
+                Some(input - cache_write)
+            }
+        }
+        (input, _) => input,
     };
 
     // output / reasoning
@@ -107,7 +125,9 @@ pub fn normalize_usage(semantics: &TokenSemantics, raw: &RawTokenCounts) -> Norm
 
 #[cfg(test)]
 mod tests {
-    use super::super::{CLAUDE_CODE_SEMANTICS, CODEX_SEMANTICS, OPENCODE_SEMANTICS};
+    use super::super::{
+        CLAUDE_CODE_SEMANTICS, CLINE_SEMANTICS, CODEX_SEMANTICS, OPENCODE_SEMANTICS,
+    };
     use super::*;
 
     fn raw(
@@ -158,6 +178,35 @@ mod tests {
                 .unknown_relations
                 .contains(&UNKNOWN_CACHE_WRITE_RELATION)
         );
+    }
+
+    #[test]
+    fn cline_subtracts_both_caches_from_input_and_counts_each_bucket_once() {
+        // Cline 的 input 同时包含缓存读取与缓存写入，两者都要从输入里扣除。
+        let usage = normalize_usage(&CLINE_SEMANTICS, &raw(350, 35, 190, 5, 0, None));
+        assert_eq!(usage.buckets.input, Some(155));
+        assert_eq!(usage.buckets.cache_read, Some(190));
+        assert_eq!(usage.buckets.cache_write, Some(5));
+        assert_eq!(usage.buckets.output, Some(35));
+        // 总量等于客户端的 input + output，缓存写入没有被漏掉也没有被重复计入。
+        assert_eq!(usage.total_tokens, Some(385));
+        assert_eq!(usage.buckets.sum_with(&CLINE_SEMANTICS), Some(385));
+        assert!(
+            usage.unknown_relations.is_empty(),
+            "{:?}",
+            usage.unknown_relations
+        );
+    }
+
+    #[test]
+    fn cache_write_larger_than_the_remaining_input_is_an_anomaly() {
+        let usage = normalize_usage(&CLINE_SEMANTICS, &raw(100, 10, 90, 20, 0, None));
+        assert!(
+            usage
+                .unknown_relations
+                .contains(&ANOMALY_CACHE_WRITE_EXCEEDS_INPUT)
+        );
+        assert_eq!(usage.buckets.input, Some(0));
     }
 
     #[test]

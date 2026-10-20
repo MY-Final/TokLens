@@ -13,7 +13,8 @@ export type ClientKey =
   | "copilot"
   | "gemini_cli"
   | "grok"
-  | "mcode";
+  | "mcode"
+  | "cline";
 
 export type TokenTotals = {
   inputTokens: number;

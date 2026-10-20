@@ -17,10 +17,11 @@ pub enum Client {
     GeminiCli,
     Grok,
     Mcode,
+    Cline,
 }
 
 impl Client {
-    pub const ALL: [Client; 12] = [
+    pub const ALL: [Client; 13] = [
         Client::Codex,
         Client::ClaudeCode,
         Client::OpenCode,
@@ -33,6 +34,7 @@ impl Client {
         Client::GeminiCli,
         Client::Grok,
         Client::Mcode,
+        Client::Cline,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -49,6 +51,7 @@ impl Client {
             Client::GeminiCli => "gemini_cli",
             Client::Grok => "grok",
             Client::Mcode => "mcode",
+            Client::Cline => "cline",
         }
     }
 
@@ -66,6 +69,7 @@ impl Client {
             "gemini_cli" => Some(Client::GeminiCli),
             "grok" => Some(Client::Grok),
             "mcode" => Some(Client::Mcode),
+            "cline" => Some(Client::Cline),
             _ => None,
         }
     }

@@ -41,6 +41,7 @@ const CLIENT_SERIES: Record<ClientKey, { color: string; dotClass: string }> = {
   gemini_cli: { color: "var(--client-gemini)", dotClass: "bg-client-gemini" },
   grok: { color: "var(--client-grok)", dotClass: "bg-client-grok" },
   mcode: { color: "var(--client-mcode)", dotClass: "bg-client-mcode" },
+  cline: { color: "var(--client-cline)", dotClass: "bg-client-cline" },
 };
 const TOTAL_SERIES = CLIENT_KEYS.map((key) => ({
   key,

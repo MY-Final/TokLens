@@ -3,8 +3,9 @@
 use super::copilot::CopilotCollector;
 use super::workbuddy::WorkBuddyCollector;
 use super::{
-    SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, codex::CodexCollector,
-    dsh::DshCollector, kimi_code::KimiCodeCollector, opencode::OpenCodeCollector,
+    SyncOptions, SyncReport, claude_code::ClaudeCodeCollector, cline::ClineCollector,
+    codex::CodexCollector, dsh::DshCollector, kimi_code::KimiCodeCollector,
+    opencode::OpenCodeCollector,
 };
 use super::{gemini_cli::GeminiCliCollector, grok::GrokCollector, mcode::MCodeCollector};
 use super::{mimocode::MiMoCodeCollector, pi_desktop::PiDesktopCollector};
@@ -27,6 +28,7 @@ pub struct CollectorRoots {
     pub gemini_cli: Option<PathBuf>,
     pub grok: Option<PathBuf>,
     pub mcode: Option<PathBuf>,
+    pub cline: Option<PathBuf>,
 }
 
 /// Root readability only; checking a file never reads its contents.
@@ -106,6 +108,7 @@ impl CollectorRoots {
             Client::GeminiCli => &self.gemini_cli,
             Client::Grok => &self.grok,
             Client::Mcode => &self.mcode,
+            Client::Cline => &self.cline,
         }
         .as_deref()
     }
@@ -125,6 +128,7 @@ impl CollectorRoots {
             gemini_cli: GeminiCliCollector::default_root(),
             grok: GrokCollector::default_root(),
             mcode: MCodeCollector::default_database(),
+            cline: ClineCollector::default_root(),
         }
     }
 }
@@ -234,6 +238,10 @@ pub(crate) fn sync_clients_with_progress(
                 .mcode
                 .as_ref()
                 .map(|root| MCodeCollector::new(root).sync(store, options)),
+            Client::Cline => roots
+                .cline
+                .as_ref()
+                .map(|root| ClineCollector::new(root).sync(store, options)),
         }
         .unwrap_or_else(|| {
             Ok(SyncReport {

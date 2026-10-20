@@ -87,6 +87,7 @@ pub enum ClientParam {
     GeminiCli,
     Grok,
     Mcode,
+    Cline,
 }
 
 impl From<ClientParam> for Client {
@@ -104,6 +105,7 @@ impl From<ClientParam> for Client {
             ClientParam::GeminiCli => Client::GeminiCli,
             ClientParam::Grok => Client::Grok,
             ClientParam::Mcode => Client::Mcode,
+            ClientParam::Cline => Client::Cline,
         }
     }
 }
