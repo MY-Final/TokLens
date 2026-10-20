@@ -9,17 +9,22 @@ impl UsageStore {
     /// 区间统计：会话数、明细数、token 分桶之和，以及"无用量/明细不完整"的会话数。
     pub fn range_totals(&self, filter: &AnalyticsFilter<'_>) -> Result<RangeTotals, UsageError> {
         let client = filter.client.map(Client::as_str);
+        // 归集口径见 `attribution.rs`：有请求明细按明细时间归集，否则按会话开始时间归集。
+        let cte = super::attribution::attributed_cte(&super::attribution::AttributionParams {
+            from: 1,
+            to: 2,
+            client: Some(3),
+            project_path: Some(4),
+        });
         let sql = format!(
-            "SELECT COUNT(*),
-                    COALESCE(SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN message_coverage = 'partial' THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN client_total_mismatch = 1 THEN 1 ELSE 0 END), 0),
-                    {SUM_COLUMNS}
-             FROM sessions
-             WHERE (?1 IS NULL OR started_at_ms >= ?1)
-               AND (?2 IS NULL OR started_at_ms < ?2)
-               AND (?3 IS NULL OR client = ?3)
-               AND (?4 IS NULL OR project_path = ?4)"
+            "{cte}
+             SELECT COUNT(DISTINCT session_id),
+                    COUNT(DISTINCT CASE WHEN session_total_tokens IS NULL THEN session_id END),
+                    COUNT(DISTINCT CASE WHEN message_coverage = 'partial' THEN session_id END),
+                    COUNT(DISTINCT CASE WHEN client_total_mismatch = 1 THEN session_id END),
+                    {SUM_COLUMNS},
+                    COALESCE(SUM(CASE WHEN from_request = 1 THEN 1 ELSE 0 END), 0)
+             FROM attributed"
         );
         let mut totals = self.conn.query_row(
             &sql,
@@ -31,18 +36,19 @@ impl UsageStore {
                     sessions_partial: row.get(2)?,
                     sessions_total_mismatch: row.get(3)?,
                     sums: read_sums(row, 4)?,
-                    messages: 0,
+                    messages: row.get(11)?,
                     cache_hit_bps: None,
                     cache_eligible_sessions: 0,
                 })
             },
         )?;
-        totals.messages = self.count_messages(filter)?;
         let (eligible, input, cache): (i64, f64, f64) = self.conn.query_row(
-            "SELECT COUNT(*), COALESCE(TOTAL(input_tokens), 0), COALESCE(TOTAL(cache_read_tokens), 0)
-             FROM sessions WHERE input_tokens IS NOT NULL AND cache_read_tokens IS NOT NULL
-               AND (?1 IS NULL OR started_at_ms >= ?1) AND (?2 IS NULL OR started_at_ms < ?2)
-               AND (?3 IS NULL OR client = ?3) AND (?4 IS NULL OR project_path = ?4)",
+            &format!(
+                "{cte}
+                 SELECT COUNT(DISTINCT session_id), COALESCE(TOTAL(input_tokens), 0), COALESCE(TOTAL(cache_read_tokens), 0)
+                 FROM attributed
+                 WHERE input_tokens IS NOT NULL AND cache_read_tokens IS NOT NULL"
+            ),
             rusqlite::params![filter.from_ms, filter.to_ms, client, filter.project_path],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
@@ -50,21 +56,6 @@ impl UsageStore {
         totals.cache_hit_bps =
             (input + cache > 0.0).then(|| (cache * 10_000.0 / (input + cache)) as i64);
         Ok(totals)
-    }
-
-    fn count_messages(&self, filter: &AnalyticsFilter<'_>) -> Result<i64, UsageError> {
-        let client = filter.client.map(Client::as_str);
-        Ok(self.conn.query_row(
-            "SELECT COUNT(*)
-             FROM messages AS m
-             JOIN sessions AS s ON s.id = m.session_id
-             WHERE (?1 IS NULL OR s.started_at_ms >= ?1)
-               AND (?2 IS NULL OR s.started_at_ms < ?2)
-               AND (?3 IS NULL OR s.client = ?3)
-               AND (?4 IS NULL OR s.project_path = ?4)",
-            rusqlite::params![filter.from_ms, filter.to_ms, client, filter.project_path],
-            |row| row.get(0),
-        )?)
     }
 
     /// 每日趋势：按 `day_start_ms` 起、每 24 小时一个桶，缺失的日期补 0。
@@ -80,7 +71,7 @@ impl UsageStore {
         self.daily_token_trend_in_range(day_start_ms, day_count, None, None, client)
     }
 
-    /// Daily buckets and the exact half-open session-start filter are independent.
+    /// 桶按归集时间划分；精确区间过滤与桶起点相互独立。
     pub fn daily_token_trend_in_range(
         &self,
         day_start_ms: i64,
@@ -100,19 +91,22 @@ impl UsageStore {
             return Ok(buckets);
         }
         let end_ms = day_start_ms + i64::from(day_count) * DAY_MS;
+        let cte = super::attribution::attributed_cte(&super::attribution::AttributionParams {
+            from: 4,
+            to: 5,
+            client: Some(3),
+            project_path: None,
+        });
         let sql = format!(
-            "SELECT CAST((started_at_ms - ?1) / {DAY_MS} AS INTEGER) AS day_index,
-                    COUNT(*),
-                    SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN message_coverage = 'partial' THEN 1 ELSE 0 END),
-                    {SUM_COLUMNS}
-             FROM sessions AS s
-             WHERE started_at_ms IS NOT NULL
-               AND started_at_ms >= ?1
-               AND started_at_ms < ?2
-               AND (?3 IS NULL OR client = ?3)
-               AND (?4 IS NULL OR started_at_ms >= ?4)
-               AND (?5 IS NULL OR started_at_ms < ?5)
+            "{cte}
+             SELECT CAST((at_ms - ?1) / {DAY_MS} AS INTEGER) AS day_index,
+                    COUNT(DISTINCT session_id),
+                    COUNT(DISTINCT CASE WHEN session_total_tokens IS NULL THEN session_id END),
+                    COUNT(DISTINCT CASE WHEN message_coverage = 'partial' THEN session_id END),
+                    {SUM_COLUMNS},
+                    COALESCE(SUM(CASE WHEN from_request = 1 THEN 1 ELSE 0 END), 0)
+             FROM attributed
+             WHERE at_ms >= ?1 AND at_ms < ?2
              GROUP BY day_index
              ORDER BY day_index"
         );
@@ -128,41 +122,18 @@ impl UsageStore {
                     row.get::<_, i64>(2)?,
                     row.get::<_, i64>(3)?,
                     read_sums(row, 4)?,
+                    row.get::<_, i64>(11)?,
                 ))
             },
         )?;
-        let mut message_counts = std::collections::HashMap::new();
         for row in rows {
-            let (index, sessions, sessions_without_usage, sessions_partial, sums) = row?;
+            let (index, sessions, sessions_without_usage, sessions_partial, sums, messages) = row?;
             if let Some(bucket) = buckets.get_mut(index.max(0) as usize) {
                 bucket.sessions = sessions;
                 bucket.sessions_without_usage = sessions_without_usage;
                 bucket.sessions_partial = sessions_partial;
                 bucket.sums = sums;
-            }
-        }
-        // 明细数按会话所属日期归类。
-        let mut statement = self.conn.prepare(
-            "SELECT CAST((s.started_at_ms - ?1) / 86400000 AS INTEGER) AS day_index, COUNT(*)
-             FROM messages AS m
-             JOIN sessions AS s ON s.id = m.session_id
-             WHERE s.started_at_ms IS NOT NULL AND s.started_at_ms >= ?1 AND s.started_at_ms < ?2
-               AND (?3 IS NULL OR s.client = ?3)
-               AND (?4 IS NULL OR s.started_at_ms >= ?4)
-               AND (?5 IS NULL OR s.started_at_ms < ?5)
-             GROUP BY day_index",
-        )?;
-        let rows = statement.query_map(
-            rusqlite::params![day_start_ms, end_ms, client, from_ms, to_ms],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
-        )?;
-        for row in rows {
-            let (index, count) = row?;
-            message_counts.insert(index, count);
-        }
-        for (index, count) in message_counts {
-            if let Some(bucket) = buckets.get_mut(index.max(0) as usize) {
-                bucket.messages = count;
+                bucket.messages = messages;
             }
         }
         Ok(buckets)
@@ -173,20 +144,21 @@ impl UsageStore {
         &self,
         filter: &AnalyticsFilter<'_>,
     ) -> Result<Vec<ClientUsage>, UsageError> {
-        // 明细计数并入同一分组查询（相关子查询），避免逐客户端再发起一次 JOIN 查询。
-        // 子查询保持与 `count_messages` 相同的条件：客户端 + 会话开始时间 + 项目。
+        // 归集口径见 `attribution.rs`；会话数与明细数都来自同一个归集结果，不再另起子查询。
+        let cte = super::attribution::attributed_cte(&super::attribution::AttributionParams {
+            from: 1,
+            to: 2,
+            client: None,
+            project_path: Some(3),
+        });
         let sql = format!(
-            "SELECT client, COUNT(*), SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END), {SUM_COLUMNS},
-                    (SELECT COUNT(*)
-                       FROM messages AS m
-                       JOIN sessions AS s ON s.id = m.session_id
-                      WHERE s.client = sessions.client
-                        AND (?1 IS NULL OR s.started_at_ms >= ?1)
-                        AND (?2 IS NULL OR s.started_at_ms < ?2)
-                        AND (?3 IS NULL OR s.project_path = ?3))
-             FROM sessions
-             WHERE (?1 IS NULL OR started_at_ms >= ?1)
-               AND (?2 IS NULL OR started_at_ms < ?2)
+            "{cte}
+             SELECT client,
+                    COUNT(DISTINCT session_id),
+                    COUNT(DISTINCT CASE WHEN session_total_tokens IS NULL THEN session_id END),
+                    {SUM_COLUMNS},
+                    COALESCE(SUM(CASE WHEN from_request = 1 THEN 1 ELSE 0 END), 0)
+             FROM attributed
              GROUP BY client
              ORDER BY client"
         );

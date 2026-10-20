@@ -40,7 +40,7 @@ export default function App() {
     client: null,
     search: "",
     sort: "newest",
-    requestTime: false,
+    requestTime: true,
     offset: 0,
     rangeScope: "",
   });
@@ -90,7 +90,7 @@ export default function App() {
       client: null,
       search: "",
       sort: "newest",
-      requestTime: false,
+      requestTime: true,
       ...filters,
       offset: 0,
       rangeScope: rangeScope(nextRange),

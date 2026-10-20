@@ -225,22 +225,25 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 ## 9. 统计查询口径（analytics）
 
 本节原有汇总表与每日趋势描述属于保留的“会话累计”模式；默认“请求时间”模式见文末“请求时间与会话详情查询”2.3 补充。
+**自口径 2.16（2026-10-20）起，区间统计、每日趋势、客户端聚合与模型 / 项目排行统一按“请求时间优先”归集**（规则见下表）。
 
 实现：`src-tauri/src/usage/analytics/`；命令层只做参数校验与 DTO 转换（`src-tauri/src/commands/`）。
 
-| 规则       | 说明                                                                                                       |
-| ---------- | ---------------------------------------------------------------------------------------------------------- |
-| 事实来源   | 会话累计 token 汇总取自 `sessions` 表（该模式唯一事实来源）；`messages` 只用于计数与时间序列，二者绝不相加 |
-| 区间过滤   | 按会话的 `started_at_ms` 过滤；边界由前端按本地日历传入（`fromMs`/`toMs`，`toMs` 为排他上界）              |
-| 每日趋势   | 按会话开始时间归属到本地日期，缺失日期补 0；桶按 24 小时整除，含夏令时的时区会有偏差（待引入时间库修正）   |
-| 模型排行   | 按会话主模型（`sessions.model`）聚合；Codex 的逐请求模型未落库，故不按请求维度排行                         |
-| 项目排行   | 按 `sessions.project_path` 聚合，跨客户端合并                                                              |
-| 未知值     | `total_tokens` 为 NULL 的会话不计入任何合计，单独计数为 `sessions_without_usage`（界面显示 “—”）           |
-| 不完整数据 | `message_coverage = partial`（源文件被分页/续接）单独计数，界面加标注                                      |
-| 口径冲突   | 客户端自报总量与其分项之和不一致时按客户端值计入，并计数为 `sessions_total_mismatch`                       |
-| 费用       | 当前恒不展示（`costAvailable: false`），避免虚构金额                                                       |
+| 规则       | 说明                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| 事实来源   | 归集结果取自 `sessions` 与 `messages` 的联合：会话有请求明细时按明细求和，没有明细时用会话累计值；两者不相加      |
+| 归集时间   | 有请求明细的会话按 `messages.created_at_ms` 归集，没有请求明细的会话按 `sessions.started_at_ms` 归集（口径 2.16） |
+| 区间过滤   | 作用在归集时间上（`fromMs`/`toMs`，`toMs` 为排他上界，边界由前端按本地日历传入）                                  |
+| 每日趋势   | 按归集时间归属到本地日期，缺失日期补 0；桶按 24 小时整除，含夏令时的时区会有偏差（待引入时间库修正）              |
+| 模型排行   | 按会话主模型（`sessions.model`）聚合；Codex 的逐请求模型未落库，故不按请求维度排行                                |
+| 项目排行   | 按 `sessions.project_path` 聚合，跨客户端合并                                                                     |
+| 未知值     | `total_tokens` 为 NULL 的会话不计入任何合计，单独计数为 `sessions_without_usage`（界面显示 “—”）                  |
+| 不完整数据 | `message_coverage = partial`（源文件被分页/续接）单独计数，界面加标注                                             |
+| 口径冲突   | 客户端自报总量与其分项之和不一致时按客户端值计入，并计数为 `sessions_total_mismatch`                              |
+| 费用       | 当前恒不展示（`costAvailable: false`），避免虚构金额                                                              |
 
 分桶之和应等于规范总量；唯一例外是上一行的 `client_total_mismatch` 会话（总量取客户端值，分项按其原始字段计算）。
+归集 CTE 见 `usage/analytics/attribution.rs`：请求级分支与会话级分支互斥，同一次归集不会重复计入。
 
 首版热力图复用每日趋势，不新增表或迁移。`DailyBucket` 增加 `sessions_without_usage`
 （当天 `total_tokens IS NULL` 的会话数）与 `sessions_partial`（当天 `message_coverage = partial` 的会话数）。
@@ -248,7 +251,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 这些计数彼此独立：明细不完整的会话仍可能有已知累计 Token 总量。
 缺失日期仍返回零会话、零计数与零求和；有会话但全部总量未知时，数值求和仍为 0，展示应为 `—`。
 已知与未知混合时保留已知求和并标注已知子集及未知会话数，不把它当作完整总量。
-请求数仍按所属会话开始日期计数，不按请求自身时间重分桶；本地零点起固定 24 小时桶的夏令时偏差保持原有限制。
+请求数按请求自身时间重分桶（口径 2.16）；本地零点起固定 24 小时桶的夏令时偏差保持原有限制。
 
 ## 10. 新采集器（2026-10-11）
 
@@ -274,8 +277,10 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 每次扫描元数据快照，避免主库大小或 mtime 未变化时漏掉 WAL 内容；不依赖不完整的 event 表作为水位。
 
 `session` / `session_v2` 按 id 合并，更新时间较新的优先，平局取 `session_v2`；不把两份聚合相加。
-消息只导入 assistant，按 message.id 去重，兼容扁平与嵌套模型字段；缺失聚合列保持未知。
-聚合表无总量列时，由完整聚合分桶确定性换算总量；保留客户端自报成本，但不视作统一 USD 定价依据。
+消息同时读取 `session_message`（客户端 2026-10-18 起的写入目标）与 `message`（迁移前的历史），按 message.id 去重合并，重叠部分以新表为准。
+只导入 assistant 与携带用量的 compaction；user / system / synthetic / idle / agent-switched / model-switched 是会话控制类消息，不含用量，静默跳过；未知种类忽略并计数。
+兼容扁平与嵌套模型字段（新表为 `data.model.id` / `data.model.providerID`，旧表为 `modelID` / `providerID`）；缺失聚合列保持未知。
+新表 `tokens` 没有 `total` 字段时按分桶确定性换算总量；保留客户端自报成本，但不视作统一 USD 定价依据。
 成功读取后原子替换完整客户端快照；读取 / schema 失败保留原快照。
 当前支持 SQLite 格式；旧 `storage/session|message` JSON 格式未经验证，未接入。
 

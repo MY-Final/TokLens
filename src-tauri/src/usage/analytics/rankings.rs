@@ -11,7 +11,7 @@ impl UsageStore {
         filter: &AnalyticsFilter<'_>,
         limit: u32,
     ) -> Result<Vec<GroupUsage>, UsageError> {
-        self.group_ranking("s.model", filter, limit)
+        self.group_ranking("model", filter, limit)
     }
 
     /// 项目排行：按会话的 `project_path` 聚合。
@@ -20,7 +20,7 @@ impl UsageStore {
         filter: &AnalyticsFilter<'_>,
         limit: u32,
     ) -> Result<Vec<GroupUsage>, UsageError> {
-        self.group_ranking("s.project_path", filter, limit)
+        self.group_ranking("project_path", filter, limit)
     }
 
     fn group_ranking(
@@ -30,18 +30,23 @@ impl UsageStore {
         limit: u32,
     ) -> Result<Vec<GroupUsage>, UsageError> {
         let client = filter.client.map(Client::as_str);
+        // 归集口径见 `attribution.rs`：用量按请求时间归集，分组键仍取会话自身的模型 / 项目。
+        let cte = super::attribution::attributed_cte(&super::attribution::AttributionParams {
+            from: 1,
+            to: 2,
+            client: Some(3),
+            project_path: Some(4),
+        });
         let sql = format!(
-            "SELECT {column}, COUNT(*),
-                    SUM((SELECT COUNT(*) FROM messages AS m WHERE m.session_id = s.id)),
-                    COALESCE(SUM(s.total_tokens), 0),
-                    SUM(CASE WHEN s.total_tokens IS NULL THEN 1 ELSE 0 END)
-             FROM sessions AS s
-             WHERE (?1 IS NULL OR s.started_at_ms >= ?1)
-               AND (?2 IS NULL OR s.started_at_ms < ?2)
-               AND (?3 IS NULL OR s.client = ?3)
-               AND (?4 IS NULL OR s.project_path = ?4)
+            "{cte}
+             SELECT {column},
+                    COUNT(DISTINCT session_id),
+                    COALESCE(SUM(CASE WHEN from_request = 1 THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(total_tokens), 0),
+                    COUNT(DISTINCT CASE WHEN session_total_tokens IS NULL THEN session_id END)
+             FROM attributed
              GROUP BY {column}
-             ORDER BY COUNT(s.total_tokens) = 0, COALESCE(SUM(s.total_tokens), 0) DESC, COUNT(*) DESC
+             ORDER BY SUM(CASE WHEN total_tokens IS NULL THEN 1 ELSE 0 END) > 0, COALESCE(SUM(total_tokens), 0) DESC, COUNT(DISTINCT session_id) DESC
              LIMIT ?5"
         );
         let mut statement = self.conn.prepare(&sql)?;

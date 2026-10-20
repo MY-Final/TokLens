@@ -205,10 +205,10 @@ export function CalendarHeatmap({
                               const exact = `${value === null ? "—（未知）" : formatNumber(value)} ${unit}`;
                               const basis =
                                 metric === "tokens"
-                                  ? "实测 / 直接换算的已知会话累计 Token，含计入总量的缓存；按会话开始日期归属，不代表当天请求增量，不含估算。"
+                                  ? "实测 / 直接换算的已知 Token，含计入总量的缓存；按请求时间归集，没有请求明细的会话按会话开始日归属，不含估算。"
                                   : metric === "sessions"
-                                    ? "客户端记录的会话数，按会话开始日期归属。"
-                                    : "已采集请求明细条数，按所属会话开始日期归属；不代表全部请求，分页或续接可能导致明细不完整。";
+                                    ? "客户端记录的会话数，按会话在该日的归集时间归属。"
+                                    : "已采集请求明细条数，按请求发生日期归属；不代表全部请求，分页或续接可能导致明细不完整。";
                               const unknownNote =
                                 unknownSessions > 0
                                   ? metric === "tokens"
@@ -253,14 +253,14 @@ export function CalendarHeatmap({
                   <HeatmapLegend maxValue={maxValue} unit={unit} />
                 </div>
                 <DataExplanation
-                  summary={`按会话开始日 · 会话累计 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+                  summary={`按请求时间归集 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
                 >
                   <p>
                     {metric === "tokens"
-                      ? "按会话开始日期归属；Token 为会话累计用量，不代表当天请求增量。无用量记录显示 —，部分未知或明细不完整以标记说明。"
+                      ? "用量按请求时间归集，没有请求明细的会话按会话开始日归属。无用量记录显示 —，部分未知或明细不完整以标记说明。"
                       : metric === "sessions"
-                        ? "按会话开始日期归属；会话数量不受 Token 是否已知影响。"
-                        : "请求明细按所属会话开始日期归属，为已采集记录，可能不完整；不代表客户端的全部请求。"}
+                        ? "按会话在该日的归集时间归属；会话数量不受 Token 是否已知影响。"
+                        : "请求明细按请求发生日期归属，为已采集记录，可能不完整；不代表客户端的全部请求。"}
                     悬停或键盘聚焦日期查看精确值与口径。
                     {onSelectDay ? "点击日期查看当天开始的会话。" : ""}
                   </p>

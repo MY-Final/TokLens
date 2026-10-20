@@ -93,7 +93,7 @@ fn request(
 }
 
 #[test]
-fn request_time_range_is_half_open_and_independent_of_session_start_and_totals() {
+fn request_time_range_is_half_open_and_applies_to_the_attribution_time() {
     let store = UsageStore::open_in_memory().expect("store");
     session(&store, "early", Client::Codex, "alpha", 0, true);
     request(&store, "before", "early", Some(99), Some(5), "measured");
@@ -117,7 +117,11 @@ fn request_time_range_is_half_open_and_independent_of_session_start_and_totals()
     assert_eq!(activity.daily[1].totals.sums.total_tokens, 3);
     assert_eq!(activity.coverage.recorded_requests, 4);
     assert_eq!(activity.coverage.sessions_partial, 1);
-    assert_eq!(store.range_totals(&filter).expect("legacy").sessions, 0);
+    // 总览与用量分析同口径：会话按请求时间归集，会话开始时间不参与。
+    let totals = store.range_totals(&filter).expect("attributed");
+    assert_eq!(totals.sessions, 1);
+    assert_eq!(totals.messages, 2);
+    assert_eq!(totals.sums.total_tokens, 15);
 }
 
 #[test]
@@ -408,8 +412,18 @@ fn overview_clients_match_analysis_for_continued_sessions_zero_and_unknown_usage
     assert_eq!(activity.clients[2].metrics.totals.requests_without_usage, 1);
     assert_eq!(activity.clients[2].metrics.share_bps, None);
     assert_eq!(
-        store.range_totals(&filter).expect("session start").sessions,
-        0
+        store.range_totals(&filter).expect("attributed").sessions,
+        3,
+        "总览按请求时间归集：区间内有请求的会话都算进来"
+    );
+    assert_eq!(
+        store
+            .range_totals(&filter)
+            .expect("attributed")
+            .sums
+            .total_tokens,
+        12,
+        "与请求分析页的用量一致"
     );
     let empty_filter = AnalyticsFilter {
         from_ms: Some(200),

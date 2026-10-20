@@ -17,8 +17,11 @@ export function UsageBasisSelect({
       >
         <TabsList aria-label="统计口径">
           <TabsTrigger value="requests">按请求时间</TabsTrigger>
-          <TabsTrigger value="sessions" title="按会话开始日期筛选，展示整个会话累计用量">
-            按会话开始日
+          <TabsTrigger
+            value="sessions"
+            title="会话视角：会话数、会话排行与日趋势；用量按请求时间归集"
+          >
+            按会话汇总
           </TabsTrigger>
         </TabsList>
       </Tabs>

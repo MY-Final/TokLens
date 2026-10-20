@@ -1,4 +1,7 @@
 //! Whitelisted SQL projections inside one source read transaction.
+//!
+//! 客户端自 2026-10-18 起把请求明细写入 `session_message` 表，旧 `message` 表冻结为历史；
+//! 两张表都读，按 `message.id` 去重合并。
 
 use crate::collectors::files::valid_counts;
 use crate::usage::model::{MessageCoverage, MessageRecord, SessionRecord};
@@ -32,6 +35,16 @@ impl Counts {
             cache_write: self.cache_write,
             client_total: self.total,
         }
+    }
+
+    /// 该行是否携带任何用量字段。
+    fn has_usage(&self) -> bool {
+        self.input.is_some()
+            || self.output.is_some()
+            || self.reasoning.is_some()
+            || self.cache_read.is_some()
+            || self.cache_write.is_some()
+            || self.total.is_some()
     }
 }
 
@@ -155,23 +168,86 @@ struct Message {
     tokens: Counts,
 }
 
-fn messages(
+/// 消息角色在来源里的存放位置。
+#[derive(Clone, Copy)]
+enum RoleSource {
+    /// 旧 `message` 表：角色写在 `data.role`。
+    Data,
+    /// 新 `session_message` 表：角色写在 `type` 列，缺失时回落到 `data.role`。
+    Type,
+}
+
+impl RoleSource {
+    fn expression(self) -> &'static str {
+        match self {
+            RoleSource::Data => "json_extract(safe, '$.role')",
+            RoleSource::Type => "COALESCE(type, json_extract(safe, '$.role'))",
+        }
+    }
+}
+
+/// 一条来源消息是否要作为请求明细导入。
+enum RoleAction {
+    /// 导入为请求明细。
+    Import,
+    /// 会话控制类消息，不含用量，静默跳过。
+    Skip,
+    /// 未知消息种类：忽略并计数。
+    Unparsed,
+}
+
+/// 判断一条消息是否要导入。
+///
+/// `assistant` 是常规请求（进行中或失败的请求没有用量，仍作为明细保留）；
+/// `compaction` 是真实的模型调用，携带用量时同样计入；
+/// 其余是会话控制类消息（用户输入、系统提示、空闲、切换代理 / 模型等），不含用量。
+fn role_action(role: &str, has_usage: bool) -> RoleAction {
+    match role {
+        "assistant" => RoleAction::Import,
+        "compaction" => {
+            if has_usage {
+                RoleAction::Import
+            } else {
+                RoleAction::Skip
+            }
+        }
+        "user" | "system" | "synthetic" | "idle" | "agent-switched" | "model-switched" => {
+            RoleAction::Skip
+        }
+        _ => RoleAction::Unparsed,
+    }
+}
+
+/// 读取一张消息来源表，返回按会话分组的请求明细。
+///
+/// 两张来源表的列名一致（`id` / `session_id` / `data`），差别只在角色字段：
+/// 旧 `message` 表把角色放在 `data.role`，新 `session_message` 表用 `type` 列。
+fn message_records(
     conn: &Connection,
+    table: &str,
+    role_source: RoleSource,
     unparsed: &mut usize,
 ) -> rusqlite::Result<BTreeMap<String, Vec<MessageRecord>>> {
     let mut result: BTreeMap<String, Vec<MessageRecord>> = BTreeMap::new();
-    if !table_exists(conn, "message")? {
+    if !table_exists(conn, table)? {
         return Ok(result);
     }
-    let columns = columns(conn, "message")?;
+    let columns = columns(conn, table)?;
     if !["id", "session_id", "data"]
         .iter()
         .all(|name| columns.contains(*name))
     {
         return Err(rusqlite::Error::InvalidQuery);
     }
-    let mut statement = conn.prepare("SELECT json_valid(data), json_object('id', id, 'session_id', session_id,
-        'role', json_extract(safe, '$.role'),
+    // 新表用 `type` 列记录消息种类；列不存在时回落到旧表的 `data.role`。
+    let role_source = match (role_source, columns.contains("type")) {
+        (RoleSource::Type, true) => RoleSource::Type,
+        _ => RoleSource::Data,
+    };
+    // Only these identifiers can enter the query. Titles, summaries, permissions and raw model JSON stay in the source.
+    let sql = format!(
+        "SELECT json_valid(data), json_object('id', id, 'session_id', session_id,
+        'role', {role},
         'model_id', COALESCE(json_extract(safe, '$.modelID'), json_extract(safe, '$.model.modelID'), json_extract(safe, '$.model.id')),
         'provider_id', COALESCE(json_extract(safe, '$.providerID'), json_extract(safe, '$.model.providerID')),
         'agent', COALESCE(json_extract(safe, '$.agent'), json_extract(safe, '$.mode')),
@@ -180,8 +256,16 @@ fn messages(
         'tokens', json_object('input', json_extract(safe, '$.tokens.input'), 'output', json_extract(safe, '$.tokens.output'),
             'reasoning', json_extract(safe, '$.tokens.reasoning'), 'cache_read', json_extract(safe, '$.tokens.cache.read'),
             'cache_write', json_extract(safe, '$.tokens.cache.write'), 'total', json_extract(safe, '$.tokens.total')))
-        FROM (SELECT id, session_id, data, CASE WHEN json_valid(data) THEN data ELSE '{}' END AS safe FROM message)
-        ORDER BY id")?;
+        FROM (SELECT id, session_id{type_column}, data, CASE WHEN json_valid(data) THEN data ELSE '{{}}' END AS safe FROM {table})
+        ORDER BY id",
+        role = role_source.expression(),
+        type_column = if matches!(role_source, RoleSource::Type) {
+            ", type"
+        } else {
+            ""
+        },
+    );
+    let mut statement = conn.prepare(&sql)?;
     for row in statement.query_map([], |row| {
         Ok((row.get::<_, bool>(0)?, row.get::<_, String>(1)?))
     })? {
@@ -197,10 +281,15 @@ fn messages(
                 continue;
             }
         };
-        match message.role.as_deref() {
-            Some("assistant") => {}
-            Some("user" | "system") => continue,
-            _ => {
+        match message
+            .role
+            .as_deref()
+            .map_or(RoleAction::Unparsed, |role| {
+                role_action(role, message.tokens.has_usage())
+            }) {
+            RoleAction::Import => {}
+            RoleAction::Skip => continue,
+            RoleAction::Unparsed => {
                 *unparsed += 1;
                 continue;
             }
@@ -231,6 +320,29 @@ fn messages(
     Ok(result)
 }
 
+/// 合并两张来源表：同一个 `message.id` 只保留一条明细。
+///
+/// 两张表的 id 空间一致（新表包含旧表消息的投影），按 `dedup_key` 去重后不会重复计数；
+/// 重叠部分以先读入的表为准。
+fn merge_messages(
+    target: &mut BTreeMap<String, Vec<MessageRecord>>,
+    extra: BTreeMap<String, Vec<MessageRecord>>,
+) {
+    for (session_id, records) in extra {
+        let entry = target.entry(session_id).or_default();
+        let mut seen: BTreeSet<String> = entry
+            .iter()
+            .map(|record| record.dedup_key.clone())
+            .collect();
+        for record in records {
+            if !seen.insert(record.dedup_key.clone()) {
+                continue;
+            }
+            entry.push(record);
+        }
+    }
+}
+
 pub(super) fn snapshot(conn: &Connection, source_path: &str) -> rusqlite::Result<Snapshot> {
     let mut unparsed = 0;
     let has_legacy = table_exists(conn, "session")?;
@@ -249,7 +361,13 @@ pub(super) fn snapshot(conn: &Connection, source_path: &str) -> rusqlite::Result
         BTreeMap::new()
     };
     let ids: BTreeSet<_> = legacy.keys().chain(current.keys()).collect();
-    let mut messages = messages(conn, &mut unparsed)?;
+    // 新表 `session_message` 是客户端当前的写入目标，旧表 `message` 保留迁移前的历史；
+    // 两者 id 空间一致，按 `message.id` 去重后合并，不会重复计数。
+    let mut messages = message_records(conn, "session_message", RoleSource::Type, &mut unparsed)?;
+    merge_messages(
+        &mut messages,
+        message_records(conn, "message", RoleSource::Data, &mut unparsed)?,
+    );
     let mut imports = Vec::new();
     for id in ids {
         let legacy_model = legacy

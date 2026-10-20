@@ -258,6 +258,28 @@
 只读连接在客户端未运行时（`-wal` / `-shm` 缺失）会自行创建这两个旁车文件，与"不在客户端目录落文件"的约束冲突，因此仅在客户端持有该库时使用，其余情况回退内存快照。
 就地读取会像任何 SQLite 读者一样在共享内存索引里写一条读标记；主库与 WAL 逐字节不变。
 
+### 4.6 消息表迁移（2026-10-20）
+
+客户端自 2026-10-18 00:56（+08:00）起把请求明细写入 `session_message` 表，`message` 表冻结为迁移前的历史：
+本机 `message` 表最后写入 2026-10-18 00:49:57、`session` 表 00:53:17，而 `session_message` 与 `session_v2` 持续写入。
+`opencode.log` 中同一时刻执行了 `20261007190000_azure_cli_external_credential` 与 `20261010180456_project_time_archived`
+两个 database migration，之后写入目标切换。只读旧表的采集器会从此漏掉全部新请求。
+
+两表 id 空间一致，可安全并集（本机 `message` 4 105 行、`session_message` 3 293 行、交集 2 327 行，交集 token 值逐条相同）：
+`message` 独有 1 778 行是迁移前历史，`session_message` 独有 966 行是迁移后新增。
+
+| 字段     | `message`（旧）                                         | `session_message`（新）                                                                                |
+| -------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 消息种类 | `data.role`                                             | `type` 列：assistant / user / system / compaction / synthetic / idle / agent-switched / model-switched |
+| 模型     | `data.modelID` + `data.providerID`（扁平）              | `data.model.id` + `data.model.providerID`（嵌套）                                                      |
+| `tokens` | `{input,output,reasoning,cache.read,cache.write,total}` | `{input,output,reasoning,cache.read,cache.write}`，**没有 `total`**                                    |
+| 时间     | `data.time.created/completed`                           | 同上，另有 `data.time.streamed`                                                                        |
+
+- `total == input + output + reasoning + cache.read` 在新表同样成立（抽样比对旧表重叠行，`total` 逐条相等）。
+- 2 870 条 assistant 中只有 2 条没有用量（进行中或失败重试）；`compaction` 是真实的模型调用，携带用量时同样计入（1 条）。
+- `session_message.session_id` 全部命中 `session_v2.id`（57/57），明细能挂到会话上。
+- 会话累计与明细求和的偏差：52/57 个会话逐条相等，其余 5 个合计偏差 0.52%（客户端累计快照与逐条求和的时点差）。
+
 ## 5. 字段可得性总结（十三个客户端；本节为初始 Codex / Claude Code / OpenCode 三客户端对照）
 
 | 能力             | Codex                                                     | Claude Code                                          | OpenCode                             |

@@ -35,7 +35,7 @@ import type { SessionFilters, StatsBucket } from "@/lib/usage-types";
 import { createCustomRange, rangeScope, type DateRange } from "@/lib/ranges";
 
 const TOTAL_TOOLTIP =
-  "按客户端口径归一化：Codex / OpenCode 使用客户端累计或聚合值，其他客户端按去重后的请求求和。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
+  "按客户端口径归一化后由请求明细求和；没有请求明细的会话使用客户端自报的累计值。缓存写入依据各客户端口径计入总量；缺失值保持未知。";
 
 type OverviewPageProps = {
   range: DateRange;
@@ -281,11 +281,14 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
       </DashboardCard>
 
       <DataExplanation
-        summary={`会话累计 · 不含估算${bucket?.sessionsPartial ? ` · ${formatNumber(bucket.sessionsPartial)} 个明细不完整` : ""}${bucket?.sessionsTotalMismatch ? ` · ${formatNumber(bucket.sessionsTotalMismatch)} 个总量异常` : ""}`}
+        summary={`请求时间归集 · 不含估算${bucket?.sessionsPartial ? ` · ${formatNumber(bucket.sessionsPartial)} 个明细不完整` : ""}${bucket?.sessionsTotalMismatch ? ` · ${formatNumber(bucket.sessionsTotalMismatch)} 个总量异常` : ""}`}
       >
-        <p>按会话开始日归属累计用量。— 表示未知，不计入合计。</p>
+        <p>
+          用量按请求时间归集：有请求明细的会话按每条请求的发生时间落桶，没有请求明细的会话按会话开始日落桶。
+          — 表示未知，不计入合计。
+        </p>
         <p>模型按会话主模型归属，非逐请求模型；项目按会话目录归属。</p>
-        <p>明细不完整时仍展示会话累计值；分项与客户端总量不一致时保留客户端值。</p>
+        <p>明细不完整时按已导入的请求明细求和；分项与客户端总量不一致的会话单独计数。</p>
       </DataExplanation>
     </div>
   );
