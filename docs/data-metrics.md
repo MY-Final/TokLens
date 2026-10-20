@@ -364,6 +364,14 @@ Codex parser_version 升到 2，下一次同步自动重读原日志，历史展
 - 主库只读样本 1会话/17请求：input61869/output5675/cache_read814226/cache_write0/reasoning0，四桶881770；17模型均NULL。客户端 fresh/goal summary 为67544，明确排除缓存，差814226来自口径，不能把它当完整用量。最终 WAL 可见对账在验收后登记，不把主库数字冒充 WAL 结果。
 - 三客户端采用原子完整快照：重复同步幂等，稳定成功扫描可反映修正/删除；源缺失、格式失败、扫描变化不推进水位或删除历史。单客户端失败不阻塞其他来源。无迁移、依赖、权限、联网、费用或估算新增；旧客户端历史规则不变。
 
+### 口径 2.14（2026-10-20）：OpenCode 大库读取方式
+
+- 只改读取方式：客户端正在持有该库时就地只读打开，客户端未运行时回退内存快照。统计口径、去重键、会话与请求的对应关系完全不变。
+- 起因：OpenCode 本地库已到 2.17 GB，超过 SQLite 单次内存分配上限（2 147 483 391 字节），"整库复制成内存快照"的读法必然返回 `SQLITE_NOMEM`，采集持续失败。
+- 就地读取在延迟读事务内完成，会话累计值与逐条明细来自同一时点；客户端数据（主库与 WAL）逐字节不变，共享内存索引 `-shm` 只多一条读标记（任何 SQLite 读者都会写）。
+- 客户端未运行且库超过上限时仍无法读取，界面提示"客户端数据库过大，只读快照无法载入；请在客户端运行时重试"，历史统计保持不变。
+- 本机复测：OpenCode 1 109 个会话、39 932 条明细导入成功，峰值内存 75 MB（原路径需 2 078 MB 后失败）。其余 SQLite 客户端行为不变。
+
 ### 口径 2.13（2026-10-20）：Cline 会话清单与逐轮明细
 
 - `cline.messages.v1`，只读 `~/.cline/data/sessions/<sessionId>/` 下的清单 `<sessionId>.json` 与消息文件 `<sessionId>.messages.json`（格式版本 1）；目录根按 Cline 自身的 `CLINE_SESSION_DATA_DIR` > `CLINE_DATA_DIR/sessions` > `CLINE_DIR/data/sessions` > `~/.cline/data/sessions` 解析。不读 `db/sessions.db`（仅会话索引，无独立 Token 账本）、不读 `hooks.jsonl`、不读正文与系统提示词。

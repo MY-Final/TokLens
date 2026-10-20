@@ -250,6 +250,14 @@
 4. **旧版 JSON 存储已迁移**：本机没有历史 JSON 存储可读；若目标机器是旧版本 OpenCode，需要额外适配 `storage/session|message|part` 目录结构（本机无样本，**未验证**）。
 5. **`event` 表覆盖不全**（仅 2 个聚合），不能作为增量水位；应使用 `session.time_updated` 与 `message.time_updated`。
 
+### 4.5 大库读取方式（2026-10-20）
+
+本机 OpenCode 库已从 1 186 MB 增长到 **2 172 809 216 字节**（530 471 页 × 4 096，`session` 1 091 行、`session_v2` 1 029 行、`message` 44 634 行），`message.data` 大 JSON 是主要体积来源。
+`rusqlite::deserialize_read_exact` 需要一次性 `sqlite3_malloc64` 整库镜像，而 SQLite 的 `SQLITE_MAX_ALLOCATION_SIZE` 为 2 147 483 391 字节，**超过该上限的库必然返回 `SQLITE_NOMEM`**（与机器内存是否充足无关，本机 63.7 GB 内存、22 GB 空闲时同样失败）。
+改为客户端运行时就地只读打开（`file:...?mode=ro` 等价的只读标志），按需读取页面，峰值内存 2 078 MB → 75 MB。
+只读连接在客户端未运行时（`-wal` / `-shm` 缺失）会自行创建这两个旁车文件，与"不在客户端目录落文件"的约束冲突，因此仅在客户端持有该库时使用，其余情况回退内存快照。
+就地读取会像任何 SQLite 读者一样在共享内存索引里写一条读标记；主库与 WAL 逐字节不变。
+
 ## 5. 字段可得性总结（十三个客户端；本节为初始 Codex / Claude Code / OpenCode 三客户端对照）
 
 | 能力             | Codex                                                     | Claude Code                                          | OpenCode                             |

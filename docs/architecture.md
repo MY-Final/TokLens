@@ -34,6 +34,18 @@
 
 `collectors/sync` 通过回调报告实际处理的数据源数、总数与当前客户端；command 存入现有同步状态并复用 `usage-sync` 广播，查询状态也携带同一进度用于轮询兜底。仅统计本轮启用的客户端；缺失与失败来源仍算已处理，失败继续沿用独立报告。前端复用 shadcn Progress，在主工具栏与数据源页显示进度；进度事件只更新内存状态，结束后重读来源与统计，不在每次进度变化时查询数据库。无新依赖、目录、权限、网络能力、迁移或统计口径变更。
 
+### OpenCode 大库读取方式（2026-10-20）
+
+OpenCode 的本地库已增长到 2.17 GB，超过 SQLite 单次内存分配上限（`SQLITE_MAX_ALLOCATION_SIZE = 2 147 483 391`）。
+原先"把整库复制成内存快照"的读法会直接返回 `SQLITE_NOMEM`，OpenCode 采集因此持续失败。
+新增 `collectors/sqlite_source.rs`：客户端正在持有该库时（`-wal` 与 `-shm` 同时存在）就地只读打开，按需读取页面，内存有界且不受该上限约束；
+客户端未运行时的只读连接会自行创建 `-shm`，与"不在客户端目录落文件"的约束冲突，因此回退到内存快照（`collectors/sqlite_snapshot.rs`）。
+只读连接在延迟读事务内读取，保证会话累计值与逐条明细来自同一时点。
+边界：客户端数据（主库与 WAL）逐字节不变；共享内存索引 `-shm` 会多一条读标记，与任何 SQLite 读者一致；
+客户端未运行且库超过上限时仍无法读取，提示"客户端数据库过大，只读快照无法载入；请在客户端运行时重试"。
+其余 SQLite 客户端（MiMoCode / MCode / Copilot）继续走内存快照路径，行为与测试不变。
+本机复测：峰值内存由 2 078 MB 降到 75 MB，导入 1 109 个会话、39 932 条明细。
+
 ### Cline 接入决策（2026-10-20）
 
 新增 `collectors/cline/`，按 discovery / parser / rollup / sync / tests 拆分；纯归一化位于 `usage/normalize/cline.rs`。
@@ -357,23 +369,24 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 
 保留公开调用路径、DTO、数据库结构与统计口径；目录入口只负责模块组织与显式导出。
 
-| 模块                      | 子模块职责                                                                                                                                                                                                                         |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `usage/normalize/`        | `codex`、`claude_code`、`opencode`、`dsh`、`kimi_code` 独立归一化；MiMoCode / Pi Desktop 共享 `request_ledger` 记录构造；`rollup` 对完整字段安全求和；`request_ledger` 负责 MiMoCode / Pi Desktop 按请求求和，测试随客户端规则组织 |
-| `usage/time.rs`           | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                                                                                                                                 |
-| `usage/store/`            | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                                                                                                                              |
-| `usage/analytics/`        | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                                                                                                                        |
-| `collectors/codex/`       | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                                                                                                                                 |
-| `collectors/claude_code/` | JSONL 白名单解析、跨文件去重聚合与完整快照同步                                                                                                                                                                                     |
-| `collectors/opencode/`    | 只读 SQLite 元数据查询与完整快照同步；每次读取 WAL 可见的事务快照                                                                                                                                                                  |
-| `collectors/dsh/`         | v0 JSONL / Zstandard 解析、步骤 usage 替换与完整快照同步                                                                                                                                                                           |
-| `collectors/kimi_code/`   | 会话目录发现、v2 / 旧版元数据、wire 1.4 / 1.5 白名单解析与原子快照同步                                                                                                                                                             |
-| `collectors/mimocode/`    | SQLite WAL 只读事务、统计白名单投影、排除外部导入与快照替换                                                                                                                                                                        |
-| `collectors/pi_desktop/`  | schema 1 JSONL 白名单、物理操作账本 / legacy 残差、指纹与原子快照                                                                                                                                                                  |
-| `collectors/cline/`       | 会话目录发现、清单 / 消息文件类型化投影、清单与逐轮明细合成、原子快照同步                                                                                                                                                          |
-| `collectors/` 公共模块    | `files` 发现与指纹；`sqlite_snapshot` 只读 SQLite/WAL 内存快照；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                                                                                       |
-| `commands/`               | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验                                                                                                     |
-| `src/lib/usage-types.ts`  | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                                                                                                                      |
+| 模块                          | 子模块职责                                                                                                                                                                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `usage/normalize/`            | `codex`、`claude_code`、`opencode`、`dsh`、`kimi_code` 独立归一化；MiMoCode / Pi Desktop 共享 `request_ledger` 记录构造；`rollup` 对完整字段安全求和；`request_ledger` 负责 MiMoCode / Pi Desktop 按请求求和，测试随客户端规则组织 |
+| `usage/time.rs`               | UTC 时间解析与系统时间读取，记录模型不承担日历计算                                                                                                                                                                                 |
+| `usage/store/`                | 连接初始化、错误与存储类型、版本化迁移、单记录写入、事务导入、读查询分别组织；已发布迁移 SQL 保持不变                                                                                                                              |
+| `usage/analytics/`            | 查询类型、公共分桶读取、区间/趋势/客户端聚合、排行、会话/数据源查询分别组织                                                                                                                                                        |
+| `collectors/codex/`           | 文件发现与水位判断、白名单解析、线程累计聚合、同步协调与报告分别组织；只有同步协调调用存储写入 API                                                                                                                                 |
+| `collectors/claude_code/`     | JSONL 白名单解析、跨文件去重聚合与完整快照同步                                                                                                                                                                                     |
+| `collectors/opencode/`        | 只读 SQLite 元数据查询与完整快照同步；每次读取 WAL 可见的事务快照                                                                                                                                                                  |
+| `collectors/dsh/`             | v0 JSONL / Zstandard 解析、步骤 usage 替换与完整快照同步                                                                                                                                                                           |
+| `collectors/kimi_code/`       | 会话目录发现、v2 / 旧版元数据、wire 1.4 / 1.5 白名单解析与原子快照同步                                                                                                                                                             |
+| `collectors/mimocode/`        | SQLite WAL 只读事务、统计白名单投影、排除外部导入与快照替换                                                                                                                                                                        |
+| `collectors/pi_desktop/`      | schema 1 JSONL 白名单、物理操作账本 / legacy 残差、指纹与原子快照                                                                                                                                                                  |
+| `collectors/cline/`           | 会话目录发现、清单 / 消息文件类型化投影、清单与逐轮明细合成、原子快照同步                                                                                                                                                          |
+| `collectors/sqlite_source.rs` | 客户端 SQLite 库的只读访问策略：客户端运行时就地只读打开（带读事务），否则回退内存快照；只统计白名单字段                                                                                                                           |
+| `collectors/` 公共模块        | `files` 发现与指纹；`sqlite_snapshot` 只读 SQLite/WAL 内存快照；`types` 同步协议；`sync` 独立调度各客户端；`test_support` 仅共享合成测试目录                                                                                       |
+| `commands/`                   | `state.rs` 管理应用状态，`sync.rs` 调度后台同步，`error.rs` 封装命令错误；`dto.rs` 统一跨端结构，`queries.rs` 仅查询与参数校验                                                                                                     |
+| `src/lib/usage-types.ts`      | 纯跨端类型；`api.ts` 负责调用与事件订阅，并兼容原类型导入路径                                                                                                                                                                      |
 
 较大的测试模块按行为分组，共享合成数据构造器仅在 `cfg(test)` 下编译。不按行数机械拆文件，
 优先隔离不同的变更原因；模块内部使用私有或 `pub(super)` 可见性，避免为拆分扩大公开接口。
@@ -448,10 +461,11 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 
 ### AI 品牌图标（2026-10-11）
 
-| 日期       | 决策                                                                                                                  | 状态   | 理由 / 影响                                                                                    |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
-| 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现                                                 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文                                                     |
-| 2026-10-20 | 接入 Cline：新增 `collectors/cline/` 与 `usage/normalize/cline.rs`，注册 `client-cline` 身份色与 LobeHub `Cline` 图标 | 已采纳 | 复用既有完整快照与去重机制，不新增依赖、权限、联网或费用换算；子代理累计值不叠加，避免重复计数 |
+| 日期       | 决策                                                                                                                  | 状态   | 理由 / 影响                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| 2026-10-11 | 引入用户指定的 `@lobehub/icons`，品牌标识统一由 `ClientIdentity` 呈现                                                 | 已采纳 | 本地 SVG、统一品牌色；依赖与体积影响见下文                                                          |
+| 2026-10-20 | 接入 Cline：新增 `collectors/cline/` 与 `usage/normalize/cline.rs`，注册 `client-cline` 身份色与 LobeHub `Cline` 图标 | 已采纳 | 复用既有完整快照与去重机制，不新增依赖、权限、联网或费用换算；子代理累计值不叠加，避免重复计数      |
+| 2026-10-20 | OpenCode 超过 2 GB 的本地库改为客户端运行时就地只读打开，内存快照保留为回退                                           | 已采纳 | 消除 `SQLITE_NOMEM` 导致的同步失败；峰值内存 2 078 MB → 75 MB；不改统计口径、不新增依赖、权限或联网 |
 
 按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
 由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode`、`DeepSeek`（DSH）的单色 SVG 组件。
