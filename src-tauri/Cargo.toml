@@ -28,6 +28,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 zstd = { version = "0.13.3", default-features = false }
 rusqlite = { version = "0.40.2", features = ["bundled", "serialize"] }
+# Kimi Code names a session's workspace directory after the MD5 digest of its path.
+md5 = "0.7"
 
 [dev-dependencies]
 base64 = "0.22"

@@ -4,9 +4,10 @@ mod discovery;
 mod metadata;
 mod parser;
 mod sync;
+mod workdirs;
 
 pub use sync::KimiCodeCollector;
-pub const PARSER_VERSION: i64 = 1;
+pub const PARSER_VERSION: i64 = 2;
 
 #[cfg(test)]
 mod tests;

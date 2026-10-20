@@ -302,3 +302,66 @@ fn derived_bucket_totals_are_derived_and_reported_totals_stay_measured() {
         ]
     );
 }
+
+/// 版本 3 的会话头：时间用 ISO 字符串，消息行用纪元毫秒。
+const V3_HEADER: &str = r#"{"type":"session","version":3,"id":"01a0ad59-59fc-759d-9191-99715872de7f","timestamp":"2026-09-17T03:11:49.244Z","cwd":"D:\\synthetic\\project"}"#;
+
+fn v3_message(id: &str, ts: i64, model: &str, usage: &str) -> String {
+    format!(
+        r#"{{"type":"message","id":"{id}","parentId":null,"timestamp":{ts},"message":{{"role":"assistant","model":"{model}","usage":{usage},"content":[{{"type":"text","text":"PRIVATE_SENTINEL"}}]}}}}"#
+    )
+}
+
+const V3_USAGE: &str = r#"{"input":64609,"output":5967,"cacheRead":260224,"cacheWrite":0,"reasoning":2890,"totalTokens":330800,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}"#;
+
+#[test]
+fn version_three_sessions_read_usage_models_and_events() {
+    let dir = TempDir::new();
+    let rows = [
+        V3_HEADER.to_string(),
+        r#"{"type":"model_change","id":"680190ec","parentId":null,"timestamp":"2026-09-17T03:11:49.302Z","provider":"synthetic","modelId":"synthetic/model"}"#.to_string(),
+        r#"{"type":"thinking_level_change","id":"535ef0c1","parentId":"680190ec","timestamp":"2026-09-17T03:11:49.302Z","thinkingLevel":"medium"}"#.to_string(),
+        v3_message("m1", 1789614731679, "synthetic/model", V3_USAGE),
+        r#"{"type":"message","id":"u1","parentId":null,"timestamp":1789614731000,"message":{"role":"user","content":[{"type":"text","text":"PRIVATE_SENTINEL"}]}}"#.to_string(),
+    ];
+    dir.write("project/session.jsonl", &(rows.join("\n") + "\n"));
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = PiDesktopCollector::new(&dir.0)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    // 模型切换事件不携带用量，不算异常记录。
+    assert_eq!(report.unparsed_lines, 0);
+    assert_eq!(report.sessions_imported, 1);
+    assert_eq!(store.message_count().expect("count"), 1);
+    // 客户端自报总量：input + output + cacheRead + cacheWrite。
+    assert_eq!(total(&store), 330800);
+    let t = store
+        .range_totals(&AnalyticsFilter::default())
+        .expect("totals");
+    assert_eq!(t.sums.input_tokens, 64609);
+    assert_eq!(t.sums.cache_read_tokens, 260224);
+    // 推理是输出的子集，普通输出不重复加推理。
+    assert_eq!(t.sums.output_tokens, 5967 - 2890);
+    assert_eq!(t.sums.reasoning_tokens, 2890);
+    let conn = store.connection_for_tests();
+    let (session, project, model): (String, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT client_session_id, project_path, model FROM sessions WHERE client='pi_desktop'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("session");
+    assert_eq!(session, "01a0ad59-59fc-759d-9191-99715872de7f");
+    assert_eq!(project, Some("D:\\synthetic\\project".to_string()));
+    assert_eq!(model, Some("synthetic/model".to_string()));
+    let (key, time): (String, Option<i64>) = conn
+        .query_row(
+            "SELECT dedup_key, created_at_ms FROM messages WHERE client='pi_desktop'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("message");
+    assert_eq!(key, "message:m1");
+    assert_eq!(time, Some(1789614731679));
+    assert_private(&store);
+}

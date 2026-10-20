@@ -1,6 +1,6 @@
 //! Detect changed transcripts, then import one complete cross-file snapshot.
 
-use super::{PARSER_VERSION, discovery, metadata, parser};
+use super::{PARSER_VERSION, discovery, metadata, parser, workdirs};
 use crate::collectors::files::{discover_files, fingerprint, home_dir};
 use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
@@ -15,10 +15,22 @@ pub struct KimiCodeCollector {
 
 impl KimiCodeCollector {
     pub fn default_root() -> Option<PathBuf> {
-        std::env::var_os("KIMI_CODE_HOME")
+        let root = std::env::var_os("KIMI_CODE_HOME")
             .map(PathBuf::from)
-            .or_else(|| home_dir().map(|home| home.join(".kimi-code")))
-            .map(|home| home.join("sessions"))
+            .or_else(|| {
+                let home = home_dir()?;
+                // 当前版本把配置与会话放在 ~/.kimi，旧版本用 ~/.kimi-code；
+                // 哪个目录下有 sessions 就用哪个。
+                let candidates = [home.join(".kimi"), home.join(".kimi-code")];
+                Some(
+                    candidates
+                        .iter()
+                        .find(|candidate| candidate.join("sessions").is_dir())
+                        .cloned()
+                        .unwrap_or_else(|| home.join(".kimi")),
+                )
+            })?;
+        Some(root.join("sessions"))
     }
 
     pub fn new(root: impl Into<PathBuf>) -> Self {
@@ -69,9 +81,11 @@ impl KimiCodeCollector {
             report.files_skipped_unchanged = paths.len();
             return Ok(report);
         }
+        // 工作目录登记在客户端主目录的 kimi.json 里，用来反查会话所属的项目。
+        let work_dirs = workdirs::read(self.root.parent().unwrap_or(&self.root));
         let mut sessions = Vec::new();
-        for group in discovery::group(&paths).into_values() {
-            let meta = metadata::read(&group.state)?;
+        for (session_dir, group) in discovery::group(&paths) {
+            let meta = metadata::read(&session_dir, group.state.as_deref(), &work_dirs)?;
             let mut messages = Vec::new();
             let mut counts = Vec::new();
             let mut message_source_paths = BTreeMap::new();
@@ -97,7 +111,12 @@ impl KimiCodeCollector {
                     meta, &messages, &counts, partial,
                 ),
                 messages,
-                source_path: group.state.to_string_lossy().to_string(),
+                source_path: group
+                    .state
+                    .as_ref()
+                    .or_else(|| group.wires.first())
+                    .map(|path| path.to_string_lossy().to_string())
+                    .unwrap_or_default(),
                 message_source_paths,
             });
         }

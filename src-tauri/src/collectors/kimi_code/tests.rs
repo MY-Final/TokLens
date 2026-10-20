@@ -144,7 +144,12 @@ fn legacy_protocol_empty_missing_and_zero_usage() {
         "workspace/session_fixture/agents/main/wire.jsonl",
         &wire(&[]).replace("1.5", "1.4"),
     );
-    let meta = metadata::read(&dir.0.join("workspace/session_fixture/state.json")).expect("legacy");
+    let meta = metadata::read(
+        &dir.0.join("workspace/session_fixture"),
+        Some(&dir.0.join("workspace/session_fixture/state.json")),
+        &workdirs::WorkDirs::new(),
+    )
+    .expect("legacy");
     assert_eq!(meta.id, "session_fixture");
     assert_eq!(meta.start_ms, Some(1784642924991));
     let store = UsageStore::open_in_memory().expect("store");
@@ -253,4 +258,106 @@ fn invalid_usage_is_counted_and_partial_coverage_is_visible() {
             .sessions_partial,
         1
     );
+}
+
+/// 1.1 协议：每行是 `{"timestamp": 秒, "message": {...}}`，用量在消息负载上。
+fn wire_v11(records: &[&str]) -> String {
+    String::from("{\"type\":\"metadata\",\"protocol_version\":\"1.1\"}\n")
+        + &records.join("\n")
+        + "\n"
+}
+
+const V11_USAGE: &str = r#"{"timestamp":1769652498.3081927,"message":{"type":"StatusUpdate","payload":{"message_id":"chatcmpl-a","token_usage":{"input_other":10,"output":5,"input_cache_read":100,"input_cache_creation":7}}}}"#;
+const V11_TOOL: &str =
+    r#"{"timestamp":1769652499.0,"message":{"type":"ToolCall","payload":{"type":"function"}}}"#;
+
+/// 当前版本的布局：`<工作目录摘要>/<会话 id>/wire.jsonl`，没有 state.json。
+fn current_fixture(dir: &TempDir, records: &[&str]) -> (String, String) {
+    let project = "/synthetic/workspace";
+    let digest = workdirs::digest(project);
+    dir.write(
+        "kimi.json",
+        &format!(
+            r#"{{"work_dirs":[{{"path":"{project}","kaos":"local","last_session_id":null}}]}}"#
+        ),
+    );
+    dir.write(
+        &format!("sessions/{digest}/session_v1/wire.jsonl"),
+        &wire_v11(records),
+    );
+    (digest, project.to_string())
+}
+
+#[test]
+fn current_protocol_reads_usage_and_maps_the_workspace_digest() {
+    let dir = TempDir::new();
+    let (digest, project) = current_fixture(&dir, &[V11_USAGE, V11_TOOL]);
+    let store = UsageStore::open_in_memory().expect("store");
+    let collector = KimiCodeCollector::new(dir.0.join("sessions"));
+    let report = collector
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert_eq!(report.files_seen, 1);
+    assert_eq!(report.unparsed_lines, 0);
+    assert_eq!(report.sessions_imported, 1);
+    assert_eq!(store.message_count().expect("count"), 1);
+    // 四个互不重叠的分桶：10 + 5 + 100 + 7。
+    assert_eq!(total(&store), 122);
+    let conn = store.connection_for_tests();
+    let (session, project_path, model): (String, Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT client_session_id, project_path, model FROM sessions WHERE client='kimi_code'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("session");
+    assert_eq!(session, "session_v1");
+    assert_eq!(project_path, Some(project.clone()));
+    // 1.1 不落盘模型，缺失保持未知。
+    assert_eq!(model, None);
+    let (key, start): (String, Option<i64>) = conn
+        .query_row(
+            "SELECT dedup_key, created_at_ms FROM messages WHERE client='kimi_code'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("message");
+    assert_eq!(key, "message:chatcmpl-a");
+    assert_eq!(start, Some(1769652498308));
+    // 工作目录摘要是路径的 MD5，摘要对不上时项目路径保持未知。
+    assert_eq!(workdirs::digest(&project), digest);
+    assert_private(&store);
+}
+
+#[test]
+fn current_protocol_deduplicates_repeated_message_ids() {
+    let dir = TempDir::new();
+    current_fixture(&dir, &[V11_USAGE, V11_USAGE]);
+    let store = UsageStore::open_in_memory().expect("store");
+    KimiCodeCollector::new(dir.0.join("sessions"))
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    assert_eq!(store.message_count().expect("count"), 1);
+    assert_eq!(total(&store), 122);
+}
+
+#[test]
+fn current_protocol_reports_unknown_records_and_ignores_the_conversation() {
+    let dir = TempDir::new();
+    current_fixture(
+        &dir,
+        &[
+            V11_USAGE,
+            r#"{"timestamp":1769652500.0,"message":{"type":"FutureEvent","payload":{"n":1}}}"#,
+        ],
+    );
+    dir.write("sessions/unknown/context.jsonl", "PRIVATE_SENTINEL");
+    let store = UsageStore::open_in_memory().expect("store");
+    let report = KimiCodeCollector::new(dir.0.join("sessions"))
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    // 未知消息类型计入未识别记录；对话文件根本不读。
+    assert_eq!(report.unparsed_lines, 1);
+    assert_eq!(store.message_count().expect("count"), 1);
+    assert_private(&store);
 }

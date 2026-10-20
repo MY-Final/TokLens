@@ -17,7 +17,22 @@ impl PiDesktopCollector {
     pub fn default_root() -> Option<PathBuf> {
         std::env::var_os("PI_DESKTOP_SESSIONS_DIR")
             .map(PathBuf::from)
-            .or_else(|| home_dir().map(|home| home.join(".pi-desktop").join("sessions")))
+            .or_else(|| {
+                let home = home_dir()?;
+                // 当前版本把会话放在 ~/.pi/agent/sessions，旧版本用 ~/.pi-desktop/sessions；
+                // 哪个目录存在就用哪个。
+                let candidates = [
+                    home.join(".pi").join("agent").join("sessions"),
+                    home.join(".pi-desktop").join("sessions"),
+                ];
+                Some(
+                    candidates
+                        .iter()
+                        .find(|candidate| candidate.is_dir())
+                        .cloned()
+                        .unwrap_or_else(|| home.join(".pi").join("agent").join("sessions")),
+                )
+            })
     }
 
     pub fn new(root: impl Into<PathBuf>) -> Self {
