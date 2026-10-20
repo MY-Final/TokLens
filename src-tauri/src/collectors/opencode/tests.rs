@@ -108,6 +108,53 @@ fn missing_aggregate_fields_unknown_json_and_nested_models() {
     assert_eq!(store.message_count().expect("count"), 1);
 }
 
+/// 客户端库主文件与旁车文件的内容指纹。
+fn source_bytes(path: &std::path::Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    ["", "-wal", "-shm"]
+        .into_iter()
+        .filter_map(|suffix| {
+            let name = format!("{}{suffix}", path.to_string_lossy());
+            std::fs::read(&name).ok().map(|bytes| (name, bytes))
+        })
+        .collect()
+}
+
+#[test]
+fn a_running_client_is_read_in_place_without_modifying_its_database() {
+    let dir = TempDir::new();
+    let (path, source) = source(&dir);
+    let before = source_bytes(&path);
+    let store = UsageStore::open_in_memory().expect("store");
+    OpenCodeCollector::new(&path)
+        .sync(&store, &SyncOptions::default())
+        .expect("sync");
+    // 客户端正在持有这个库：就地只读打开，不新建任何文件。
+    // 客户端数据（主库与 WAL）逐字节不变；共享内存索引里只会多一条读标记，
+    // 任何 SQLite 读者都会写它，与客户端自身的行为一致。
+    let after = source_bytes(&path);
+    assert_eq!(
+        after.keys().collect::<Vec<_>>(),
+        before.keys().collect::<Vec<_>>(),
+        "no sidecar file may appear beside the client database"
+    );
+    for suffix in ["", "-wal"] {
+        let name = format!("{}{suffix}", path.to_string_lossy());
+        assert_eq!(
+            before.get(&name),
+            after.get(&name),
+            "the client database and its WAL must stay untouched"
+        );
+    }
+    assert_eq!(
+        store
+            .totals(&TotalsFilter::default())
+            .expect("totals")
+            .total_tokens,
+        115
+    );
+    drop(source);
+}
+
 #[test]
 fn sync_does_not_create_a_sqlite_shared_memory_sidecar() {
     let dir = TempDir::new();

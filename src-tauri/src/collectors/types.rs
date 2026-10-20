@@ -13,6 +13,8 @@ pub enum SyncError {
     Source(std::io::Error),
     Database(rusqlite::Error),
     ChangedDuringScan,
+    /// 客户端库超过只读快照的可用上限（SQLite 单次内存分配约 2 GB）。
+    TooLarge,
 }
 
 impl std::fmt::Display for SyncError {
@@ -23,6 +25,10 @@ impl std::fmt::Display for SyncError {
             SyncError::Source(_) => write!(f, "无法完整读取客户端转录，下次同步重试"),
             SyncError::Database(_) => write!(f, "无法读取客户端数据库，可能被占用或格式不受支持"),
             SyncError::ChangedDuringScan => write!(f, "源数据在扫描期间发生变化，下次同步重试"),
+            SyncError::TooLarge => write!(
+                f,
+                "客户端数据库过大，只读快照无法载入；请在客户端运行时重试"
+            ),
         }
     }
 }

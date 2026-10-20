@@ -2,7 +2,7 @@
 
 use super::{PARSER_VERSION, queries};
 use crate::collectors::files::{fingerprint, home_dir};
-use crate::collectors::sqlite_snapshot;
+use crate::collectors::sqlite_source;
 use crate::collectors::{SyncError, SyncOptions, SyncReport};
 use crate::usage::client::Client;
 use crate::usage::store::{SourceFile, SourceFileKind, UsageStore};
@@ -42,9 +42,11 @@ impl OpenCodeCollector {
         }
         report.files_seen = 1;
         let path = self.database.to_string_lossy().to_string();
-        // Read the main file plus committed WAL frames into memory. SQLite never opens
-        // the source, so no -wal/-shm is created or locked beside the client database.
-        let conn = sqlite_snapshot::open(&self.database)?;
+        // Read the client database in place while the client holds it open, so a large
+        // library does not have to fit into one memory allocation. When the client is
+        // not running, the read-only connection would create sidecar files beside it,
+        // so the in-memory snapshot is used instead.
+        let conn = sqlite_source::open(&self.database)?;
         let snapshot = queries::snapshot(&conn, &path)?;
         let (size, mtime) = fingerprint(&self.database)?;
         let source = SourceFile {

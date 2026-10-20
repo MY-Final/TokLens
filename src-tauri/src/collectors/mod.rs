@@ -14,6 +14,7 @@ pub mod mimocode;
 pub mod opencode;
 pub mod pi_desktop;
 pub(crate) mod sqlite_snapshot;
+pub(crate) mod sqlite_source;
 mod sync;
 mod types;
 pub mod workbuddy;

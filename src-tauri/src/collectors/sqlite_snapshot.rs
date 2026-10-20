@@ -1,4 +1,7 @@
 //! Filesystem reads only: SQLite never opens the original database or its shm.
+//!
+//! 这是客户端库的兜底读法：整库复制成内存快照，源目录完全不被触碰。
+//! 但 SQLite 单次内存分配上限约 2 GB，超过上限的库无法复制（见 `sqlite_source`）。
 use crate::collectors::{SyncError, files::fingerprint};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
