@@ -53,6 +53,19 @@ OpenCode 的本地库已增长到 2.17 GB，超过 SQLite 单次内存分配上�
 其余 SQLite 客户端（MiMoCode / MCode / Copilot）继续走内存快照路径，行为与测试不变。
 本机复测：峰值内存由 2 078 MB 降到 75 MB，导入 1 109 个会话、39 932 条明细。
 
+### OpenCode 消息表迁移（2026-10-20）
+
+OpenCode 自 2026-10-18 00:56（+08:00）起把请求明细写入 `session_message` 表，`message` 表冻结为迁移前的历史
+（本机 `message` 表最后写入 2026-10-18 00:49:57，`session_message` 与 `session_v2` 持续写入）。
+采集器原先只读 `message` 表，迁移之后的请求明细全部缺失，表现为"今天的用量统计不到"。
+`collectors/opencode/queries.rs` 改为同时读取 `session_message` 与 `message`：角色取自 `type` 列（新表）或 `data.role`（旧表），
+模型字段兼容嵌套（`data.model.id` / `data.model.providerID`）与扁平（`modelID` / `providerID`）两种写法；
+两表 id 空间一致，按 `message.id` 去重合并，重叠部分以新表为准，不会重复计数。
+只导入 assistant 与携带用量的 compaction（compaction 是真实的模型调用）；user / system / synthetic / idle / agent-switched / model-switched
+是会话控制类消息，不含用量，静默跳过；未知种类忽略并计数。新表 `tokens` 没有 `total` 字段，按分桶确定性换算总量，口径 id 不变。
+解析器版本提升为 2，已有水位会触发重扫；完整成功扫描原子替换客户端快照，迁移后的明细自动补齐。
+不改统计口径、不新增依赖、权限或联网。
+
 ### Cline 接入决策（2026-10-20）
 
 新增 `collectors/cline/`，按 discovery / parser / rollup / sync / tests 拆分；纯归一化位于 `usage/normalize/cline.rs`。
@@ -474,6 +487,7 @@ Windows x64、macOS Intel / Apple Silicon 分别执行 Rust 校验与无安装�
 | 2026-10-20 | 接入 Cline：新增 `collectors/cline/` 与 `usage/normalize/cline.rs`，注册 `client-cline` 身份色与 LobeHub `Cline` 图标 | 已采纳 | 复用既有完整快照与去重机制，不新增依赖、权限、联网或费用换算；子代理累计值不叠加，避免重复计数      |
 | 2026-10-20 | OpenCode 超过 2 GB 的本地库改为客户端运行时就地只读打开，内存快照保留为回退                                           | 已采纳 | 消除 `SQLITE_NOMEM` 导致的同步失败；峰值内存 2 078 MB → 75 MB；不改统计口径、不新增依赖、权限或联网 |
 | 2026-10-20 | Kimi Code 与 Pi Desktop 跟随客户端迁移数据目录与文件格式，新增 `md5` 反查工作目录摘要                                 | 已采纳 | 修回两个"已装已用但一条都没采到"的客户端；仅新增 `md5`（MIT、无传递依赖）用于路径反查，不改统计口径 |
+| 2026-10-20 | OpenCode 请求明细改读 `session_message` 表，并与历史 `message` 表按 `message.id` 去重合并                             | 已采纳 | 修回 10-18 之后全部缺失的请求明细；口径 id 与去重键不变，不新增依赖、权限或联网                     |
 
 按用户指定的 [LobeHub 接入说明](https://icons.lobehub.com/skills.md)，引入 `@lobehub/icons`，
 由 `ClientIdentity` 统一使用 `Codex`、`ClaudeCode`、`OpenCode`、`DeepSeek`（DSH）的单色 SVG 组件。

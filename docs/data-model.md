@@ -274,8 +274,10 @@ cargo run --manifest-path src-tauri/Cargo.toml --example codex_usage_report
 每次扫描元数据快照，避免主库大小或 mtime 未变化时漏掉 WAL 内容；不依赖不完整的 event 表作为水位。
 
 `session` / `session_v2` 按 id 合并，更新时间较新的优先，平局取 `session_v2`；不把两份聚合相加。
-消息只导入 assistant，按 message.id 去重，兼容扁平与嵌套模型字段；缺失聚合列保持未知。
-聚合表无总量列时，由完整聚合分桶确定性换算总量；保留客户端自报成本，但不视作统一 USD 定价依据。
+消息同时读取 `session_message`（客户端 2026-10-18 起的写入目标）与 `message`（迁移前的历史），按 message.id 去重合并，重叠部分以新表为准。
+只导入 assistant 与携带用量的 compaction；user / system / synthetic / idle / agent-switched / model-switched 是会话控制类消息，不含用量，静默跳过；未知种类忽略并计数。
+兼容扁平与嵌套模型字段（新表为 `data.model.id` / `data.model.providerID`，旧表为 `modelID` / `providerID`）；缺失聚合列保持未知。
+新表 `tokens` 没有 `total` 字段时按分桶确定性换算总量；保留客户端自报成本，但不视作统一 USD 定价依据。
 成功读取后原子替换完整客户端快照；读取 / schema 失败保留原快照。
 当前支持 SQLite 格式；旧 `storage/session|message` JSON 格式未经验证，未接入。
 
