@@ -1,82 +1,108 @@
+import type { ReactNode } from "react";
 import { Download, LoaderCircle, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { ReleaseNotes } from "@/components/ReleaseNotes";
 import type { UpdatesController } from "@/hooks/use-updates";
-import type { UpdatePhase } from "@/lib/settings-types";
-import { releaseNotesText } from "@/lib/release-notes";
+import type { UpdatePhase, UpdateState } from "@/lib/settings-types";
+import { resolveUpdatePhase, updateErrorText, updatePhaseLabel } from "@/lib/update-phase";
 
-const LABELS: Record<UpdatePhase, string> = {
-  disabled: "更新不可用",
-  idle: "检查是否有新版本",
-  checking: "正在检查更新…",
-  up_to_date: "已是最新版本",
-  available: "发现新版本",
-  downloading: "正在下载更新…",
-  downloaded: "更新已准备好",
-  installing: "正在安装更新…",
-  unavailable: "暂时无法检查更新",
-  failed: "更新未完成",
-};
 function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-/** Shared update flow for settings and the notification dialog. */
-export function UpdatePanel({
-  updates,
+/** 版本摘要：新版本存在时突出显示版本号，否则显示当前版本。 */
+function UpdateSummary({
+  state,
+  phase,
   currentVersion,
+  showStatus,
+}: {
+  state: UpdateState | null;
+  phase: UpdatePhase | null;
+  currentVersion: string | null | undefined;
+  showStatus: boolean;
+}) {
+  const version = state?.version;
+  const current = currentVersion ? `v${currentVersion}` : "—";
+  if (!version) {
+    return (
+      <div className="space-y-1">
+        <p className="text-lg font-semibold tabular-nums">v{current}</p>
+        {showStatus && <p className="text-xs text-muted-foreground">{updatePhaseLabel(phase)}</p>}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-lg font-semibold tabular-nums">v{version}</p>
+        {phase === "available" && (
+          <Badge variant="outline" className="border-primary/50 text-primary">
+            新版本
+          </Badge>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground">当前版本 {current}</p>
+    </div>
+  );
+}
+
+/** 底部操作栏：左侧说明或下载进度，右侧次要操作与主操作。 */
+function UpdateActions({
+  updates,
+  phase,
+  busy,
 }: {
   updates: UpdatesController;
-  currentVersion: string | null | undefined;
+  phase: UpdatePhase | null;
+  busy: boolean;
 }) {
-  const { state, operation } = updates;
-  const phase =
-    operation === "check"
-      ? "checking"
-      : operation === "download"
-        ? "downloading"
-        : operation === "install"
-          ? "installing"
-          : state?.phase;
-  const busy =
-    updates.busy || phase === "checking" || phase === "downloading" || phase === "installing";
-  const canDownload = !!state?.version && (phase === "available" || phase === "failed");
-  const canInstall = phase === "downloaded";
+  const { state } = updates;
   const percentage = state?.totalBytes
     ? Math.min(100, Math.floor((state.downloadedBytes / state.totalBytes) * 100))
     : null;
-  const error = updates.error ?? state?.error;
-  const notes = releaseNotesText(state?.notes ?? null);
-  return (
-    <div className="min-w-0 space-y-4">
-      <div aria-live="polite" role="status" className="space-y-1">
-        <p className="text-base font-medium">
-          {phase ? LABELS[phase] : "读取更新状态…"}
-          {state?.version && phase !== "checking" ? ` v${state.version}` : ""}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          当前版本 {currentVersion ? `v${currentVersion}` : "—"}
+  const error = updateErrorText(updates);
+  const canDownload = !!state?.version && (phase === "available" || phase === "failed");
+  const canInstall = phase === "downloaded";
+
+  let hint: ReactNode = "";
+  if (phase === "downloading") {
+    hint = (
+      <div className="space-y-1.5">
+        {percentage !== null && <Progress value={percentage} aria-label="更新下载进度" />}
+        <p className="text-xs text-muted-foreground tabular-nums">
+          {formatBytes(state?.downloadedBytes ?? 0)}
+          {state?.totalBytes ? ` / ${formatBytes(state.totalBytes)}` : ""}
+          {percentage !== null ? ` · ${percentage}%` : ""}
         </p>
       </div>
-      {phase === "downloading" && (
-        <div className="space-y-2" role="status">
-          {percentage !== null && <Progress value={percentage} aria-label="更新下载进度" />}
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {formatBytes(state?.downloadedBytes ?? 0)}
-            {state?.totalBytes ? ` / ${formatBytes(state.totalBytes)}` : ""}
-            {percentage !== null ? ` · ${percentage}%` : ""}
-          </p>
-        </div>
-      )}
-      {error && !busy && (
-        <p role="alert" className="text-sm break-words text-destructive">
-          {error}
-        </p>
-      )}
-      {canInstall && (
-        <p className="text-xs text-muted-foreground">安装时会关闭应用，统计与设置保留。</p>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
+    );
+  } else if (error && !busy) {
+    hint = (
+      <p role="alert" className="text-xs break-words text-destructive">
+        {error}
+      </p>
+    );
+  } else if (phase === "available") {
+    hint = <p className="text-xs text-muted-foreground">查看更新内容后再决定</p>;
+  } else if (canInstall) {
+    hint = <p className="text-xs text-muted-foreground">安装会关闭应用，统计与设置保留</p>;
+  } else if (phase === "idle") {
+    hint = <p className="text-xs text-muted-foreground">自动检查更新默认关闭，可手动检查</p>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="min-w-0 flex-1">{hint}</div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {canDownload && (
+          <Button variant="outline" disabled={busy} onClick={() => void updates.act("check")}>
+            <RefreshCw aria-hidden="true" />
+            重新检查
+          </Button>
+        )}
         {canDownload ? (
           <Button disabled={busy} onClick={() => void updates.act("download")}>
             <Download aria-hidden="true" />
@@ -107,25 +133,67 @@ export function UpdatePanel({
                     : "检查更新"}
           </Button>
         )}
-        {canDownload && (
-          <Button variant="ghost" disabled={busy} onClick={() => void updates.act("check")}>
-            重新检查
-          </Button>
-        )}
-        {!state && updates.error && (
-          <Button variant="outline" disabled={busy} onClick={() => void updates.reload()}>
-            重试
-          </Button>
-        )}
       </div>
-      {state?.version && notes && phase !== "checking" && (
-        <div className="space-y-2 border-t pt-4">
-          <p className="text-sm font-medium">更新内容</p>
-          <p className="max-h-[35vh] overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-wrap text-muted-foreground">
-            {notes}
+    </div>
+  );
+}
+
+/** Shared update flow for settings and the notification dialog. */
+export function UpdatePanel({
+  updates,
+  currentVersion,
+  layout = "inline",
+}: {
+  updates: UpdatesController;
+  currentVersion: string | null | undefined;
+  layout?: "inline" | "dialog";
+}) {
+  const { state } = updates;
+  const phase = resolveUpdatePhase(updates);
+  const busy =
+    updates.busy || phase === "checking" || phase === "downloading" || phase === "installing";
+  const notes = state?.notes ?? null;
+  const summary = (
+    <UpdateSummary
+      state={state}
+      phase={phase}
+      currentVersion={currentVersion}
+      showStatus={layout === "inline"}
+    />
+  );
+  const changelog =
+    state?.version && notes && phase !== "checking" ? (
+      <div className="space-y-3">
+        <p className="text-sm font-semibold">更新日志</p>
+        <ReleaseNotes notes={notes} omitVersion={state.version} />
+      </div>
+    ) : null;
+
+  if (layout === "dialog") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="shrink-0 border-b px-6 py-4">
+          {summary}
+          <p className="sr-only" role="status" aria-live="polite">
+            {updatePhaseLabel(phase)}
           </p>
         </div>
-      )}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{changelog}</div>
+        <div className="shrink-0 border-t px-6 py-4">
+          <UpdateActions updates={updates} phase={phase} busy={busy} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0 space-y-4">
+      {summary}
+      <p className="sr-only" role="status" aria-live="polite">
+        {updatePhaseLabel(phase)}
+      </p>
+      {changelog}
+      <UpdateActions updates={updates} phase={phase} busy={busy} />
     </div>
   );
 }
