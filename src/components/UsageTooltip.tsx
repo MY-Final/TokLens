@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { formatNumber } from "@/lib/format";
 import { useTokenFormat } from "@/hooks/use-token-format";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 
 export function UsageTooltip({
   title,
@@ -28,9 +29,11 @@ export function UsageTooltip({
   breakdownUnit?: "Token" | "条请求";
 }) {
   const { formatTokens } = useTokenFormat();
+  const { tooltipBasis } = useStatisticMode();
   const sorted = [...breakdown].sort((a, b) =>
     a.value === null ? (b.value === null ? 0 : 1) : b.value === null ? -1 : b.value - a.value,
   );
+  const exact = total !== null && formatTokens(total) !== formatNumber(total);
   return (
     <div className="min-w-56 space-y-2 text-xs">
       <p className="font-medium">{title}</p>
@@ -40,9 +43,6 @@ export function UsageTooltip({
           {total === null ? "—（未知）" : formatTokens(total)}{" "}
           <span className="font-sans text-xs font-normal">Token</span>
         </p>
-        {total !== null && formatTokens(total) !== formatNumber(total) ? (
-          <p className="text-muted-foreground tabular-nums">精确值 {formatNumber(total)}</p>
-        ) : null}
       </div>
       <dl className="space-y-1">
         {requests !== undefined ? (
@@ -58,9 +58,6 @@ export function UsageTooltip({
           </div>
         ) : null}
       </dl>
-      {basis === "requests" && requests === 0 ? (
-        <p className="text-muted-foreground">未记录请求，不代表无活动。</p>
-      ) : null}
       {children}
       {sorted.length > 0 ? (
         <dl className="space-y-1 border-t pt-2">
@@ -89,18 +86,25 @@ export function UsageTooltip({
           ))}
         </dl>
       ) : null}
-      {unknown > 0 ? (
-        <p className="text-muted-foreground">
-          {total !== null ? "已知子集 · " : ""}
-          {formatNumber(unknown)} {basis === "requests" ? "条请求" : "个会话"}用量未知
-        </p>
-      ) : null}
-      {partial > 0 ? (
-        <p className="text-muted-foreground">{formatNumber(partial)} 个会话明细不完整</p>
-      ) : null}
-      <p className="text-muted-foreground">
-        {basis === "requests" ? "请求时间 · 不含估算" : "会话开始日 · 不含估算"}
-      </p>
+      {/* 口径与精度信息默认折叠，避免浮框被说明文字淹没。 */}
+      <details className="group">
+        <summary className="cursor-pointer list-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+          <span className="group-open:hidden">展开口径</span>
+          <span className="hidden group-open:inline">收起口径</span>
+        </summary>
+        <div className="mt-1 space-y-1 border-t pt-2 text-muted-foreground">
+          {exact ? <p className="tabular-nums">精确值 {formatNumber(total)} Token</p> : null}
+          {unknown > 0 ? (
+            <p>
+              {total !== null ? "已知子集 · " : ""}
+              {formatNumber(unknown)} {basis === "requests" ? "条请求" : "个会话"}用量未知
+            </p>
+          ) : null}
+          {partial > 0 ? <p>{formatNumber(partial)} 个会话明细不完整</p> : null}
+          {basis === "requests" && requests === 0 ? <p>未记录请求，不代表没有活动。</p> : null}
+          <p>{tooltipBasis} · 不含估算</p>
+        </div>
+      </details>
     </div>
   );
 }

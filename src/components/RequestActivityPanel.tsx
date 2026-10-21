@@ -1,5 +1,5 @@
 import { useTokenFormat } from "@/hooks/use-token-format";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { DataExplanation } from "@/components/DataExplanation";
@@ -11,6 +11,7 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
 import { EmptyBlock, ChartSkeleton } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer } from "@/components/ui/chart";
@@ -34,6 +35,7 @@ import type {
   ClientKey,
   RequestActivity,
   RequestDailyBucket,
+  RequestHourlyBucket,
   RequestTotals,
 } from "@/lib/usage-types";
 
@@ -77,6 +79,55 @@ function metricValue(totals: RequestTotals | undefined, metric: Metric): number 
   if (!totals) return null;
   if (metric === "requests") return totals.requests;
   return totals.requests > 0 && totals.requestsWithUsage === 0 ? null : totals.totals.totalTokens;
+}
+
+/** 小时明细分段：连续没有请求的小时合并成一段，避免空占位刷屏。 */
+type HourSegment =
+  { kind: "empty"; startMs: number; endMs: number } | { kind: "hour"; hour: RequestHourlyBucket };
+
+function segmentHours(hours: RequestHourlyBucket[]): HourSegment[] {
+  const segments: HourSegment[] = [];
+  for (const hour of hours) {
+    const previous = segments[segments.length - 1];
+    if (hour.totals.requests === 0) {
+      if (previous?.kind === "empty") {
+        previous.endMs = hour.hourStartMs;
+        continue;
+      }
+      segments.push({ kind: "empty", startMs: hour.hourStartMs, endMs: hour.hourStartMs });
+      continue;
+    }
+    segments.push({ kind: "hour", hour });
+  }
+  return segments;
+}
+
+/** 日条分段：连续没有请求的日期合并成一段。 */
+type DaySegment =
+  | { kind: "empty"; startMs: number; endMs: number; count: number }
+  | { kind: "day"; day: RequestDailyBucket };
+
+function segmentDays(days: RequestDailyBucket[]): DaySegment[] {
+  const segments: DaySegment[] = [];
+  for (const day of days) {
+    const previous = segments[segments.length - 1];
+    if (day.totals.requests === 0) {
+      if (previous?.kind === "empty") {
+        previous.endMs = day.dayStartMs;
+        previous.count += 1;
+        continue;
+      }
+      segments.push({
+        kind: "empty",
+        startMs: day.dayStartMs,
+        endMs: day.dayStartMs,
+        count: 1,
+      });
+      continue;
+    }
+    segments.push({ kind: "day", day });
+  }
+  return segments;
 }
 function description(totals: RequestTotals | undefined, metric: Metric): string {
   if (!totals) return "未返回该日统计，数值未知。";
@@ -170,12 +221,25 @@ export function RequestActivityPanel({
   selectedRange?: DailyRange;
 }) {
   const { formatTokens, formatTokensOrDash } = useTokenFormat();
+  const { attribution } = useStatisticMode();
   const [metric, setMetric] = useState<Metric>("tokens");
+  const [showAllHours, setShowAllHours] = useState(false);
+  const [showAllDays, setShowAllDays] = useState(false);
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
   const syncing = useSyncing();
   const days = data?.daily ?? [];
   const hours = data?.hourly ?? [];
   const hasHourly = hours.length > 0;
+  const hourSegments = segmentHours(hours);
+  const visibleHourSegments: HourSegment[] = showAllHours
+    ? hours.map((hour) => ({ kind: "hour", hour }))
+    : hourSegments;
+  const collapsedHours = hourSegments.filter((segment) => segment.kind === "empty").length;
+  const daySegments = segmentDays(days);
+  const visibleDaySegments: DaySegment[] = showAllDays
+    ? days.map((day) => ({ kind: "day", day }))
+    : daySegments;
+  const collapsedDays = daySegments.filter((segment) => segment.kind === "empty").length;
   const trendBuckets = hasHourly
     ? hours.map((hour) => ({ startMs: hour.hourStartMs, totals: hour.totals, clients: [] }))
     : days.map((day) => ({ startMs: day.dayStartMs, totals: day.totals, clients: day.clients }));
@@ -183,7 +247,7 @@ export function RequestActivityPanel({
     hasHourly ? (formatDateTime(ms).split(" ")[1] ?? "—") : dateLabel(ms);
   const trendScope = (ms: number) =>
     hasHourly
-      ? `${formatDateTime(ms)} · ${timeZoneLabel(ms)} · 本地小时`
+      ? `${formatDateTime(ms)} · 按小时 · 本地时区 ${timeZoneLabel(ms)}`
       : `${dateLabel(ms)} · ${dailyScope(ms, selectedRange)}`;
   const clients = (client ? [client] : CLIENTS).filter((key) =>
     days.some((day) =>
@@ -231,6 +295,8 @@ export function RequestActivityPanel({
   const chartTooltip = (
     <Tooltip
       portal={chartElement?.ownerDocument.body}
+      // 柱状图不画整列底色，只保留当前柱的描边；折线仍用竖向参考线。
+      cursor={useBars ? false : undefined}
       wrapperStyle={{
         position: "fixed",
         top: 0,
@@ -360,13 +426,26 @@ export function RequestActivityPanel({
                     <p className="text-xs text-muted-foreground">单位：{unit}</p>
                   )}
                   {hasHourly ? (
-                    <div className="@container/hourly">
+                    <div className="space-y-2">
                       <div
-                        role="list"
                         aria-label="每小时统计，精确值可聚焦查看"
-                        className="grid grid-cols-4 gap-x-2 gap-y-3 py-2 @sm/hourly:grid-cols-6 @2xl/hourly:grid-cols-8 @4xl/hourly:grid-cols-12"
+                        className="grid auto-cols-[minmax(3.25rem,auto)] grid-flow-col grid-rows-[auto_auto_auto] gap-x-3 gap-y-0.5 overflow-x-auto pb-1"
                       >
-                        {hours.map((hour) => {
+                        {visibleHourSegments.map((segment) => {
+                          if (segment.kind === "empty") {
+                            return (
+                              <Fragment key={`empty-${segment.startMs}`}>
+                                <span className="text-xs text-muted-foreground">
+                                  {trendLabel(segment.startMs)}–{trendLabel(segment.endMs)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  未记录或无活动
+                                </span>
+                                <span />
+                              </Fragment>
+                            );
+                          }
+                          const hour = segment.hour;
                           const status =
                             hour.totals.requests === 0
                               ? "未记录"
@@ -375,41 +454,76 @@ export function RequestActivityPanel({
                                 : hour.totals.requestsWithoutUsage > 0
                                   ? "已知子集"
                                   : null;
+                          const detail = `${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`;
                           return (
-                            <div
-                              key={hour.hourStartMs}
-                              role="listitem"
-                              tabIndex={0}
-                              className="min-w-0 space-y-1 rounded-sm text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                              aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                              title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                            >
-                              <p className="text-muted-foreground">
+                            <Fragment key={hour.hourStartMs}>
+                              <span className="text-xs text-muted-foreground">
                                 {trendLabel(hour.hourStartMs)}
-                              </p>
-                              <p className="font-mono font-medium tabular-nums">
+                              </span>
+                              <span
+                                tabIndex={0}
+                                aria-label={detail}
+                                title={detail}
+                                className="font-mono text-sm font-medium tabular-nums focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              >
                                 {metric === "tokens"
                                   ? formatTokensOrDash(metricValue(hour.totals, metric))
                                   : formatExactOrDash(metricValue(hour.totals, metric))}
-                              </p>
-                              {status ? <p className="text-muted-foreground">{status}</p> : null}
-                            </div>
+                              </span>
+                              <span className="text-xs text-muted-foreground">{status ?? ""}</span>
+                            </Fragment>
                           );
                         })}
                       </div>
+                      {collapsedHours > 0 ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => setShowAllHours((value) => !value)}
+                        >
+                          {showAllHours ? "收起空时段" : `展开全部 ${hours.length} 个小时`}
+                        </Button>
+                      ) : null}
                     </div>
                   ) : (
-                    <div className="flex gap-1 overflow-x-auto py-2">
-                      {days.map((day) => (
-                        <ActivityCell
-                          selectedRange={selectedRange}
-                          key={day.dayStartMs}
-                          ms={day.dayStartMs}
-                          totals={day.totals}
-                          metric={metric}
-                          maxValue={maxValue}
-                        />
-                      ))}
+                    <div className="space-y-2">
+                      <div className="flex gap-1 overflow-x-auto py-2">
+                        {visibleDaySegments.map((segment) => {
+                          if (segment.kind === "empty") {
+                            return (
+                              <div
+                                key={`empty-${segment.startMs}`}
+                                className="flex h-4 shrink-0 items-center justify-center rounded-sm border border-dashed border-foreground/50 bg-muted text-[10px] text-muted-foreground"
+                                style={{ width: `${segment.count * 20 - 4}px` }}
+                                title={`${dateLabel(segment.startMs)} – ${dateLabel(segment.endMs)} 未记录请求或无活动`}
+                              >
+                                {segment.count > 2 ? `${segment.count} 天` : ""}
+                              </div>
+                            );
+                          }
+                          return (
+                            <ActivityCell
+                              selectedRange={selectedRange}
+                              key={segment.day.dayStartMs}
+                              ms={segment.day.dayStartMs}
+                              totals={segment.day.totals}
+                              metric={metric}
+                              maxValue={maxValue}
+                            />
+                          );
+                        })}
+                      </div>
+                      {collapsedDays > 0 ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs text-muted-foreground"
+                          onClick={() => setShowAllDays((value) => !value)}
+                        >
+                          {showAllDays ? "收起空时段" : `展开全部 ${days.length} 天`}
+                        </Button>
+                      ) : null}
                     </div>
                   )}
                   {hasHourly ? null : <HeatmapLegend maxValue={maxValue} unit={unit} />}
@@ -519,7 +633,7 @@ export function RequestActivityPanel({
             )}
             {coverage ? (
               <DataExplanation
-                summary={`实测 / 换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 明细不完整" : ""}`}
+                summary={`${attribution} · 实测 / 换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 明细不完整" : ""}`}
               >
                 <p>未记录不代表没有活动；未知 Token 不补零，混合记录只展示已知子集。</p>
                 <p>未结束的小时只包含截止前的记录；采集覆盖无法确认完整，不计算昨日同期增减。</p>

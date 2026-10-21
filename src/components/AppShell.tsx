@@ -165,52 +165,64 @@ export function AppShell({
       <SidebarInset className="min-w-0 bg-background">
         <header ref={toolbarRef} className="sticky top-0 z-20 bg-background">
           <div className="border-b border-border/50">
-            <div className="mx-auto grid min-h-16 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2 lg:px-7">
-              <div className="flex shrink-0 items-center gap-2">
+            {page !== "settings" && page !== "sources" ? (
+              <>
+                {/* 页头：页面标题独立成行，与筛选工具栏分层。 */}
+                <div className="mx-auto w-full max-w-[1600px] px-5 pt-3 lg:px-7">
+                  <h1 className="truncate text-base font-semibold tracking-tight">
+                    {PAGE_TITLES[page]}
+                  </h1>
+                </div>
+                {/* 筛选工具栏：统计口径与时间范围在左，状态与操作在右。 */}
+                <div className="mx-auto w-full max-w-[1600px] px-5 pt-2 pb-2 lg:px-7">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      {filters ? <div className="flex min-w-0 shrink-0">{filters}</div> : null}
+                      <DateRangePicker
+                        range={range}
+                        firstEventMs={status?.firstEventMs ?? null}
+                        nowMs={nowMs}
+                        onChange={onRangeChange}
+                      />
+                    </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-1">
+                      <SyncControl
+                        sync={sync}
+                        busy={syncBusy}
+                        onSync={onSync}
+                        paused={collectionPaused}
+                        onOpenSettings={() => onNavigate("settings")}
+                        compact
+                        extraActions={
+                          <ExportReportDialog
+                            range={range}
+                            nowMs={nowMs}
+                            firstEventMs={status?.firstEventMs ?? null}
+                          />
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="mx-auto grid min-h-16 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2 lg:px-7">
                 <h1 className="truncate text-base font-semibold tracking-tight">
                   {PAGE_TITLES[page]}
                 </h1>
-              </div>
-              {page !== "settings" && page !== "sources" ? (
-                <div className="flex min-w-0 items-center gap-3">
-                  {filters ? (
-                    <div className="flex min-w-0 shrink-0 items-center gap-2">
-                      <span className="hidden shrink-0 text-xs text-muted-foreground lg:inline">
-                        统计口径
-                      </span>
-                      {filters}
-                    </div>
-                  ) : null}
-                  <DateRangePicker
-                    range={range}
-                    firstEventMs={status?.firstEventMs ?? null}
-                    nowMs={nowMs}
-                    onChange={onRangeChange}
+                <div />
+                <div className="flex shrink-0 items-center gap-1">
+                  <SyncControl
+                    sync={sync}
+                    busy={syncBusy}
+                    onSync={onSync}
+                    paused={collectionPaused}
+                    onOpenSettings={() => onNavigate("settings")}
+                    compact
                   />
                 </div>
-              ) : (
-                <div />
-              )}
-              <div className="flex shrink-0 items-center gap-1">
-                <SyncControl
-                  sync={sync}
-                  busy={syncBusy}
-                  onSync={onSync}
-                  paused={collectionPaused}
-                  onOpenSettings={() => onNavigate("settings")}
-                  compact
-                  extraActions={
-                    page !== "settings" && page !== "sources" ? (
-                      <ExportReportDialog
-                        range={range}
-                        nowMs={nowMs}
-                        firstEventMs={status?.firstEventMs ?? null}
-                      />
-                    ) : null
-                  }
-                />
               </div>
-            </div>
+            )}
           </div>
           {secondaryToolbar ? (
             <div className="border-b border-border/50">

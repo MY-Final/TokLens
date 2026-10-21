@@ -181,7 +181,7 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
             className="h-8 w-full justify-start rounded-md px-2.5 text-xs"
             onClick={() => setShowCustom((value) => !value)}
           >
-            自定义日期范围
+            自定义日期
             {range.key === "custom" ? <span className="text-muted-foreground">· 当前</span> : null}
           </Button>
           {showCustom ? (

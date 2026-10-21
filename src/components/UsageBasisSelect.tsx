@@ -1,4 +1,7 @@
+import { Info } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 
 export type UsageBasis = "requests" | "sessions";
 
@@ -13,23 +16,39 @@ export function UsageBasisSelect({
   value: UsageBasis;
   onChange: (value: UsageBasis) => void;
 }) {
+  const { explain, attribution } = useStatisticMode();
   return (
-    <Tabs
-      value={value}
-      onValueChange={(next) => onChange(next === "sessions" ? "sessions" : "requests")}
-    >
-      <TabsList aria-label="统计口径" className="h-9 rounded-lg bg-muted/70 p-[3px]">
-        <TabsTrigger value="requests" className={TRIGGER_CLASS}>
-          按请求时间
-        </TabsTrigger>
-        <TabsTrigger
-          value="sessions"
-          className={TRIGGER_CLASS}
-          title="会话视角：会话数、会话排行与日趋势；用量按请求时间归集"
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="hidden shrink-0 text-xs text-muted-foreground lg:inline">统计口径</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`统计口径说明：${attribution}`}
+            className="hidden rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring lg:block"
+          >
+            <Info className="size-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-72 text-xs leading-relaxed">{explain}</TooltipContent>
+      </Tooltip>
+      <Tabs
+        value={value}
+        onValueChange={(next) => onChange(next === "sessions" ? "sessions" : "requests")}
+      >
+        <TabsList
+          aria-label="统计口径"
+          title={explain}
+          className="h-9 rounded-lg bg-muted/70 p-[3px]"
         >
-          按会话汇总
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+          <TabsTrigger value="requests" className={TRIGGER_CLASS}>
+            按请求时间
+          </TabsTrigger>
+          <TabsTrigger value="sessions" className={TRIGGER_CLASS}>
+            按会话汇总
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
   );
 }

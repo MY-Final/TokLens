@@ -97,13 +97,14 @@ export function SyncControl({
     !running && !paused && !sync?.error && sync?.finishedAtMs
       ? `已同步 ${formatClock(sync.finishedAtMs)}`
       : stateLabel;
+  // 同步状态用中性色点，避免与筛选区的激活态主色混淆；失败用 destructive。
   const dotClass = sync?.error
     ? "bg-destructive"
     : running
-      ? "bg-primary animate-pulse"
+      ? "bg-muted-foreground/70 animate-pulse"
       : sync?.finishedAtMs
-        ? "bg-primary"
-        : "bg-muted-foreground/40";
+        ? "bg-muted-foreground/50"
+        : "bg-muted-foreground/30";
   if (compact)
     return (
       <div className="flex flex-col gap-1">
@@ -204,10 +205,7 @@ export function SyncControl({
           )}
           title={label}
         >
-          <span
-            className={cn("size-1.5 rounded-full", sync?.error ? "bg-destructive" : "bg-primary")}
-            aria-hidden="true"
-          />
+          <span className={cn("size-1.5 rounded-full", dotClass)} aria-hidden="true" />
           {running
             ? paused
               ? "同步中 · 待暂停"

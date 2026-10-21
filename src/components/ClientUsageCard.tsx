@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { EmptyBlock, ErrorBlock, ClientListSkeleton } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 import type { ClientKey, ClientUsage, RequestAnalysisGroup } from "@/lib/usage-types";
 import { clientLabel, isClientKey } from "@/lib/client-labels";
 import { formatNumber } from "@/lib/format";
@@ -28,6 +29,13 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   cline: "[&_[data-slot=progress-indicator]]:bg-client-cline",
 };
 
+/** 占比文案：小占比保留两位小数，避免多个客户端都显示成 0.1%。 */
+function formatShare(shareBps: number | null): string {
+  if (shareBps === null) return "—";
+  const percent = shareBps / 100;
+  return percent < 1 ? `${percent.toFixed(2)}%` : `${percent.toFixed(1)}%`;
+}
+
 /** 排行行：名称、已知 Token、请求数与占比分列，数值右对齐便于比对。 */
 const RANKING_COLUMNS = "grid grid-cols-[minmax(0,1fr)_6rem_3.5rem] items-center gap-x-4";
 
@@ -45,6 +53,7 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
   const { loading, error, onRetry } = props;
   const syncing = useSyncing();
   const { formatTokens } = useTokenFormat();
+  const { attribution } = useStatisticMode();
   const rows =
     props.basis === "requests"
       ? (props.usage ?? []).flatMap(({ key, metrics }) =>
@@ -75,12 +84,19 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
           }));
   const countLabel = props.basis === "requests" ? "条请求" : "条明细";
   const unknownLabel = props.basis === "requests" ? "条请求" : "个会话";
+  // 排行按已知 Token 降序；总量未知的项排在最后。
+  const sorted = [...rows].sort((a, b) => {
+    const aUnknown = a.unknown === a.count;
+    const bUnknown = b.unknown === b.count;
+    if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
+    return b.total - a.total;
+  });
   return (
     <DashboardCard className="h-full">
       <CardHeader className="gap-1.5 px-5">
         <CardTitle className="text-sm font-medium">客户端用量排行</CardTitle>
         <CardDescription className="text-xs">
-          {props.basis === "requests" ? "按请求时间" : "按请求时间归集"} · 已知 Token 占比
+          {attribution} · 已知 Token 占比 · 按 Token 降序
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">
@@ -99,8 +115,14 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
               <span className="text-right">已知 Token</span>
               <span className="text-right">占比</span>
             </div>
-            {rows.map((row) => (
-              <div key={row.client} className="space-y-1.5">
+            {sorted.map((row) => (
+              <div
+                key={row.client}
+                className="space-y-1.5"
+                title={`${clientLabel(row.client)} · 已知 Token ${
+                  row.unknown === row.count ? "未知" : formatNumber(row.total)
+                } · 占比 ${formatShare(row.shareBps)} · ${formatNumber(row.sessions)} 个会话 · ${formatNumber(row.messages)} ${countLabel}`}
+              >
                 <div className={RANKING_COLUMNS}>
                   <div className="min-w-0 space-y-0.5">
                     {props.onOpenClient ? (
@@ -130,7 +152,7 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
                     {row.unknown === row.count ? "—" : formatTokens(row.total)}
                   </span>
                   <span className="text-right font-mono text-xs text-muted-foreground tabular-nums">
-                    {row.shareBps === null ? "—" : `${(row.shareBps / 100).toFixed(1)}%`}
+                    {formatShare(row.shareBps)}
                   </span>
                 </div>
                 {row.shareBps !== null ? (

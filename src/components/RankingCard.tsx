@@ -20,6 +20,75 @@ import { EmptyBlock, ErrorBlock, RankingSkeleton } from "@/components/StateBlock
 import { useSyncing } from "@/hooks/use-sync-status";
 import type { RankingEntry } from "@/lib/usage-types";
 import { formatNumber, shortenPath } from "@/lib/format";
+import { normalizeModelName } from "@/lib/model-name";
+
+/** 排行行：归一化后的展示模型与来源。 */
+type RankRow = {
+  key: string | null;
+  label: string;
+  source: string | null;
+  sessions: number;
+  totalTokens: number;
+  sessionsWithoutUsage: number;
+  /** 合并了多个原始模型串时用于下钻的名称。 */
+  search: string | null;
+};
+
+/** 模型按归一化名聚合，来源作为副信息；项目保持原样。 */
+function buildRows(entries: RankingEntry[], shortenKeys: boolean): RankRow[] {
+  if (shortenKeys) {
+    return entries.map((entry) => ({
+      key: entry.key,
+      label: entry.key === null ? "未知" : shortenPath(entry.key),
+      source: null,
+      sessions: entry.sessions,
+      totalTokens: entry.totalTokens,
+      sessionsWithoutUsage: entry.sessionsWithoutUsage,
+      search: null,
+    }));
+  }
+  const groups = new Map<string, RankRow & { keys: string[]; sources: Set<string> }>();
+  for (const entry of entries) {
+    const normalized = normalizeModelName(entry.key);
+    const groupKey = normalized.model;
+    const existing = groups.get(groupKey);
+    if (!existing) {
+      groups.set(groupKey, {
+        key: entry.key,
+        label: normalized.model,
+        source: normalized.source,
+        sessions: entry.sessions,
+        totalTokens: entry.totalTokens,
+        sessionsWithoutUsage: entry.sessionsWithoutUsage,
+        search: null,
+        keys: entry.key ? [entry.key] : [],
+        sources: new Set(normalized.source ? [normalized.source] : []),
+      });
+      continue;
+    }
+    existing.sessions += entry.sessions;
+    existing.totalTokens += entry.totalTokens;
+    existing.sessionsWithoutUsage += entry.sessionsWithoutUsage;
+    if (entry.key) existing.keys.push(entry.key);
+    if (normalized.source) existing.sources.add(normalized.source);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      key: group.key,
+      label: group.label,
+      source: group.sources.size > 0 ? [...group.sources].join(" · ") : null,
+      sessions: group.sessions,
+      totalTokens: group.totalTokens,
+      sessionsWithoutUsage: group.sessionsWithoutUsage,
+      search: group.keys.length > 1 ? group.label : null,
+    }))
+    .sort((a, b) => {
+      const aUnknown = a.sessionsWithoutUsage === a.sessions;
+      const bUnknown = b.sessionsWithoutUsage === b.sessions;
+      if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
+      return b.totalTokens - a.totalTokens;
+    });
+}
 
 export function RankingCard({
   title,
@@ -31,6 +100,7 @@ export function RankingCard({
   emptyTitle,
   emptyDescription,
   shortenKeys = false,
+  limit = 5,
   onOpenEntry,
 }: {
   title: string;
@@ -42,11 +112,13 @@ export function RankingCard({
   emptyTitle: string;
   emptyDescription: string;
   shortenKeys?: boolean;
-  onOpenEntry?: (key: string | null) => void;
+  /** 展示条数；模型按归一化名聚合后截断。 */
+  limit?: number;
+  onOpenEntry?: (key: string | null, search?: string | null) => void;
 }) {
   const { formatTokens } = useTokenFormat();
   const syncing = useSyncing();
-  const rows = entries ?? [];
+  const rows = buildRows(entries ?? [], shortenKeys).slice(0, limit);
   const max = rows[0]?.totalTokens ?? 0;
   return (
     <DashboardCard className="h-full">
@@ -76,10 +148,10 @@ export function RankingCard({
             </TableHeader>
             <TableBody>
               {rows.map((entry, index) => {
-                const label =
-                  entry.key === null ? "未知" : shortenKeys ? shortenPath(entry.key) : entry.key;
+                const label = entry.label;
                 const percent = max > 0 ? (entry.totalTokens / max) * 100 : 0;
                 const unknown = entry.sessionsWithoutUsage === entry.sessions;
+                const rawLabel = entry.key ?? "客户端未记录";
                 return (
                   <TableRow
                     key={`${entry.key ?? "unknown"}-${index}`}
@@ -103,12 +175,22 @@ export function RankingCard({
                           </span>
                         </div>
                       ) : (
-                        <ModelIdentity
-                          model={entry.key}
-                          compact
-                          truncate
-                          labelClassName="font-mono text-xs font-normal"
-                        />
+                        <div className="min-w-0 space-y-0.5">
+                          <ModelIdentity
+                            model={entry.key === null ? null : label}
+                            compact
+                            truncate
+                            labelClassName="font-mono text-xs font-normal"
+                          />
+                          {entry.source ? (
+                            <p
+                              className="truncate pl-8 text-xs text-muted-foreground"
+                              title={rawLabel}
+                            >
+                              来源 {entry.source}
+                            </p>
+                          ) : null}
+                        </div>
                       )}
                       {!unknown ? (
                         <Progress
@@ -142,7 +224,7 @@ export function RankingCard({
                           variant="ghost"
                           className="h-auto p-0 text-xs"
                           aria-label={`查看 ${label} 会话`}
-                          onClick={() => onOpenEntry(entry.key)}
+                          onClick={() => onOpenEntry(entry.key, entry.search)}
                         >
                           {formatNumber(entry.sessions)}
                         </Button>
@@ -152,7 +234,11 @@ export function RankingCard({
                     </TableCell>
                     <TableCell
                       className="pr-0 text-right font-mono text-xs"
-                      title={unknown ? "总量未知" : `${formatNumber(entry.totalTokens)} Token`}
+                      title={
+                        unknown
+                          ? "总量未知"
+                          : `${label}${entry.source ? ` · 来源 ${entry.source}` : ""} · ${formatNumber(entry.totalTokens)} Token`
+                      }
                     >
                       {unknown ? "—" : formatTokens(entry.totalTokens)}
                       {entry.sessionsWithoutUsage > 0 ? (

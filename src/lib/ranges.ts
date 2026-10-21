@@ -18,9 +18,9 @@ export type DateRange = {
 };
 export const RANGE_OPTIONS: ReadonlyArray<{ key: RangeKey; label: string }> = [
   { key: "today", label: "今天" },
-  { key: "7d", label: "最近 7 天" },
-  { key: "30d", label: "最近 30 天" },
-  { key: "90d", label: "最近 90 天" },
+  { key: "7d", label: "最近7天" },
+  { key: "30d", label: "最近30天" },
+  { key: "90d", label: "最近90天" },
   { key: "all", label: "全部" },
 ];
 export const RANGE_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> = [

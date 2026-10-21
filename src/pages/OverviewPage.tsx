@@ -4,6 +4,7 @@ import { useTokenFormat } from "@/hooks/use-token-format";
 import { DashboardCard } from "@/components/DashboardCard";
 import { DataExplanation } from "@/components/DataExplanation";
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 
 import { CalendarDays, Database, ListTree, MessageSquare } from "lucide-react";
 import { addDays, startOfDay } from "date-fns";
@@ -65,6 +66,7 @@ export function OverviewPage(props: OverviewPageProps) {
 
 function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: OverviewPageProps) {
   const { formatTokensOrDash } = useTokenFormat();
+  const { attribution, explain } = useStatisticMode();
   const syncing = useSyncing();
   const [calendarPeriod, setCalendarPeriod] = useState("year");
   const keySuffix = `${range.key}:${range.fromMs ?? "all"}:${range.toMs}:${refreshToken}`;
@@ -108,7 +110,8 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
     rangeScope(range),
   );
   const rankings = useAsyncData(
-    () => getRankings({ fromMs: range.fromMs, toMs: range.toMs, limit: 5 }),
+    // 取更多原始条目，模型按归一化名聚合后仍能凑满 Top 5。
+    () => getRankings({ fromMs: range.fromMs, toMs: range.toMs, limit: 20 }),
     `rankings:${keySuffix}`,
     rangeScope(range),
   );
@@ -161,7 +164,7 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
                 knownTotal(bucket) === null
                   ? "总量未知"
                   : `${formatNumber(knownTotal(bucket) ?? 0)} Token`,
-              unit: `（${range.label}）`,
+              unit: range.key === "today" ? "当前范围即今天" : `（${range.label}）`,
               hint: totalHint(bucket),
               tooltip: TOTAL_TOOLTIP,
               icon: Database,
@@ -180,7 +183,7 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
               icon: ListTree,
             },
             {
-              label: "请求明细",
+              label: "请求数",
               value: formatNumber(bucket?.messages ?? 0),
               hint: `缓存命中率 ${cacheHitRate}`,
               tooltip: `请求级记录按客户端去重。缓存命中率只使用输入与缓存读取同时已知的 ${formatNumber(bucket?.cacheEligibleSessions ?? 0)} 个会话，不含输出；字段缺失的会话不进入分母。`,
@@ -212,7 +215,11 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
         selectedRange={
           calendarPeriod === "year" ? { fromMs: calendarStart, toMs: range.toMs } : range
         }
-        rangeLabel={calendarPeriod === "year" ? "最近一年（365 天）" : trendRangeLabel}
+        rangeLabel={
+          calendarPeriod === "year"
+            ? "独立范围：最近一年（365 天）· 不受顶部时间范围影响"
+            : trendRangeLabel
+        }
         buckets={calendarData.data}
         loading={calendarData.loading}
         error={calendarData.error}
@@ -239,9 +246,11 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
           onRetry={clients.reload}
         />
         <RankingCard
-          onOpenEntry={(model) => onOpenSessions({ model })}
+          onOpenEntry={(model, search) =>
+            onOpenSessions(search ? { search } : { model: model ?? null })
+          }
           title="模型排行"
-          description="会话主模型 · Top 5"
+          description="会话主模型 · 按归一化模型名聚合 · Top 5"
           entries={rankings.data?.models ?? null}
           loading={rankings.loading}
           error={rankings.error}
@@ -281,12 +290,9 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
       </DashboardCard>
 
       <DataExplanation
-        summary={`请求时间归集 · 不含估算${bucket?.sessionsPartial ? ` · ${formatNumber(bucket.sessionsPartial)} 个明细不完整` : ""}${bucket?.sessionsTotalMismatch ? ` · ${formatNumber(bucket.sessionsTotalMismatch)} 个总量异常` : ""}`}
+        summary={`${attribution} · 不含估算${bucket?.sessionsPartial ? ` · ${formatNumber(bucket.sessionsPartial)} 个明细不完整` : ""}${bucket?.sessionsTotalMismatch ? ` · ${formatNumber(bucket.sessionsTotalMismatch)} 个总量异常` : ""}`}
       >
-        <p>
-          用量按请求时间归集：有请求明细的会话按每条请求的发生时间落桶，没有请求明细的会话按会话开始日落桶。
-          — 表示未知，不计入合计。
-        </p>
+        <p>{explain} — 表示未知，不计入合计。</p>
         <p>模型按会话主模型归属，非逐请求模型；项目按会话目录归属。</p>
         <p>明细不完整时按已导入的请求明细求和；分项与客户端总量不一致的会话单独计数。</p>
       </DataExplanation>

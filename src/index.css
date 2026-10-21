@@ -195,6 +195,17 @@
   .recharts-wrapper [tabindex="-1"]:focus {
     outline: none;
   }
+
+  /* 柱状图不再铺整列底色，只给指针所在的一根柱描边。 */
+  .recharts-bar-rectangle path {
+    stroke: transparent;
+    stroke-width: 1;
+    transition: stroke 150ms;
+  }
+
+  .recharts-bar-rectangle path:hover {
+    stroke: var(--foreground);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

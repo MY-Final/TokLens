@@ -12,6 +12,7 @@ import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyBlock, ErrorBlock, ChartSkeleton } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
+import { useStatisticMode } from "@/hooks/use-statistic-mode";
 import { CLIENT_KEYS, clientLabel } from "@/lib/client-labels";
 import { dayTotalLabel, formatDateTime } from "@/lib/format";
 import type { ClientKey, DailyTokenBucket } from "@/lib/usage-types";
@@ -78,6 +79,7 @@ export function TokenTrendChart({
   selectedRange?: DailyRange;
 }) {
   const { formatTokens } = useTokenFormat();
+  const { attribution } = useStatisticMode();
   const syncing = useSyncing();
   const [mode, setMode] = useState("client");
   const [chartElement, setChartElement] = useState<HTMLDivElement | null>(null);
@@ -107,6 +109,7 @@ export function TokenTrendChart({
     cacheRead: bucket.totals.cacheReadTokens,
   }));
   const hasData = buckets?.some((entry) => entry.sessions > 0) ?? false;
+  const dayBuckets = buckets?.length ?? 0;
   const visibleClients = TOTAL_SERIES.filter((item) =>
     buckets?.some((bucket) =>
       bucket.clients.some((client) => client.client === item.key && client.sessions > 0),
@@ -119,9 +122,9 @@ export function TokenTrendChart({
     <DashboardCard>
       <CardHeader className="flex flex-wrap items-start justify-between gap-3 px-5">
         <div className="space-y-1.5">
-          <CardTitle className="text-sm">每日 Token 趋势</CardTitle>
+          <CardTitle className="text-sm">Token 趋势</CardTitle>
           <CardDescription className="text-xs">
-            {rangeLabel} · 本地时区 · 单位 Token
+            {rangeLabel} · 按日 · 本地时区 · 单位 Token
           </CardDescription>
         </div>
         <Tabs value={mode} onValueChange={setMode} aria-label="趋势展示方式">
@@ -145,6 +148,11 @@ export function TokenTrendChart({
             <EmptyBlock
               title="所选区间没有 Token 记录"
               description="换个时间范围，或点击刷新同步客户端数据。"
+            />
+          ) : dayBuckets <= 1 ? (
+            <EmptyBlock
+              title="当前范围仅 1 天，暂不构成每日趋势"
+              description="换成更长的日期范围查看走势，或在下方活动日历与客户端排行中查看当天分布。"
             />
           ) : (
             <ChartContainer
@@ -265,27 +273,29 @@ export function TokenTrendChart({
             </ChartContainer>
           )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-            {series.map((item) => (
-              <span key={item.key} className="flex items-center gap-1.5">
-                <span className={`size-2 rounded-full ${item.dotClass}`} aria-hidden="true" />
-                {item.label}
+        {dayBuckets > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+              {series.map((item) => (
+                <span key={item.key} className="flex items-center gap-1.5">
+                  <span className={`size-2 rounded-full ${item.dotClass}`} aria-hidden="true" />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+            {firstDate && lastDate ? (
+              <span className="font-mono text-xs text-muted-foreground">
+                {firstDate} — {lastDate}
               </span>
-            ))}
+            ) : null}
           </div>
-          {firstDate && lastDate ? (
-            <span className="font-mono text-xs text-muted-foreground">
-              {firstDate} — {lastDate}
-            </span>
-          ) : null}
-        </div>
+        ) : null}
         <DataExplanation
-          summary={`按请求时间归集 · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
+          summary={`${attribution} · 不含估算${buckets?.some((day) => day.sessionsWithoutUsage > 0) ? " · 存在未知用量" : ""}${buckets?.some((day) => day.sessionsPartial > 0) ? " · 存在明细不完整" : ""}`}
         >
           <p>
             {description ??
-              "用量按请求时间归集，没有请求明细的会话按会话开始日归属。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。"}
+              `${attribution}。Token 分桶互不重叠；缓存写入依据各客户端口径计入总量，缺失字段不推算。`}
           </p>
         </DataExplanation>
       </CardContent>
