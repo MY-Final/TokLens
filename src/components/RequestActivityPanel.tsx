@@ -1,6 +1,6 @@
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { useState } from "react";
-import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { DataExplanation } from "@/components/DataExplanation";
 import { ChartTooltipOverlay } from "@/components/ChartTooltipOverlay";
@@ -9,7 +9,7 @@ import { dailyScope, type DailyRange } from "@/lib/daily-tooltip";
 import { ClientIdentity } from "@/components/ClientIdentity";
 import { DashboardCard } from "@/components/DashboardCard";
 import { HeatmapCell, HeatmapLegend } from "@/components/HeatmapCell";
-import { EmptyBlock, ErrorBlock, ChartSkeleton } from "@/components/StateBlocks";
+import { EmptyBlock, ChartSkeleton } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +41,10 @@ type Metric = "tokens" | "requests";
 const CLIENTS = CLIENT_KEYS;
 const WEEKDAYS = ["一", "二", "三", "四", "五", "六", "日"];
 const CHART_CONFIG = { value: { label: "已记录请求", color: "var(--chart-1)" } };
+/** 趋势图高度：宽窗口更高，窄窗口保持可读比例。 */
+const CHART_HEIGHT = "aspect-auto h-64 w-full min-[1200px]:h-72 min-[1600px]:h-80";
+/** 桶数不超过该值时用柱状图；更多桶改用折线，避免柱子挤成细线。 */
+const BAR_BUCKET_LIMIT = 120;
 const NO_RECORDED_REQUESTS: RequestTotals = {
   sessions: 0,
   requests: 0,
@@ -61,6 +65,13 @@ const NO_RECORDED_REQUESTS: RequestTotals = {
 
 function dateLabel(ms: number) {
   return formatDateTime(ms).split(" ")[0] ?? "—";
+}
+/** 时区短名（GMT+8），用于区分夏令时重复出现的小时。 */
+function timeZoneLabel(ms: number) {
+  const parts = new Intl.DateTimeFormat("zh-CN", { timeZoneName: "short" }).formatToParts(
+    new Date(ms),
+  );
+  return parts.find((part) => part.type === "timeZoneName")?.value ?? "";
 }
 function metricValue(totals: RequestTotals | undefined, metric: Metric): number | null {
   if (!totals) return null;
@@ -148,16 +159,12 @@ function ActivityCell({
 export function RequestActivityPanel({
   data,
   loading,
-  error,
-  onRetry,
   rangeLabel,
   client,
   selectedRange,
 }: {
   data: RequestActivity | null;
   loading: boolean;
-  error: string | null;
-  onRetry: () => void;
   rangeLabel: string;
   client?: ClientKey | null;
   selectedRange?: DailyRange;
@@ -176,7 +183,7 @@ export function RequestActivityPanel({
     hasHourly ? (formatDateTime(ms).split(" ")[1] ?? "—") : dateLabel(ms);
   const trendScope = (ms: number) =>
     hasHourly
-      ? `${formatDateTime(ms)} · ${new Date(ms).toLocaleTimeString("zh-CN", { timeZoneName: "short" })} 起 · 本地小时`
+      ? `${formatDateTime(ms)} · ${timeZoneLabel(ms)} · 本地小时`
       : `${dateLabel(ms)} · ${dailyScope(ms, selectedRange)}`;
   const clients = (client ? [client] : CLIENTS).filter((key) =>
     days.some((day) =>
@@ -192,192 +199,166 @@ export function RequestActivityPanel({
   const coverage = data?.coverage;
   const unit = metric === "tokens" ? "Token" : "条请求";
   const hasData = (range?.requests ?? 0) > 0;
+  const chartData = trendBuckets.map((bucket) => ({
+    startMs: bucket.startMs,
+    value: metricValue(bucket.totals, metric),
+  }));
+  // 用量是按小时 / 按天求和的离散量，柱子能如实表达每个区间的总量；
+  // 桶数过多时柱子会挤成细线，改用折线表达整体走势。
+  const useBars = trendBuckets.length > 0 && trendBuckets.length <= BAR_BUCKET_LIMIT;
+  const chartGrid = <CartesianGrid stroke="var(--border)" vertical={false} strokeDasharray="4 4" />;
+  const chartAxes = (
+    <>
+      <XAxis
+        dataKey="startMs"
+        tickFormatter={(ms: number) => (hasHourly ? trendLabel(ms) : trendLabel(ms).slice(5))}
+        axisLine={false}
+        tickLine={false}
+        minTickGap={24}
+        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+      />
+      <YAxis
+        tickFormatter={(value: number) =>
+          metric === "tokens" ? formatTokens(value) : formatNumber(value)
+        }
+        axisLine={false}
+        tickLine={false}
+        width="auto"
+        tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+      />
+    </>
+  );
+  const chartTooltip = (
+    <Tooltip
+      portal={chartElement?.ownerDocument.body}
+      wrapperStyle={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        zIndex: 40,
+        pointerEvents: "none",
+      }}
+      content={({ active, label, coordinate }) => {
+        if (!active) return null;
+        const bucket = trendBuckets.find((entry) => entry.startMs === Number(label));
+        return (
+          <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
+            <UsageTooltip
+              title={bucket ? trendScope(bucket.startMs) : "本地时间"}
+              totalLabel={
+                hasHourly
+                  ? "已知 Token"
+                  : dayTotalLabel(dailyScope(bucket?.startMs ?? 0, selectedRange))
+              }
+              total={metricValue(bucket?.totals, "tokens")}
+              requests={bucket?.totals.requests}
+              sessions={bucket?.totals.sessions}
+              unknown={bucket?.totals.requestsWithoutUsage}
+              basis="requests"
+              breakdownUnit={unit}
+              breakdown={(bucket?.clients ?? [])
+                .filter((entry) => entry.totals.requests > 0)
+                .map((entry) => ({
+                  key: entry.client,
+                  label: clientLabel(entry.client),
+                  value: metricValue(entry.totals, metric),
+                  note:
+                    metric === "tokens" && entry.totals.requestsWithoutUsage > 0
+                      ? `${formatNumber(entry.totals.requestsWithoutUsage)} 条请求用量未知`
+                      : undefined,
+                }))}
+            />
+          </ChartTooltipOverlay>
+        );
+      }}
+    />
+  );
   return (
     <DashboardCard className="min-w-0">
       <CardHeader className="gap-3 px-5">
-        <CardTitle className="text-sm">请求用量</CardTitle>
-        <CardDescription className="text-xs">{rangeLabel} · 本地时间</CardDescription>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-sm font-medium">用量趋势</CardTitle>
+            <CardDescription className="text-xs">{rangeLabel} · 本地时间</CardDescription>
+          </div>
+          <div className="flex gap-1" role="group" aria-label="请求时间统计指标">
+            <Button
+              size="sm"
+              variant={metric === "tokens" ? "secondary" : "ghost"}
+              aria-pressed={metric === "tokens"}
+              onClick={() => setMetric("tokens")}
+            >
+              Token
+            </Button>
+            <Button
+              size="sm"
+              variant={metric === "requests" ? "secondary" : "ghost"}
+              aria-pressed={metric === "requests"}
+              onClick={() => setMetric("requests")}
+            >
+              请求数
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
-        {error ? (
-          <ErrorBlock message={error} onRetry={onRetry} />
-        ) : (!data || !hasData) && (loading || syncing) ? (
-          <ChartSkeleton />
+        {(!data || !hasData) && (loading || syncing) ? (
+          <ChartSkeleton blockClassName={CHART_HEIGHT} />
         ) : data ? (
           <>
-            <dl className="grid grid-cols-3 gap-4 text-xs">
-              {[
-                ["已知 Token", formatTokensOrDash(metricValue(range, "tokens"))],
-                ["请求数", formatNumber(range?.requests ?? 0)],
-                ["有请求会话数", formatNumber(range?.sessions ?? 0)],
-              ].map(([label, value]) => (
-                <div key={label} className="space-y-1">
-                  <dt className="text-muted-foreground">{label}</dt>
-                  <dd
-                    className="font-mono text-lg tabular-nums"
-                    title={
-                      label === "已知 Token"
-                        ? `${formatExactOrDash(metricValue(range, "tokens"))} Token`
-                        : undefined
-                    }
-                  >
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            {(range?.requestsWithoutUsage ?? 0) > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {range?.requestsWithUsage ? "已知子集 · " : ""}
-                {formatNumber(range?.requestsWithoutUsage ?? 0)} 条请求用量未知
-              </p>
-            ) : null}
-            {coverage ? (
-              <DataExplanation
-                summary={`实测 / 换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 明细不完整" : ""}`}
-              >
-                <p className="tabular-nums">
-                  采集覆盖（所有已采集日期，仅按客户端筛选，与当前日期范围独立）：有时间{" "}
-                  {formatNumber(coverage.timedRequests)} / 已记录{" "}
-                  {formatNumber(coverage.recordedRequests)}{" "}
-                  条。此处为已采集记录计数，不能代表实际请求或 Token 的完整覆盖。无时间{" "}
-                  {formatNumber(coverage.untimedRequests)} 条、估算{" "}
-                  {formatNumber(coverage.estimatedRequests)} 条不计入时间视图；
-                  {formatNumber(coverage.sessionsPartial)} 个会话明细不完整，
-                  {formatNumber(coverage.sessionsWithoutRequests)} 个会话没有请求明细。
-                </p>
-              </DataExplanation>
-            ) : null}
             {!hasData ? (
               <EmptyBlock title="暂无请求记录" description="调整日期或点击刷新。" />
             ) : (
               <Tabs defaultValue="trend" className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <TabsList aria-label="请求时间视图">
-                    <TabsTrigger value="trend">{hasHourly ? "小时趋势" : "趋势"}</TabsTrigger>
-                    <TabsTrigger value="calendar">日历</TabsTrigger>
-                    <TabsTrigger value="clients">客户端</TabsTrigger>
-                  </TabsList>
-                  <div className="flex gap-1" role="group" aria-label="请求时间统计指标">
-                    <Button
-                      size="sm"
-                      variant={metric === "tokens" ? "secondary" : "ghost"}
-                      aria-pressed={metric === "tokens"}
-                      onClick={() => setMetric("tokens")}
-                    >
-                      Token
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={metric === "requests" ? "secondary" : "ghost"}
-                      aria-pressed={metric === "requests"}
-                      onClick={() => setMetric("requests")}
-                    >
-                      请求数
-                    </Button>
-                  </div>
-                </div>
+                <TabsList aria-label="请求时间视图">
+                  <TabsTrigger value="trend">{hasHourly ? "小时趋势" : "趋势"}</TabsTrigger>
+                  <TabsTrigger value="calendar">日历</TabsTrigger>
+                  <TabsTrigger value="clients">客户端</TabsTrigger>
+                </TabsList>
                 <TabsContent value="trend" className="space-y-3">
                   <ChartContainer
                     ref={setChartElement}
                     config={CHART_CONFIG}
-                    className={
-                      trendBuckets.length === 1
-                        ? "aspect-auto h-40 w-full"
-                        : "aspect-auto h-56 w-full"
-                    }
+                    className={trendBuckets.length === 1 ? "aspect-auto h-40 w-full" : CHART_HEIGHT}
                     aria-label={`${rangeLabel} 按请求发生${hasHourly ? "小时" : "日期"}的${unit}趋势，精确值见下方列表`}
                   >
-                    <LineChart
-                      accessibilityLayer
-                      data={trendBuckets.map((bucket) => ({
-                        startMs: bucket.startMs,
-                        value: metricValue(bucket.totals, metric),
-                      }))}
-                    >
-                      <CartesianGrid
-                        stroke="var(--border)"
-                        vertical={false}
-                        strokeDasharray="4 4"
-                      />
-                      <XAxis
-                        dataKey="startMs"
-                        tickFormatter={(ms: number) =>
-                          hasHourly ? trendLabel(ms) : trendLabel(ms).slice(5)
-                        }
-                        axisLine={false}
-                        tickLine={false}
-                        minTickGap={24}
-                      />
-                      <YAxis
-                        tickFormatter={(value: number) =>
-                          metric === "tokens" ? formatTokens(value) : formatNumber(value)
-                        }
-                        axisLine={false}
-                        tickLine={false}
-                        width="auto"
-                      />
-                      <Tooltip
-                        portal={chartElement?.ownerDocument.body}
-                        wrapperStyle={{
-                          position: "fixed",
-                          top: 0,
-                          left: 0,
-                          zIndex: 40,
-                          pointerEvents: "none",
-                        }}
-                        content={({ active, label, coordinate }) => {
-                          if (!active) return null;
-                          const bucket = trendBuckets.find(
-                            (entry) => entry.startMs === Number(label),
-                          );
-                          return (
-                            <ChartTooltipOverlay anchor={chartElement} coordinate={coordinate}>
-                              <UsageTooltip
-                                title={bucket ? trendScope(bucket.startMs) : "本地时间"}
-                                totalLabel={
-                                  hasHourly
-                                    ? "本时段已知 Token"
-                                    : dayTotalLabel(dailyScope(bucket?.startMs ?? 0, selectedRange))
-                                }
-                                total={metricValue(bucket?.totals, "tokens")}
-                                requests={bucket?.totals.requests}
-                                sessions={bucket?.totals.sessions}
-                                unknown={bucket?.totals.requestsWithoutUsage}
-                                basis="requests"
-                                breakdownUnit={unit}
-                                breakdown={(bucket?.clients ?? [])
-                                  .filter((entry) => entry.totals.requests > 0)
-                                  .map((entry) => ({
-                                    key: entry.client,
-                                    label: clientLabel(entry.client),
-                                    value: metricValue(entry.totals, metric),
-                                    note:
-                                      metric === "tokens" && entry.totals.requestsWithoutUsage > 0
-                                        ? `${formatNumber(entry.totals.requestsWithoutUsage)} 条请求用量未知`
-                                        : undefined,
-                                  }))}
-                              />
-                            </ChartTooltipOverlay>
-                          );
-                        }}
-                      />
-                      <Line
-                        dataKey="value"
-                        stroke="var(--chart-1)"
-                        strokeWidth={2}
-                        connectNulls={false}
-                        dot={trendBuckets.length === 1 ? { r: 6 } : false}
-                        isAnimationActive={false}
-                      />
-                    </LineChart>
+                    {useBars ? (
+                      <BarChart accessibilityLayer data={chartData}>
+                        {chartGrid}
+                        {chartAxes}
+                        {chartTooltip}
+                        <Bar
+                          dataKey="value"
+                          fill="var(--chart-1)"
+                          radius={[2, 2, 0, 0]}
+                          maxBarSize={28}
+                          isAnimationActive={false}
+                        />
+                      </BarChart>
+                    ) : (
+                      <LineChart accessibilityLayer data={chartData}>
+                        {chartGrid}
+                        {chartAxes}
+                        {chartTooltip}
+                        <Line
+                          dataKey="value"
+                          stroke="var(--chart-1)"
+                          strokeWidth={2}
+                          connectNulls={false}
+                          dot={trendBuckets.length === 1 ? { r: 6 } : false}
+                          isAnimationActive={false}
+                        />
+                      </LineChart>
+                    )}
                   </ChartContainer>
-                  <p className="text-xs text-muted-foreground">
-                    单位：{unit}
-                    {hasHourly
-                      ? ` · 统计截至 ${selectedRange ? formatDateTime(selectedRange.toMs - 1) : "查询截止时间"}，未结束小时仅含截止前记录`
-                      : ""}
-                  </p>
+                  {hasHourly ? (
+                    <p className="text-xs text-muted-foreground">
+                      单位：{unit} · 统计截至{" "}
+                      {selectedRange ? formatDateTime(selectedRange.toMs - 1) : "查询截止时间"}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">单位：{unit}</p>
+                  )}
                   {hasHourly ? (
                     <div className="@container/hourly">
                       <div
@@ -385,32 +366,36 @@ export function RequestActivityPanel({
                         aria-label="每小时统计，精确值可聚焦查看"
                         className="grid grid-cols-4 gap-x-2 gap-y-3 py-2 @sm/hourly:grid-cols-6 @2xl/hourly:grid-cols-8 @4xl/hourly:grid-cols-12"
                       >
-                        {hours.map((hour) => (
-                          <div
-                            key={hour.hourStartMs}
-                            role="listitem"
-                            tabIndex={0}
-                            className="min-w-0 space-y-1 rounded-sm text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                            aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                            title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
-                          >
-                            <p className="text-muted-foreground">{trendLabel(hour.hourStartMs)}</p>
-                            <p className="font-mono tabular-nums">
-                              {metric === "tokens"
-                                ? formatTokensOrDash(metricValue(hour.totals, metric))
-                                : formatExactOrDash(metricValue(hour.totals, metric))}
-                            </p>
-                            <p className="text-muted-foreground">
-                              {hour.totals.requests === 0
-                                ? "未记录"
-                                : hour.totals.requestsWithUsage === 0
-                                  ? "Token 未知"
-                                  : hour.totals.requestsWithoutUsage > 0
-                                    ? "已知子集"
-                                    : "已知记录"}
-                            </p>
-                          </div>
-                        ))}
+                        {hours.map((hour) => {
+                          const status =
+                            hour.totals.requests === 0
+                              ? "未记录"
+                              : hour.totals.requestsWithUsage === 0
+                                ? "Token 未知"
+                                : hour.totals.requestsWithoutUsage > 0
+                                  ? "已知子集"
+                                  : null;
+                          return (
+                            <div
+                              key={hour.hourStartMs}
+                              role="listitem"
+                              tabIndex={0}
+                              className="min-w-0 space-y-1 rounded-sm text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              aria-label={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                              title={`${trendScope(hour.hourStartMs)} · ${description(hour.totals, metric)}`}
+                            >
+                              <p className="text-muted-foreground">
+                                {trendLabel(hour.hourStartMs)}
+                              </p>
+                              <p className="font-mono font-medium tabular-nums">
+                                {metric === "tokens"
+                                  ? formatTokensOrDash(metricValue(hour.totals, metric))
+                                  : formatExactOrDash(metricValue(hour.totals, metric))}
+                              </p>
+                              {status ? <p className="text-muted-foreground">{status}</p> : null}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : (
@@ -427,14 +412,7 @@ export function RequestActivityPanel({
                       ))}
                     </div>
                   )}
-                  {hasHourly ? (
-                    <p className="text-xs text-muted-foreground">
-                      未记录不代表没有活动；未知 Token
-                      不补零，混合记录只展示已知子集。采集覆盖无法确认完整，不计算昨日同期增减。
-                    </p>
-                  ) : (
-                    <HeatmapLegend maxValue={maxValue} unit={unit} />
-                  )}
+                  {hasHourly ? null : <HeatmapLegend maxValue={maxValue} unit={unit} />}
                 </TabsContent>
                 <TabsContent value="calendar" className="space-y-3">
                   <div className="flex gap-2 overflow-x-auto py-2">
@@ -539,6 +517,24 @@ export function RequestActivityPanel({
                 </TabsContent>
               </Tabs>
             )}
+            {coverage ? (
+              <DataExplanation
+                summary={`实测 / 换算 · 不含估算${coverage.sessionsPartial > 0 ? " · 明细不完整" : ""}`}
+              >
+                <p>未记录不代表没有活动；未知 Token 不补零，混合记录只展示已知子集。</p>
+                <p>未结束的小时只包含截止前的记录；采集覆盖无法确认完整，不计算昨日同期增减。</p>
+                <p className="tabular-nums">
+                  采集覆盖（所有已采集日期，仅按客户端筛选，与当前日期范围独立）：有时间{" "}
+                  {formatNumber(coverage.timedRequests)} / 已记录{" "}
+                  {formatNumber(coverage.recordedRequests)}{" "}
+                  条。此处为已采集记录计数，不能代表实际请求或 Token 的完整覆盖。无时间{" "}
+                  {formatNumber(coverage.untimedRequests)} 条、估算{" "}
+                  {formatNumber(coverage.estimatedRequests)} 条不计入时间视图；
+                  {formatNumber(coverage.sessionsPartial)} 个会话明细不完整，
+                  {formatNumber(coverage.sessionsWithoutRequests)} 个会话没有请求明细。
+                </p>
+              </DataExplanation>
+            ) : null}
           </>
         ) : (
           <EmptyBlock title="暂无请求统计" description="同步本地客户端数据后重试。" />

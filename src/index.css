@@ -187,6 +187,14 @@
   .client-tabs-scroll::-webkit-scrollbar {
     display: none;
   }
+
+  /*
+   * recharts 的内部图层是程序化聚焦（tabindex=-1），不是 Tab 停靠点。
+   * 浏览器默认焦点框会在 SVG 上画出一整圈色块，改为由图表自身的高亮与浮框指示状态。
+   */
+  .recharts-wrapper [tabindex="-1"]:focus {
+    outline: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

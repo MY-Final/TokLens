@@ -28,6 +28,9 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   cline: "[&_[data-slot=progress-indicator]]:bg-client-cline",
 };
 
+/** 排行行：名称、已知 Token、请求数与占比分列，数值右对齐便于比对。 */
+const RANKING_COLUMNS = "grid grid-cols-[minmax(0,1fr)_6rem_3.5rem] items-center gap-x-4";
+
 type ClientUsageCardProps = {
   loading: boolean;
   error: string | null;
@@ -70,79 +73,82 @@ export function ClientUsageCard(props: ClientUsageCardProps) {
             total: row.totals.totalTokens,
             shareBps: row.sessionsWithoutUsage === row.sessions ? null : row.shareBps,
           }));
+  const countLabel = props.basis === "requests" ? "条请求" : "条明细";
+  const unknownLabel = props.basis === "requests" ? "条请求" : "个会话";
   return (
     <DashboardCard className="h-full">
       <CardHeader className="gap-1.5 px-5">
-        <CardTitle className="text-sm">客户端用量分布</CardTitle>
+        <CardTitle className="text-sm font-medium">客户端用量排行</CardTitle>
         <CardDescription className="text-xs">
           {props.basis === "requests" ? "按请求时间" : "按请求时间归集"} · 已知 Token 占比
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 px-5">
+      <CardContent className="px-5">
         {error ? (
           <ErrorBlock message={error} onRetry={onRetry} />
         ) : rows.length === 0 && (loading || syncing) ? (
           <ClientListSkeleton rows={4} />
+        ) : rows.length === 0 ? (
+          <EmptyBlock title="暂无客户端用量" description="调整时间范围，或点击刷新导入本机会话。" />
         ) : (
-          <>
-            {rows.length === 0 ? (
-              <EmptyBlock
-                title="暂无客户端用量"
-                description="调整时间范围，或点击刷新导入本机会话。"
-              />
-            ) : null}
+          <div className="space-y-3">
+            <div
+              className={`${RANKING_COLUMNS} border-b border-border/60 pb-2 text-xs text-muted-foreground`}
+            >
+              <span>客户端</span>
+              <span className="text-right">已知 Token</span>
+              <span className="text-right">占比</span>
+            </div>
             {rows.map((row) => (
-              <div key={row.client} className="space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  {props.onOpenClient ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-auto p-0"
-                      onClick={() => props.onOpenClient?.(row.client)}
-                      aria-label={`查看 ${clientLabel(row.client)} 会话`}
-                    >
+              <div key={row.client} className="space-y-1.5">
+                <div className={RANKING_COLUMNS}>
+                  <div className="min-w-0 space-y-0.5">
+                    {props.onOpenClient ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0"
+                        onClick={() => props.onOpenClient?.(row.client)}
+                        aria-label={`查看 ${clientLabel(row.client)} 会话`}
+                      >
+                        <ClientIdentity client={row.client} compact />
+                      </Button>
+                    ) : (
                       <ClientIdentity client={row.client} compact />
-                    </Button>
-                  ) : (
-                    <ClientIdentity client={row.client} compact />
-                  )}
-                  <span className="font-mono text-xs text-muted-foreground">
+                    )}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)}{" "}
+                      {countLabel}
+                    </p>
+                  </div>
+                  <span
+                    className="text-right font-mono text-sm font-semibold tabular-nums"
+                    title={
+                      row.unknown === row.count ? "总量未知" : `${formatNumber(row.total)} Token`
+                    }
+                  >
+                    {row.unknown === row.count ? "—" : formatTokens(row.total)}
+                  </span>
+                  <span className="text-right font-mono text-xs text-muted-foreground tabular-nums">
                     {row.shareBps === null ? "—" : `${(row.shareBps / 100).toFixed(1)}%`}
                   </span>
                 </div>
-                <>
-                  {row.shareBps !== null ? (
-                    <Progress
-                      value={row.shareBps / 100}
-                      aria-label={`${clientLabel(row.client)} Token 用量占比`}
-                      className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
-                    />
-                  ) : null}
-                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-muted-foreground">
-                    <span>
-                      {formatNumber(row.sessions)} 个会话 · {formatNumber(row.messages)}{" "}
-                      {props.basis === "requests" ? "条请求" : "条明细"}
-                    </span>
-                    <span
-                      title={
-                        row.unknown === row.count ? "总量未知" : `${formatNumber(row.total)} Token`
-                      }
-                    >
-                      {row.unknown === row.count ? "—" : formatTokens(row.total)} Token
-                    </span>
-                  </div>
-                  {row.unknown > 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {row.unknown < row.count ? "已知子集 · " : ""}
-                      {formatNumber(row.unknown)} {props.basis === "requests" ? "条请求" : "个会话"}
-                      总量未知
-                    </p>
-                  ) : null}
-                </>
+                {row.shareBps !== null ? (
+                  <Progress
+                    value={row.shareBps / 100}
+                    aria-label={`${clientLabel(row.client)} Token 用量占比`}
+                    className={`h-1.5 bg-muted ${BAR_CLASSES[row.client]}`}
+                  />
+                ) : null}
+                {row.unknown > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {row.unknown < row.count ? "已知子集 · " : ""}
+                    {formatNumber(row.unknown)} {unknownLabel} 总量未知
+                  </p>
+                ) : null}
               </div>
             ))}
-          </>
+          </div>
         )}
       </CardContent>
     </DashboardCard>

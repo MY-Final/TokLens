@@ -6,6 +6,7 @@ import { Info, type LucideIcon } from "lucide-react";
 
 import { CardContent } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 export type StatCardProps = {
   label: string;
@@ -15,19 +16,35 @@ export type StatCardProps = {
   tooltip?: string;
   icon?: LucideIcon;
   detail?: string;
+  /** 紧凑模式：指标区使用更小的字号与内边距。 */
+  compact?: boolean;
 };
 
-export function StatCard({ label, value, unit, hint, tooltip, icon: Icon, detail }: StatCardProps) {
+export function StatCard({
+  label,
+  value,
+  unit,
+  hint,
+  tooltip,
+  icon: Icon,
+  detail,
+  compact,
+}: StatCardProps) {
   return (
     <DashboardCard className="gap-0 py-0">
-      <CardContent className="space-y-3 px-4 py-4 lg:px-5">
+      <CardContent className={cn("px-4 py-4 lg:px-5", compact ? "space-y-2 py-3.5" : "space-y-3")}>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           {Icon ? (
-            <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <span
+              className={cn(
+                "flex shrink-0 items-center justify-center bg-primary/10 text-primary",
+                compact ? "size-6 rounded-md" : "size-7 rounded-lg",
+              )}
+            >
               <Icon className="size-3.5" aria-hidden="true" />
             </span>
           ) : null}
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
           {tooltip ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -45,14 +62,25 @@ export function StatCard({ label, value, unit, hint, tooltip, icon: Icon, detail
             </Tooltip>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-baseline gap-1.5">
-          <span className="font-mono text-2xl font-bold tracking-tight tabular-nums" title={detail}>
+        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          <span
+            className={cn(
+              "font-mono font-bold tracking-tight tabular-nums",
+              compact ? "text-xl" : "text-2xl",
+            )}
+            title={detail}
+          >
             {value}
           </span>
           {unit ? <span className="text-xs text-muted-foreground">{unit}</span> : null}
         </div>
         {hint ? (
-          <p className="min-h-4 text-xs leading-relaxed text-muted-foreground tabular-nums">
+          <p
+            className={cn(
+              "text-xs leading-relaxed text-muted-foreground tabular-nums",
+              compact && "line-clamp-2",
+            )}
+          >
             {hint}
           </p>
         ) : null}

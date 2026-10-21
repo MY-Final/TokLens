@@ -7,6 +7,7 @@ import { DashboardCard } from "@/components/DashboardCard";
 import { Button } from "@/components/ui/button";
 import { CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { overviewKpiGridClass } from "@/lib/overview-layout";
 import { cn } from "@/lib/utils";
 
 /** 装饰性占位块：仅用 `bg-muted` 语义色，并对读屏隐藏。 */
@@ -99,24 +100,21 @@ export function HeatmapSkeleton() {
   );
 }
 
-/** 客户端分布占位：图标块 + 名称条 + 占比条 + 百分比块。 */
+/** 客户端排行占位：名称块 + Token 数值 + 占比条，与真实排行同尺度。 */
 export function ClientListSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <SkeletonRegion label="正在加载客户端用量…" className="space-y-4">
+    <SkeletonRegion label="正在加载客户端用量…" className="space-y-3">
       {Array.from({ length: rows }, (_, index) => (
-        <div key={index} className="space-y-2.5" aria-hidden="true">
-          <div className="flex items-center justify-between gap-2">
+        <div key={index} className="space-y-1.5" aria-hidden="true">
+          <div className="grid grid-cols-[minmax(0,1fr)_6rem_3.5rem] items-center gap-x-4">
             <div className="flex items-center gap-2.5">
               <SkeletonBlock className="size-6 rounded-lg" />
-              <SkeletonBlock className="h-4 w-28 rounded-sm" />
+              <SkeletonBlock className="h-4 w-24 rounded-sm" />
             </div>
-            <SkeletonBlock className="h-4 w-12 rounded-sm" />
+            <SkeletonBlock className="h-4 w-16 justify-self-end rounded-sm" />
+            <SkeletonBlock className="h-3 w-10 justify-self-end rounded-sm" />
           </div>
           <SkeletonBlock className="h-1.5 w-full rounded-full" />
-          <div className="flex items-center justify-between gap-2">
-            <SkeletonBlock className="h-3 w-32 rounded-sm" />
-            <SkeletonBlock className="h-3 w-16 rounded-sm" />
-          </div>
         </div>
       ))}
     </SkeletonRegion>
@@ -167,14 +165,14 @@ export function StatCardsSkeleton({ cards = 4 }: { cards?: number }) {
   return (
     <SkeletonRegion
       label="正在加载统计指标…"
-      className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4"
+      className={cn("grid gap-3", overviewKpiGridClass(cards))}
     >
       {Array.from({ length: cards }, (_, index) => (
         <DashboardCard key={index} className="gap-0 py-0" aria-hidden="true">
-          <CardContent className="space-y-3 px-4 py-4 lg:px-5">
+          <CardContent className="space-y-2 px-4 py-3.5">
             <SkeletonBlock className="h-3 w-20 rounded-sm" />
-            <SkeletonBlock className="h-7 w-32 rounded-sm" />
-            <SkeletonBlock className="h-3 w-24 rounded-sm" />
+            <SkeletonBlock className="h-6 w-24 rounded-sm" />
+            <SkeletonBlock className="h-3 w-28 rounded-sm" />
           </CardContent>
         </DashboardCard>
       ))}

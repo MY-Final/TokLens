@@ -18,7 +18,7 @@ import { FilterSelectContent } from "@/components/FilterSelectContent";
 import { Select, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RankingCard } from "@/components/RankingCard";
 import { SessionTable } from "@/components/SessionTable";
-import { StatCard } from "@/components/StatCard";
+import { OverviewKpiGrid } from "@/components/OverviewKpiGrid";
 import { ErrorBlock, StatCardsSkeleton } from "@/components/StateBlocks";
 import { useSyncing } from "@/hooks/use-sync-status";
 import { TokenTrendChart } from "@/components/TokenTrendChart";
@@ -141,53 +141,53 @@ function SessionOverview({ range, nowMs, refreshToken, onOpenSessions }: Overvie
       ) : !stats && (overview.loading || syncing) ? (
         <StatCardsSkeleton />
       ) : (
-        <div className="grid grid-cols-2 gap-4 min-[960px]:grid-cols-4">
-          <StatCard
-            label="今日 Token"
-            value={formatTokensOrDash(knownTotal(today))}
-            detail={
-              knownTotal(today) === null
-                ? "总量未知"
-                : `${formatNumber(knownTotal(today) ?? 0)} Token`
-            }
-            hint={totalHint(today)}
-            tooltip={TOTAL_TOOLTIP}
-            icon={CalendarDays}
-          />
-          <StatCard
-            label="区间 Token"
-            value={formatTokensOrDash(knownTotal(bucket))}
-            detail={
-              knownTotal(bucket) === null
-                ? "总量未知"
-                : `${formatNumber(knownTotal(bucket) ?? 0)} Token`
-            }
-            unit={`（${range.label}）`}
-            hint={totalHint(bucket)}
-            tooltip={TOTAL_TOOLTIP}
-            icon={Database}
-          />
-          <StatCard
-            label="会话数量"
-            value={formatNumber(bucket?.sessions ?? 0)}
-            hint={
-              bucket && bucket.sessionsWithoutUsage > 0
-                ? `其中 ${formatNumber(bucket.sessionsWithoutUsage)} 个无用量数据`
-                : bucket?.sessions
-                  ? undefined
-                  : "所选区间暂无会话"
-            }
-            tooltip="按客户端会话/线程去重后的数量；没有 Token 记录的会话也计入会话数，但不贡献 Token 合计。"
-            icon={ListTree}
-          />
-          <StatCard
-            label="请求明细"
-            value={formatNumber(bucket?.messages ?? 0)}
-            hint={`缓存命中率 ${cacheHitRate}`}
-            tooltip={`请求级记录按客户端去重。缓存命中率只使用输入与缓存读取同时已知的 ${formatNumber(bucket?.cacheEligibleSessions ?? 0)} 个会话，不含输出；字段缺失的会话不进入分母。`}
-            icon={MessageSquare}
-          />
-        </div>
+        <OverviewKpiGrid
+          items={[
+            {
+              label: "今日 Token",
+              value: formatTokensOrDash(knownTotal(today)),
+              detail:
+                knownTotal(today) === null
+                  ? "总量未知"
+                  : `${formatNumber(knownTotal(today) ?? 0)} Token`,
+              hint: totalHint(today),
+              tooltip: TOTAL_TOOLTIP,
+              icon: CalendarDays,
+            },
+            {
+              label: "区间 Token",
+              value: formatTokensOrDash(knownTotal(bucket)),
+              detail:
+                knownTotal(bucket) === null
+                  ? "总量未知"
+                  : `${formatNumber(knownTotal(bucket) ?? 0)} Token`,
+              unit: `（${range.label}）`,
+              hint: totalHint(bucket),
+              tooltip: TOTAL_TOOLTIP,
+              icon: Database,
+            },
+            {
+              label: "会话数量",
+              value: formatNumber(bucket?.sessions ?? 0),
+              hint:
+                bucket && bucket.sessionsWithoutUsage > 0
+                  ? `其中 ${formatNumber(bucket.sessionsWithoutUsage)} 个无用量数据`
+                  : bucket?.sessions
+                    ? undefined
+                    : "所选区间暂无会话",
+              tooltip:
+                "按客户端会话/线程去重后的数量；没有 Token 记录的会话也计入会话数，但不贡献 Token 合计。",
+              icon: ListTree,
+            },
+            {
+              label: "请求明细",
+              value: formatNumber(bucket?.messages ?? 0),
+              hint: `缓存命中率 ${cacheHitRate}`,
+              tooltip: `请求级记录按客户端去重。缓存命中率只使用输入与缓存读取同时已知的 ${formatNumber(bucket?.cacheEligibleSessions ?? 0)} 个会话，不含输出；字段缺失的会话不进入分母。`,
+              icon: MessageSquare,
+            },
+          ]}
+        />
       )}
 
       <TokenTrendChart
