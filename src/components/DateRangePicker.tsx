@@ -1,25 +1,23 @@
 import { useId, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import {
+  NATURAL_PRESETS,
+  RELATIVE_PRESETS,
   createCustomRange,
   formatDateTimeInput,
   parseDateTimeInput,
+  rangeSpanLabel,
   resolveRange,
 } from "@/lib/ranges";
 import type { DateRange, RangePreset } from "@/lib/ranges";
+import { timeZoneName, timeZoneShortLabel } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-const PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> = [
-  { key: "today", label: "今天" },
-  { key: "7d", label: "7 天" },
-  { key: "week", label: "本周" },
-  { key: "30d", label: "30 天" },
-  { key: "month", label: "本月" },
-  { key: "90d", label: "90 天" },
-  { key: "all", label: "全部" },
-];
+type Preset = { key: RangePreset; label: string };
 
 type DateRangePickerProps = {
   range: DateRange;
@@ -28,16 +26,70 @@ type DateRangePickerProps = {
   onChange: (range: DateRange) => void;
 };
 
+/** 预设分组：方向键在组内切换并立即生效。 */
+function PresetGroup({
+  label,
+  presets,
+  activeKey,
+  onSelect,
+}: {
+  label: string;
+  presets: ReadonlyArray<Preset>;
+  activeKey: DateRange["key"];
+  onSelect: (key: RangePreset) => void;
+}) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    event.preventDefault();
+    const next = (index + (event.key === "ArrowRight" ? 1 : -1) + presets.length) % presets.length;
+    const key = presets[next]?.key;
+    if (!key) return;
+    onSelect(key);
+    groupRef.current?.querySelectorAll<HTMLButtonElement>("button")[next]?.focus();
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="px-1 text-xs text-muted-foreground">{label}</p>
+      <div ref={groupRef} role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+        {presets.map((preset, index) => {
+          const active = activeKey === preset.key;
+          return (
+            <Button
+              key={preset.key}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              aria-pressed={active}
+              className={cn(
+                "h-8 rounded-md px-2.5 text-xs",
+                active && "bg-primary text-primary-foreground hover:bg-primary/90",
+              )}
+              onClick={() => onSelect(preset.key)}
+              onKeyDown={(event) => handleKeyDown(event, index)}
+            >
+              {preset.label}
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRangePickerProps) {
   const id = useId();
   const startRef = useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [showCustom, setShowCustom] = useState(range.key === "custom");
   const [startValue, setStartValue] = useState("");
   const [endValue, setEndValue] = useState("");
-
   const [error, setError] = useState<string | null>(null);
-  const startMs = range.fromMs ?? range.dayStartMs;
-  const interval = `${formatDateTimeInput(startMs).replace("T", " ")} — ${formatDateTimeInput(range.toMs - 1).replace("T", " ")}`;
+
+  const zone = timeZoneShortLabel(nowMs);
+  const zoneName = timeZoneName();
+  const span = rangeSpanLabel(range);
+  const summary = `${range.label} · ${span} · ${zone}`;
 
   function setDraft(next: DateRange) {
     setStartValue(formatDateTimeInput(next.fromMs ?? next.dayStartMs));
@@ -46,13 +98,20 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
   }
 
   function changeOpen(next: boolean) {
-    if (next) setDraft(range);
-    else {
+    if (next) {
+      setDraft(range);
+      setShowCustom(range.key === "custom");
+    } else {
       setStartValue("");
       setEndValue("");
       setError(null);
     }
     setIsOpen(next);
+  }
+
+  function selectPreset(key: RangePreset) {
+    onChange(resolveRange(key, firstEventMs, new Date(nowMs)));
+    setShowCustom(false);
   }
 
   function confirm() {
@@ -76,63 +135,67 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
   }
 
   return (
-    <div className="w-full max-w-max min-w-0 space-y-1 justify-self-end">
-      <div
-        className="flex flex-wrap items-center justify-end gap-0.5"
-        role="group"
-        aria-label="统计时间范围"
+    <Popover open={isOpen} onOpenChange={changeOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-9 max-w-[min(26rem,100%)] min-w-0 shrink justify-start gap-2 px-3 font-normal"
+          title={`${summary}（${zoneName}）`}
+          aria-label={`时间范围：${summary}，时区 ${zoneName}`}
+        >
+          <CalendarDays className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="shrink-0 font-medium text-foreground">{range.label}</span>
+          <span className="min-w-0 truncate text-muted-foreground">· {span}</span>
+          <span className="shrink-0 text-muted-foreground">· {zone}</span>
+          <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        collisionPadding={16}
+        className="w-[25rem] max-w-[calc(100vw-2rem)] space-y-3 p-3"
+        aria-labelledby={`${id}-title`}
       >
-        {PRESETS.map((preset) => (
+        <h2 id={`${id}-title`} className="sr-only">
+          时间范围
+        </h2>
+        <PresetGroup
+          label="相对范围"
+          presets={RELATIVE_PRESETS}
+          activeKey={range.key}
+          onSelect={selectPreset}
+        />
+        <PresetGroup
+          label="自然周期"
+          presets={NATURAL_PRESETS}
+          activeKey={range.key}
+          onSelect={selectPreset}
+        />
+        <Separator />
+        <div className="space-y-2">
           <Button
-            key={preset.key}
-            size="sm"
-            className="h-7 px-1 text-xs"
-            variant={range.key === preset.key ? "secondary" : "ghost"}
-            aria-pressed={range.key === preset.key}
-            onClick={() => onChange(resolveRange(preset.key, firstEventMs, new Date(nowMs)))}
+            type="button"
+            variant={range.key === "custom" ? "secondary" : "ghost"}
+            aria-expanded={showCustom}
+            className="h-8 w-full justify-start rounded-md px-2.5 text-xs"
+            onClick={() => setShowCustom((value) => !value)}
           >
-            {preset.label}
+            自定义日期范围
+            {range.key === "custom" ? <span className="text-muted-foreground">· 当前</span> : null}
           </Button>
-        ))}
-        <Popover open={isOpen} onOpenChange={changeOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant={range.key === "custom" ? "secondary" : "outline"}
-              size="icon-sm"
-              className="size-7"
-              title={`${range.label}：${interval}（本地时区）`}
-              aria-label={`自定义日期范围，当前${range.label}：${interval}`}
-              aria-pressed={range.key === "custom"}
-            >
-              <CalendarDays className="size-4" aria-hidden="true" />
-              <span className="sr-only">自定义</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            sideOffset={4}
-            collisionPadding={16}
-            className="w-[32rem] max-w-[calc(100vw-2rem)] p-4"
-            aria-labelledby={`${id}-title`}
-            onOpenAutoFocus={(event) => {
-              event.preventDefault();
-              startRef.current?.focus();
-            }}
-          >
+          {showCustom ? (
             <form
               noValidate
-              className="space-y-4"
+              className="space-y-3"
               onSubmit={(event) => {
                 event.preventDefault();
                 confirm();
               }}
             >
-              <h2 id={`${id}-title`} className="sr-only">
-                日期范围
-              </h2>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="min-w-0 space-y-2">
-                  <label htmlFor={`${id}-start`} className="text-sm font-medium">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="min-w-0 space-y-1.5">
+                  <label htmlFor={`${id}-start`} className="text-xs text-muted-foreground">
                     起始时间
                   </label>
                   <Input
@@ -142,7 +205,7 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
                     step={60}
                     required
                     value={startValue}
-                    className="w-full min-w-0 tabular-nums"
+                    className="h-9 w-full min-w-0 text-xs tabular-nums"
                     aria-invalid={error !== null}
                     aria-describedby={`${id}-note${error ? ` ${id}-error` : ""}`}
                     onChange={(event) => {
@@ -151,8 +214,8 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
                     }}
                   />
                 </div>
-                <div className="min-w-0 space-y-2">
-                  <label htmlFor={`${id}-end`} className="text-sm font-medium">
+                <div className="min-w-0 space-y-1.5">
+                  <label htmlFor={`${id}-end`} className="text-xs text-muted-foreground">
                     结束时间
                   </label>
                   <Input
@@ -161,7 +224,7 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
                     step={60}
                     required
                     value={endValue}
-                    className="w-full min-w-0 tabular-nums"
+                    className="h-9 w-full min-w-0 text-xs tabular-nums"
                     aria-invalid={error !== null}
                     aria-describedby={`${id}-note${error ? ` ${id}-error` : ""}`}
                     onChange={(event) => {
@@ -172,28 +235,22 @@ export function DateRangePicker({ range, firstEventMs, nowMs, onChange }: DateRa
                 </div>
               </div>
               <p id={`${id}-note`} className="text-xs text-muted-foreground">
-                本地时区 · 精确到分钟，包含结束分钟
+                {zone} · {zoneName} · 精确到分钟，包含结束分钟
               </p>
-              {error && (
+              {error ? (
                 <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
                   {error}
                 </p>
-              )}
+              ) : null}
               <div className="flex justify-end">
-                <Button type="submit" size="sm">
+                <Button type="submit" size="sm" className="h-8">
                   确认
                 </Button>
               </div>
             </form>
-          </PopoverContent>
-        </Popover>
-      </div>
-      <p
-        className="truncate text-right text-xs text-muted-foreground tabular-nums"
-        title={`${range.label}：${interval}（本地时区）`}
-      >
-        {interval} · 本地时区
-      </p>
-    </div>
+          ) : null}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

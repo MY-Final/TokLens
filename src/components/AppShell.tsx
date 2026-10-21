@@ -59,6 +59,7 @@ export function AppShell({
   onRetry,
   updateControl,
   secondaryToolbar,
+  filters,
 }: {
   page: PageKey;
   collectionPaused: boolean;
@@ -74,6 +75,8 @@ export function AppShell({
   onRetry: () => void;
   updateControl?: ReactNode;
   secondaryToolbar?: ReactNode;
+  /** 筛选区左侧的页面级控件（统计口径等），排在时间范围之前。 */
+  filters?: ReactNode;
 }) {
   const sync = status?.sync;
   const toolbarRef = useRef<HTMLElement>(null);
@@ -162,30 +165,33 @@ export function AppShell({
       <SidebarInset className="min-w-0 bg-background">
         <header ref={toolbarRef} className="sticky top-0 z-20 bg-background">
           <div className="border-b border-border/50">
-            <div className="mx-auto grid min-h-16 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-5 py-2 lg:gap-3 lg:px-7">
+            <div className="mx-auto grid min-h-16 w-full max-w-[1600px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-5 py-2 lg:px-7">
               <div className="flex shrink-0 items-center gap-2">
                 <h1 className="truncate text-base font-semibold tracking-tight">
                   {PAGE_TITLES[page]}
                 </h1>
               </div>
               {page !== "settings" && page !== "sources" ? (
-                <DateRangePicker
-                  range={range}
-                  firstEventMs={status?.firstEventMs ?? null}
-                  nowMs={nowMs}
-                  onChange={onRangeChange}
-                />
+                <div className="flex min-w-0 items-center gap-3">
+                  {filters ? (
+                    <div className="flex min-w-0 shrink-0 items-center gap-2">
+                      <span className="hidden shrink-0 text-xs text-muted-foreground lg:inline">
+                        统计口径
+                      </span>
+                      {filters}
+                    </div>
+                  ) : null}
+                  <DateRangePicker
+                    range={range}
+                    firstEventMs={status?.firstEventMs ?? null}
+                    nowMs={nowMs}
+                    onChange={onRangeChange}
+                  />
+                </div>
               ) : (
                 <div />
               )}
-              <div className="flex shrink-0 items-center gap-2">
-                {page !== "settings" && page !== "sources" && (
-                  <ExportReportDialog
-                    range={range}
-                    nowMs={nowMs}
-                    firstEventMs={status?.firstEventMs ?? null}
-                  />
-                )}
+              <div className="flex shrink-0 items-center gap-1">
                 <SyncControl
                   sync={sync}
                   busy={syncBusy}
@@ -193,6 +199,15 @@ export function AppShell({
                   paused={collectionPaused}
                   onOpenSettings={() => onNavigate("settings")}
                   compact
+                  extraActions={
+                    page !== "settings" && page !== "sources" ? (
+                      <ExportReportDialog
+                        range={range}
+                        nowMs={nowMs}
+                        firstEventMs={status?.firstEventMs ?? null}
+                      />
+                    ) : null
+                  }
                 />
               </div>
             </div>

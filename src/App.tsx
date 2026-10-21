@@ -162,12 +162,15 @@ export default function App() {
       rangeScope: rangeScope(range),
     }));
   const secondaryToolbar =
-    page === "overview" ? (
-      <UsageBasisSelect value={overviewBasis} onChange={setOverviewBasis} />
-    ) : page === "analytics" ? (
+    page === "analytics" ? (
       <ClientAnalysisTabs />
     ) : page === "sessions" ? (
       <SessionFiltersToolbar state={sessionState} onChange={changeSessionFilters} />
+    ) : undefined;
+  // 统计口径与时间范围同属筛选区，排在时间范围之前。
+  const headerFilters =
+    page === "overview" ? (
+      <UsageBasisSelect value={overviewBasis} onChange={setOverviewBasis} />
     ) : undefined;
 
   return (
@@ -221,6 +224,7 @@ export default function App() {
                   <span className="truncate">{updateLabel}</span>
                 </Button>
               }
+              filters={headerFilters}
               secondaryToolbar={secondaryToolbar}
               onSync={handleSync}
             >

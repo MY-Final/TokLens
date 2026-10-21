@@ -72,6 +72,26 @@ export function formatDateTime(ms: number | null): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** 本地时刻 15:04。 */
+export function formatClock(ms: number | null): string {
+  if (ms === null) return "—";
+  const date = new Date(ms);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 本地时区短名，例如 GMT+8。 */
+export function timeZoneShortLabel(ms: number = Date.now()): string {
+  const parts = new Intl.DateTimeFormat("zh-CN", { timeZoneName: "short" }).formatToParts(
+    new Date(ms),
+  );
+  return parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+}
+
+/** 本地时区 IANA 名称，例如 Asia/Shanghai。 */
+export function timeZoneName(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 /** Tooltip total label for a day; mirrors `dailyScope`'s partial-day wording. */
 export function dayTotalLabel(scope: string): string {
   return scope === "所选时段 · 本地日期" ? "所选时段已知 Token" : "当日已知 Token";

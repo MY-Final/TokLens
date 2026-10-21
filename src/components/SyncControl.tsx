@@ -1,6 +1,7 @@
 /** 同步状态与控制：侧边栏与数据源页共用。 */
 
 import { MoreHorizontal, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatDateTime, formatNumber, syncStatusLabel } from "@/lib/format";
+import { formatClock, formatDateTime, formatNumber, syncStatusLabel } from "@/lib/format";
 import type { SyncProgress, SyncState } from "@/lib/usage-types";
 import { clientLabel } from "@/lib/client-labels";
 import { cn } from "@/lib/utils";
@@ -65,6 +66,7 @@ export function SyncControl({
   compact = false,
   paused = false,
   onOpenSettings,
+  extraActions,
 }: {
   sync: SyncState | null | undefined;
   busy: boolean;
@@ -73,9 +75,35 @@ export function SyncControl({
   compact?: boolean;
   paused?: boolean;
   onOpenSettings?: () => void;
+  /** 紧凑版中排在「更多」之前的附加操作。 */
+  extraActions?: ReactNode;
 }) {
   const running = busy || (sync?.running ?? false);
   const label = syncStatusLabel(sync);
+  const stateLabel = running
+    ? paused
+      ? "同步中 · 待暂停"
+      : "同步中"
+    : paused
+      ? sync?.error
+        ? "已暂停 · 同步异常"
+        : "采集已暂停"
+      : sync?.error
+        ? "同步异常"
+        : sync?.finishedAtMs
+          ? "已同步"
+          : "尚未同步";
+  const stateDetail =
+    !running && !paused && !sync?.error && sync?.finishedAtMs
+      ? `已同步 ${formatClock(sync.finishedAtMs)}`
+      : stateLabel;
+  const dotClass = sync?.error
+    ? "bg-destructive"
+    : running
+      ? "bg-primary animate-pulse"
+      : sync?.finishedAtMs
+        ? "bg-primary"
+        : "bg-muted-foreground/40";
   if (compact)
     return (
       <div className="flex flex-col gap-1">
@@ -86,31 +114,17 @@ export function SyncControl({
                 size="sm"
                 variant="ghost"
                 className={cn(
-                  "text-xs",
+                  "h-9 gap-2 px-2 text-xs",
                   sync?.error ? "text-destructive" : "text-muted-foreground",
                 )}
-                aria-label="查看采集状态与详情"
+                title={stateDetail}
+                aria-label={`采集状态：${stateDetail}`}
               >
                 <span
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    sync?.error ? "bg-destructive" : "bg-primary",
-                  )}
+                  className={cn("size-1.5 shrink-0 rounded-full", dotClass)}
                   aria-hidden="true"
                 />
-                {running
-                  ? paused
-                    ? "同步中 · 待暂停"
-                    : "同步中"
-                  : paused
-                    ? sync?.error
-                      ? "已暂停 · 同步异常"
-                      : "采集已暂停"
-                    : sync?.error
-                      ? "同步异常"
-                      : sync?.finishedAtMs
-                        ? "已同步"
-                        : "尚未同步"}
+                <span className="hidden lg:inline">{stateDetail}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-80 space-y-3 text-xs">
@@ -141,15 +155,24 @@ export function SyncControl({
           <Button
             size="icon-sm"
             variant="ghost"
+            className="size-9"
             disabled={running || paused}
             onClick={() => onSync(false)}
+            title="刷新用量"
             aria-label="刷新用量"
           >
             <RefreshCw className={running ? "size-4 animate-spin" : "size-4"} aria-hidden="true" />
           </Button>
+          {extraActions}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon-sm" variant="ghost" aria-label="更多采集操作">
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="size-9"
+                title="更多采集操作"
+                aria-label="更多采集操作"
+              >
                 <MoreHorizontal className="size-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>

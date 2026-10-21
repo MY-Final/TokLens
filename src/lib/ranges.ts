@@ -29,6 +29,13 @@ export const RANGE_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> =
   { key: "month", label: "本月" },
   ...RANGE_OPTIONS.slice(1),
 ];
+/** 相对范围：以当前时刻为终点滚动计算。 */
+export const RELATIVE_PRESETS: ReadonlyArray<{ key: RangeKey; label: string }> = RANGE_OPTIONS;
+/** 自然周期：跟随本地日历的周与月。 */
+export const NATURAL_PRESETS: ReadonlyArray<{ key: RangePreset; label: string }> = [
+  { key: "week", label: "本周" },
+  { key: "month", label: "本月" },
+];
 const MS_PER_MINUTE = 60_000;
 /** User selection identity, excluding clock ticks within rolling presets. */
 export function rangeScope(range: DateRange): string {
@@ -108,6 +115,29 @@ export function resolveRange(
     ...displayDays(fromMs, toMs),
   };
 }
+/**
+ * 触发器摘要：同一天显示时刻区间，跨天显示日期区间，跨年补上年份。
+ * 只做展示格式化，不改变范围本身的起止边界。
+ */
+export function rangeSpanLabel(range: DateRange): string {
+  const from = range.fromMs ?? range.dayStartMs;
+  const to = range.toMs - 1;
+  const fromDate = new Date(from);
+  const toDate = new Date(to);
+  const sameDay = startOfDay(from).getTime() === startOfDay(to).getTime();
+  if (sameDay) {
+    return `${pad2(fromDate.getMonth() + 1)}-${pad2(fromDate.getDate())} ${pad2(fromDate.getHours())}:${pad2(fromDate.getMinutes())}–${pad2(toDate.getHours())}:${pad2(toDate.getMinutes())}`;
+  }
+  if (fromDate.getFullYear() === toDate.getFullYear()) {
+    return `${pad2(fromDate.getMonth() + 1)}-${pad2(fromDate.getDate())}—${pad2(toDate.getMonth() + 1)}-${pad2(toDate.getDate())}`;
+  }
+  return `${fromDate.getFullYear()}-${pad2(fromDate.getMonth() + 1)}-${pad2(fromDate.getDate())}—${toDate.getFullYear()}-${pad2(toDate.getMonth() + 1)}-${pad2(toDate.getDate())}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 /**
  * 创建固定自定义区间；toMs 必须已是排他边界。
  * 无效日期或起点不早于终点时抛出 Error，调用方应展示错误并保留当前范围。

@@ -112,7 +112,8 @@ export function ExportReportDialog({
     <>
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon"
+        className="size-9"
         title="导出统计报表"
         aria-label="导出统计报表"
         onClick={() => changeOpen(true)}
