@@ -11,7 +11,7 @@ import { useSyncing } from "@/hooks/use-sync-status";
 import { useStatisticMode } from "@/hooks/use-statistic-mode";
 import type { ClientKey, ClientUsage, RequestAnalysisGroup } from "@/lib/usage-types";
 import { clientLabel, isClientKey } from "@/lib/client-labels";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatShare } from "@/lib/format";
 
 const BAR_CLASSES: Record<ClientKey, string> = {
   codex: "[&_[data-slot=progress-indicator]]:bg-client-codex",
@@ -28,13 +28,6 @@ const BAR_CLASSES: Record<ClientKey, string> = {
   mcode: "[&_[data-slot=progress-indicator]]:bg-client-mcode",
   cline: "[&_[data-slot=progress-indicator]]:bg-client-cline",
 };
-
-/** 占比文案：小占比保留两位小数，避免多个客户端都显示成 0.1%。 */
-function formatShare(shareBps: number | null): string {
-  if (shareBps === null) return "—";
-  const percent = shareBps / 100;
-  return percent < 1 ? `${percent.toFixed(2)}%` : `${percent.toFixed(1)}%`;
-}
 
 /** 排行行：名称、已知 Token、请求数与占比分列，数值右对齐便于比对。 */
 const RANKING_COLUMNS = "grid grid-cols-[minmax(0,1fr)_6rem_3.5rem] items-center gap-x-4";

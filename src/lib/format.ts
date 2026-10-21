@@ -24,6 +24,16 @@ export function formatCompactTokens(value: number): string {
   return formatNumber(value);
 }
 
+/**
+ * 占比文案：基点转百分比，小于 1% 保留两位小数，
+ * 避免多个条目都被四舍五入成同一个 0.1%。
+ */
+export function formatShare(shareBps: number | null): string {
+  if (shareBps === null) return "—";
+  const percent = shareBps / 100;
+  return percent < 1 ? `${percent.toFixed(2)}%` : `${percent.toFixed(1)}%`;
+}
+
 export const TOKEN_DISPLAY_OPTIONS: { value: TokenDisplay; label: string }[] = [
   { value: "auto", label: "自动（k / M / B）" },
   { value: "chinese", label: "自动（万 / 亿）" },

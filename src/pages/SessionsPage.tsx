@@ -2,7 +2,7 @@
 
 import { DashboardCard } from "@/components/DashboardCard";
 import { DataExplanation } from "@/components/DataExplanation";
-import { CardContent } from "@/components/ui/card";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 import { useState } from "react";
@@ -138,14 +138,16 @@ function SessionBrowser({
           {returnLabel ?? "返回统计"}
         </Button>
       ) : null}
-      <p className="text-xs leading-relaxed text-muted-foreground tabular-nums">
-        第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
-        {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
-        {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
-        {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
-      </p>
-
       <DashboardCard>
+        <CardHeader className="gap-1.5 px-5">
+          <CardTitle className="text-sm font-medium">会话列表</CardTitle>
+          <CardDescription className="text-xs tabular-nums">
+            第 {formatNumber(offset / SESSION_LIMIT + 1)} 页 ·{" "}
+            {sessions.loading ? "加载中…" : `本页 ${formatNumber(rows.length)} 个会话`}
+            {withoutUsage > 0 ? ` · ${formatNumber(withoutUsage)} 个无用量数据` : ""}
+            {partial > 0 ? ` · ${formatNumber(partial)} 个明细不完整` : ""}
+          </CardDescription>
+        </CardHeader>
         <CardContent className="px-5">
           <SessionTable
             sessions={sessions.data === null ? null : rows}

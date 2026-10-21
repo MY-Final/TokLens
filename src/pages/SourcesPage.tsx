@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import type { SettingsController } from "@/hooks/use-settings";
@@ -74,8 +74,11 @@ export function SourcesPage({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <DashboardCard>
-          <CardHeader>
-            <CardTitle>同步</CardTitle>
+          <CardHeader className="gap-1.5 px-5">
+            <CardTitle className="text-sm font-medium">同步</CardTitle>
+            <CardDescription className="text-xs">
+              只读采集本机客户端会话，不修改客户端原始数据
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <SyncControl
@@ -124,8 +127,9 @@ export function SourcesPage({
         </DashboardCard>
 
         <DashboardCard>
-          <CardHeader>
-            <CardTitle>本地数据库</CardTitle>
+          <CardHeader className="gap-1.5 px-5">
+            <CardTitle className="text-sm font-medium">本地数据库</CardTitle>
+            <CardDescription className="text-xs">统计库位置与已覆盖的时间范围</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {(loading || syncing) && !status ? (
@@ -174,7 +178,7 @@ export function SourcesPage({
               className={client.supported ? "" : "border-dashed opacity-50"}
             >
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
                   <ClientIdentity client={client.client} compact />
                   <Switch
                     className="ml-auto"

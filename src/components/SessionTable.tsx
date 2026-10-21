@@ -18,6 +18,7 @@ import { ClientIdentity } from "@/components/ClientIdentity";
 import { ModelIdentity } from "@/components/ModelIdentity";
 import type { SessionSummary } from "@/lib/usage-types";
 import { formatDateTime, formatNumber, shortenPath } from "@/lib/format";
+import { normalizeModelName } from "@/lib/model-name";
 import { cn } from "@/lib/utils";
 
 function CoverageBadge({ session }: { session: SessionSummary }) {
@@ -131,7 +132,11 @@ export function SessionTable({
                           className="block max-w-full rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
                           <ModelIdentity
-                            model={session.model}
+                            model={
+                              session.model === null
+                                ? null
+                                : normalizeModelName(session.model).model
+                            }
                             compact
                             truncate
                             className="flex w-full"

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useTokenFormat } from "@/hooks/use-token-format";
 import { formatNumber, shortenPath } from "@/lib/format";
+import { normalizeModelName } from "@/lib/model-name";
 import { cn } from "@/lib/utils";
 import { formatBasisPoints, knownRequestTokens } from "@/lib/request-analysis";
 import type { RequestAnalysis, RequestAnalysisMetrics, SessionFilters } from "@/lib/usage-types";
@@ -129,178 +130,194 @@ export function RequestAnalysisDetails({
   }
 
   return (
-    <div className="space-y-5">
-      <Table className="table-fixed text-xs">
+    <Table className="table-fixed text-xs">
+      <TableHeader>
+        <TableRow className="bg-muted/40 hover:bg-muted/40">
+          <TableHead className="w-[40%]">会话主模型</TableHead>
+          <TableHead className="text-right" aria-sort="descending">
+            已知 Token ↓
+          </TableHead>
+          <TableHead className="w-20 text-right">占比</TableHead>
+          <TableHead className="w-16 text-right">请求</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {data.models.map((entry, index) => {
+          const key = JSON.stringify(entry.key);
+          const isExpanded = expandedModel === key;
+          const metrics = entry.metrics;
+          const total = knownRequestTokens(metrics);
+          const normalized = normalizeModelName(entry.key);
+          const label = entry.key === null ? "未记录模型" : normalized.model;
+          const rowId = `${detailId}-${index}`;
+          return (
+            <Fragment key={key}>
+              <TableRow className="border-border/60 hover:bg-muted/30">
+                <TableCell className="py-3.5">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    onClick={() => setExpandedModel(isExpanded ? null : key)}
+                    aria-expanded={isExpanded}
+                    aria-controls={rowId}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <ChevronRight
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <ModelIdentity
+                      model={entry.key === null ? null : normalized.model}
+                      compact
+                      unknownLabel="未记录模型"
+                      iconClassName="size-7"
+                      labelClassName="font-mono text-xs"
+                    />
+                  </button>
+                  {normalized.source ? (
+                    <p className="mt-1 pl-6 text-xs text-muted-foreground" title={entry.key ?? ""}>
+                      来源 {normalized.source}
+                    </p>
+                  ) : null}
+                  {metrics.totals.requestsWithoutUsage > 0 ? (
+                    <p className="mt-1 pl-6 text-muted-foreground">
+                      {total === null
+                        ? "用量未知"
+                        : `已知子集 · ${formatNumber(metrics.totals.requestsWithoutUsage)} 条未知`}
+                    </p>
+                  ) : null}
+                </TableCell>
+                <TableCell className="py-3.5 text-right">
+                  <span
+                    className="block truncate font-mono tabular-nums"
+                    title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
+                  >
+                    {formatTokensOrDash(total)}
+                  </span>
+                  {metrics.shareBps !== null ? (
+                    <Progress
+                      value={metrics.shareBps / 100}
+                      className={cn(
+                        "mt-2 ml-auto h-1.5 max-w-40 rounded-full bg-border/70 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-chart-1",
+                        metrics.shareBps > 7000 &&
+                          "[&_[data-slot=progress-indicator]]:bg-linear-to-r [&_[data-slot=progress-indicator]]:from-chart-1 [&_[data-slot=progress-indicator]]:to-chart-2",
+                      )}
+                      aria-label={`${label} 占所选客户端已知 Token 的比例`}
+                    />
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatBasisPoints(metrics.shareBps)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatNumber(metrics.totals.requests)}
+                </TableCell>
+              </TableRow>
+              <TableRow id={rowId} hidden={!isExpanded} className="bg-muted/20 hover:bg-muted/20">
+                <TableCell colSpan={4} className="p-4">
+                  {isExpanded ? (
+                    <>
+                      <TokenBreakdown metrics={metrics} />
+                      {onOpenSessions ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3"
+                          onClick={() => onOpenSessions({ model: entry.key })}
+                        >
+                          查看此模型会话
+                        </Button>
+                      ) : null}
+                    </>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            </Fragment>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+/** 项目用量：默认折叠的次级视图，展开后与模型表同列。 */
+export function RequestAnalysisProjects({
+  data,
+  onOpenSessions,
+}: {
+  data: RequestAnalysis;
+  onOpenSessions?: (filters: Partial<SessionFilters>) => void;
+}) {
+  const { formatTokensOrDash } = useTokenFormat();
+  return (
+    <details className="group">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+        <ChevronRight
+          className="size-3.5 transition-transform group-open:rotate-90"
+          aria-hidden="true"
+        />
+        展开查看 Top 8
+      </summary>
+      <Table className="mt-3 table-fixed text-xs">
         <TableHeader>
-          <TableRow className="bg-muted/40 hover:bg-muted/40">
-            <TableHead className="w-[40%]">会话主模型</TableHead>
-            <TableHead className="text-right" aria-sort="descending">
-              已知 Token ↓
-            </TableHead>
+          <TableRow className="hover:bg-transparent">
+            <TableHead>项目目录</TableHead>
+            <TableHead className="w-28 text-right">已知 Token</TableHead>
             <TableHead className="w-20 text-right">占比</TableHead>
             <TableHead className="w-16 text-right">请求</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.models.map((entry, index) => {
-            const key = JSON.stringify(entry.key);
-            const isExpanded = expandedModel === key;
-            const metrics = entry.metrics;
-            const total = knownRequestTokens(metrics);
-            const label = entry.key ?? "未记录模型";
-            const rowId = `${detailId}-${index}`;
+          {data.projects.map((entry) => {
+            const total = knownRequestTokens(entry.metrics);
+            const label = entry.key === null ? "未记录项目" : shortenPath(entry.key);
             return (
-              <Fragment key={key}>
-                <TableRow className="border-border/60 hover:bg-muted/30">
-                  <TableCell className="py-3.5">
-                    <button
-                      type="button"
-                      className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      onClick={() => setExpandedModel(isExpanded ? null : key)}
-                      aria-expanded={isExpanded}
-                      aria-controls={rowId}
+              <TableRow key={JSON.stringify(entry.key)} className="hover:bg-muted/30 [&>td]:py-3">
+                <TableCell>
+                  {onOpenSessions ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-auto max-w-full p-0 font-mono text-xs"
+                      title={entry.key ?? label}
+                      onClick={() => onOpenSessions({ projectPath: entry.key })}
                     >
-                      {isExpanded ? (
-                        <ChevronDown
-                          className="size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      ) : (
-                        <ChevronRight
-                          className="size-3.5 shrink-0 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <ModelIdentity
-                        model={entry.key}
-                        compact
-                        unknownLabel="未记录模型"
-                        iconClassName="size-7"
-                        labelClassName="font-mono text-xs"
-                      />
-                    </button>
-                    {metrics.totals.requestsWithoutUsage > 0 ? (
-                      <p className="mt-1 pl-6 text-muted-foreground">
-                        {total === null
-                          ? "用量未知"
-                          : `已知子集 · ${formatNumber(metrics.totals.requestsWithoutUsage)} 条未知`}
-                      </p>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="py-3.5 text-right">
-                    <span
-                      className="block truncate font-mono tabular-nums"
-                      title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
-                    >
-                      {formatTokensOrDash(total)}
+                      <span className="truncate">{label}</span>
+                    </Button>
+                  ) : (
+                    <span className="block truncate font-mono" title={entry.key ?? label}>
+                      {label}
                     </span>
-                    {metrics.shareBps !== null ? (
-                      <Progress
-                        value={metrics.shareBps / 100}
-                        className={cn(
-                          "mt-2 ml-auto h-1.5 max-w-40 rounded-full bg-border/70 [&_[data-slot=progress-indicator]]:rounded-full [&_[data-slot=progress-indicator]]:bg-chart-1",
-                          metrics.shareBps > 7000 &&
-                            "[&_[data-slot=progress-indicator]]:bg-linear-to-r [&_[data-slot=progress-indicator]]:from-chart-1 [&_[data-slot=progress-indicator]]:to-chart-2",
-                        )}
-                        aria-label={`${label} 占所选客户端已知 Token 的比例`}
-                      />
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatBasisPoints(metrics.shareBps)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatNumber(metrics.totals.requests)}
-                  </TableCell>
-                </TableRow>
-                <TableRow id={rowId} hidden={!isExpanded} className="bg-muted/20 hover:bg-muted/20">
-                  <TableCell colSpan={4} className="p-4">
-                    {isExpanded ? (
-                      <>
-                        <TokenBreakdown metrics={metrics} />
-                        {onOpenSessions ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-3"
-                            onClick={() => onOpenSessions({ model: entry.key })}
-                          >
-                            查看此模型会话
-                          </Button>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              </Fragment>
+                  )}
+                  {entry.metrics.totals.requestsWithoutUsage > 0 ? (
+                    <span className="text-muted-foreground">
+                      {formatNumber(entry.metrics.totals.requestsWithoutUsage)} 条用量未知
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums"
+                  title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
+                >
+                  {formatTokensOrDash(total)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatBasisPoints(entry.metrics.shareBps)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatNumber(entry.metrics.totals.requests)}
+                </TableCell>
+              </TableRow>
             );
           })}
         </TableBody>
       </Table>
-
-      <details className="group border-t border-border/60 pt-3">
-        <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm text-xs text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
-          <ChevronRight
-            className="size-3.5 transition-transform group-open:rotate-90"
-            aria-hidden="true"
-          />
-          项目用量 · Top 8
-        </summary>
-        <Table className="mt-3 table-fixed text-xs">
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead>项目目录</TableHead>
-              <TableHead className="w-28 text-right">已知 Token</TableHead>
-              <TableHead className="w-20 text-right">占比</TableHead>
-              <TableHead className="w-16 text-right">请求</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.projects.map((entry) => {
-              const total = knownRequestTokens(entry.metrics);
-              const label = entry.key === null ? "未记录项目" : shortenPath(entry.key);
-              return (
-                <TableRow key={JSON.stringify(entry.key)} className="hover:bg-muted/30 [&>td]:py-3">
-                  <TableCell>
-                    {onOpenSessions ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-auto max-w-full p-0 font-mono text-xs"
-                        title={entry.key ?? label}
-                        onClick={() => onOpenSessions({ projectPath: entry.key })}
-                      >
-                        <span className="truncate">{label}</span>
-                      </Button>
-                    ) : (
-                      <span className="block truncate font-mono" title={entry.key ?? label}>
-                        {label}
-                      </span>
-                    )}
-                    {entry.metrics.totals.requestsWithoutUsage > 0 ? (
-                      <span className="text-muted-foreground">
-                        {formatNumber(entry.metrics.totals.requestsWithoutUsage)} 条用量未知
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell
-                    className="text-right font-mono tabular-nums"
-                    title={total === null ? "用量未知" : `${formatNumber(total)} Token`}
-                  >
-                    {formatTokensOrDash(total)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatBasisPoints(entry.metrics.shareBps)}
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {formatNumber(entry.metrics.totals.requests)}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </details>
-    </div>
+    </details>
   );
 }
